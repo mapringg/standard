@@ -7,9 +7,9 @@ import { gh, GhError } from "./github.mjs";
  * @property {{ allowed_merge_methods?: string[] }} [parameters]
  *
  * @typedef {object} Classic The classic branch protection of one branch.
- * @property {object | null} [required_pull_request_reviews]
- * @property {{ enabled?: boolean }} [allow_deletions]
- * @property {{ enabled?: boolean }} [allow_force_pushes]
+ * @property {{ dismiss_stale_reviews: boolean, require_code_owner_reviews: boolean }} [required_pull_request_reviews]
+ * @property {{ enabled: boolean }} [allow_deletions]
+ * @property {{ enabled: boolean }} [allow_force_pushes]
  * @typedef {{ unreadable: string }} Unreadable
  *
  * @typedef {object} BranchExpectation
@@ -43,7 +43,7 @@ const BRANCH = [
     branch: "develop",
     rule: "pull_request",
     want: "an active ruleset or classic protection that requires a pull request",
-    classic: (protection) => protection.required_pull_request_reviews != null,
+    classic: (protection) => protection.required_pull_request_reviews !== undefined,
   },
   {
     branch: "main",
@@ -99,13 +99,33 @@ function parse(text, path, valid) {
 /** @param {unknown} value */
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** @param {any} parameters */
+const isPullRequestParameters = (parameters) =>
+  isObject(parameters) &&
+  (parameters.allowed_merge_methods === undefined ||
+    (Array.isArray(parameters.allowed_merge_methods) &&
+      parameters.allowed_merge_methods.every((/** @type {unknown} */ method) => typeof method === "string" && ALL_METHODS.includes(method))));
+
 /** @param {any} rule */
 const isRule = (rule) =>
   isObject(rule) &&
   typeof rule.type === "string" &&
-  (rule.parameters?.allowed_merge_methods === undefined ||
-    (Array.isArray(rule.parameters.allowed_merge_methods) &&
-      rule.parameters.allowed_merge_methods.every((/** @type {unknown} */ method) => typeof method === "string")));
+  (rule.type !== "pull_request" || (Number.isInteger(rule.ruleset_id) && isPullRequestParameters(rule.parameters)));
+
+/** @param {any} flag */
+const isFlag = (flag) => flag === undefined || (isObject(flag) && typeof flag.enabled === "boolean");
+
+/** @param {any} reviews */
+const isReviews = (reviews) =>
+  reviews === undefined ||
+  (isObject(reviews) && typeof reviews.dismiss_stale_reviews === "boolean" && typeof reviews.require_code_owner_reviews === "boolean");
+
+/** @param {any} protection */
+const isClassic = (protection) =>
+  isObject(protection) &&
+  isFlag(protection.allow_deletions) &&
+  isFlag(protection.allow_force_pushes) &&
+  isReviews(protection.required_pull_request_reviews);
 
 /**
  * @param {unknown} error
@@ -151,7 +171,7 @@ function readClassic(root, branch) {
     if (error instanceof GhError && error.status === 404 && /Branch not (protected|found)/.test(error.detail)) return null;
     return unreadable(error, path);
   }
-  return parse(text, path, isObject);
+  return parse(text, path, isClassic);
 }
 
 /**
@@ -231,7 +251,11 @@ function evaluate(root) {
   }
 
   const develop = rules("develop");
-  const pullRequest = Array.isArray(develop) ? develop.filter((rule) => rule.type === "pull_request") : [];
+  if (!Array.isArray(develop)) {
+    unknown.push(`develop allowed_merge_methods is unknown; ${develop.unreadable}`);
+    return { fail, unknown };
+  }
+  const pullRequest = develop.filter((rule) => rule.type === "pull_request");
   if (pullRequest.length > 0) {
     const allowed = allowedMethods(pullRequest);
     if (allowed.length !== 1 || allowed[0] !== "squash") {

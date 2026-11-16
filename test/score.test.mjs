@@ -48,6 +48,12 @@ const GOOD_GITHUB = {
 };
 
 const httpError = (status, message) => ({ status, message });
+
+const CLASSIC = { allow_deletions: { enabled: false }, allow_force_pushes: { enabled: false } };
+const CLASSIC_PULL_REQUEST = {
+  ...CLASSIC,
+  required_pull_request_reviews: { dismiss_stale_reviews: false, require_code_owner_reviews: false, required_approving_review_count: 0 },
+};
 const NOT_PROTECTED = httpError(404, "Branch not protected");
 
 /**
@@ -409,8 +415,8 @@ test("--remote accepts classic branch protection where no ruleset applies", (t) 
   const { status, settings, gh } = remoteSettings(t, {
     "repos/{owner}/{repo}/rules/branches/develop": [],
     "repos/{owner}/{repo}/rules/branches/main": [],
-    "repos/{owner}/{repo}/branches/develop/protection": { required_pull_request_reviews: { required_approving_review_count: 0 } },
-    "repos/{owner}/{repo}/branches/main/protection": { allow_deletions: { enabled: false }, allow_force_pushes: { enabled: false } },
+    "repos/{owner}/{repo}/branches/develop/protection": CLASSIC_PULL_REQUEST,
+    "repos/{owner}/{repo}/branches/main/protection": CLASSIC,
   });
   assert.deepEqual(settings, { group: "github", row: "settings", status: "ok", pass: true, notes: [] });
   assert.equal(gh.calls().filter((call) => call.args.at(-1).endsWith("/protection")).length, 2);
@@ -420,9 +426,20 @@ test("--remote accepts classic branch protection where no ruleset applies", (t) 
 test("--remote fails classic protection that allows force-push on main", (t) => {
   const { settings } = remoteSettings(t, {
     "repos/{owner}/{repo}/rules/branches/main": [],
-    "repos/{owner}/{repo}/branches/main/protection": { allow_deletions: { enabled: false }, allow_force_pushes: { enabled: true } },
+    "repos/{owner}/{repo}/branches/main/protection": { ...CLASSIC, allow_force_pushes: { enabled: true } },
   });
   assert.deepEqual(settings.notes, [
+    `main non_fast_forward rule is missing; expected an active ruleset that blocks force-push. Fix: ${mainRuleset("non_fast_forward")}`,
+  ]);
+});
+
+test("--remote counts a classic protection flag GitHub leaves out as not blocking", (t) => {
+  const { settings } = remoteSettings(t, {
+    "repos/{owner}/{repo}/rules/branches/main": [],
+    "repos/{owner}/{repo}/branches/main/protection": {},
+  });
+  assert.deepEqual(settings.notes, [
+    `main deletion rule is missing; expected an active ruleset that blocks deletion. Fix: ${mainRuleset("deletion")}`,
     `main non_fast_forward rule is missing; expected an active ruleset that blocks force-push. Fix: ${mainRuleset("non_fast_forward")}`,
   ]);
 });
@@ -443,7 +460,12 @@ test("--remote reports the rules as unknown, not pass or fail, when the token ca
     row: "settings",
     status: "unknown",
     pass: null,
-    notes: [unknown("develop", "pull_request"), unknown("main", "deletion"), unknown("main", "non_fast_forward")],
+    notes: [
+      unknown("develop", "pull_request"),
+      unknown("main", "deletion"),
+      unknown("main", "non_fast_forward"),
+      `develop allowed_merge_methods is unknown; ${said("repos/{owner}/{repo}/rules/branches/develop")}`,
+    ],
   });
   assert.equal(status, 0);
 });
@@ -472,6 +494,50 @@ test("--remote fails closed when gh prints output it cannot parse", (t) => {
     assert.equal(settings.pass, false, path);
     assert.match(settings.notes[0], new RegExp(`^gh api ${path.replace(/[{}]/g, "\\$&")} printed (output that is not JSON|JSON of an unexpected shape)`), path);
     assert.equal(status, 1, path);
+  }
+});
+
+test("--remote keeps develop merge methods unknown when classic protection requires a pull request but the rules are unreadable", (t) => {
+  for (const error of [httpError(403, "Forbidden"), httpError(404, "Not Found")]) {
+    const { status, settings } = remoteSettings(t, {
+      "repos/{owner}/{repo}/rules/branches/develop": error,
+      "repos/{owner}/{repo}/branches/develop/protection": CLASSIC_PULL_REQUEST,
+    });
+    assert.deepEqual(settings, {
+      group: "github",
+      row: "settings",
+      status: "unknown",
+      pass: null,
+      notes: [
+        `develop allowed_merge_methods is unknown; gh api repos/{owner}/{repo}/rules/branches/develop returned "gh: ${error.message} (HTTP ${error.status})".`,
+      ],
+    });
+    assert.equal(status, 0);
+  }
+});
+
+test("--remote fails closed on classic protection or pull request rules of the wrong shape", (t) => {
+  const develop = "repos/{owner}/{repo}/rules/branches/develop";
+  const classic = "repos/{owner}/{repo}/branches/develop/protection";
+  const squash = { type: "pull_request", ruleset_id: 1, parameters: { allowed_merge_methods: ["squash"] } };
+  const cases = [
+    [classic, { [develop]: [], [classic]: { ...CLASSIC, required_pull_request_reviews: false } }],
+    [classic, { [develop]: [], [classic]: { ...CLASSIC, required_pull_request_reviews: "off" } }],
+    [classic, { [develop]: [], [classic]: { ...CLASSIC, required_pull_request_reviews: [] } }],
+    [classic, { [develop]: [], [classic]: { ...CLASSIC, required_pull_request_reviews: { message: "bad" } } }],
+    [classic, { [develop]: [], [classic]: { ...CLASSIC_PULL_REQUEST, allow_deletions: null } }],
+    [classic, { [develop]: [], [classic]: { ...CLASSIC_PULL_REQUEST, allow_force_pushes: { enabled: "no" } } }],
+    [develop, { [develop]: [squash, { type: "pull_request", ruleset_id: 2, parameters: false }] }],
+    [develop, { [develop]: [{ type: "pull_request", ruleset_id: 1, parameters: null }] }],
+    [develop, { [develop]: [{ type: "pull_request", ruleset_id: 1, parameters: { allowed_merge_methods: ["squash", "fast-forward"] } }] }],
+    [develop, { [develop]: [{ type: "pull_request", parameters: { allowed_merge_methods: ["squash"] } }] }],
+  ];
+  for (const [path, github] of cases) {
+    const { status, settings } = remoteSettings(t, github);
+    const label = JSON.stringify(github);
+    assert.deepEqual(settings.notes, [`gh api ${path} printed JSON of an unexpected shape, so the settings cannot be checked.`], label);
+    assert.equal(settings.status, "fail", label);
+    assert.equal(status, 1, label);
   }
 });
 
