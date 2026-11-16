@@ -100,11 +100,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 ```
 
-`github.run_id` gives each push its own group, so a push to `develop` or `main` never cancels another push's run or the deploy it carries.
+`github.run_id` gives each push its own group, so a push to `develop` or `main` never cancels another push's run or the deploy it carries, and `github.workflow` keeps one workflow's pull request runs from cancelling another's.
 
 ## Score
 
