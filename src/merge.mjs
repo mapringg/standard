@@ -155,7 +155,7 @@ export function mergeDecision(pr, runs, admin) {
       "--match-head-commit",
       pr.headRefOid,
       "--subject",
-      `${pr.title.trim()} (#${pr.number})`,
+      `${pr.title} (#${pr.number})`,
       "--body",
       "",
       ...(admin ? ["--admin"] : []),
