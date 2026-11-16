@@ -187,8 +187,8 @@ test("pr-screenshot warns when a UI change has no screenshot in Evidence, naming
 });
 
 test("pr-screenshot globs match dotfiles and dot folders, and keep * inside one folder", (t) => {
-  for (const changed of ["apps/web/.env.example", "apps/web/.storybook/main.ts", "packages/ui/src/.hidden/a.tsx"]) {
-    assert.match(checkScreenshot(t, changed, PAIR).stdout, new RegExp(`the PR changes ${changed.replaceAll(".", "\\.")}`));
+  for (const changed of ["apps/web/.env.example", "apps/web/.storybook/main.ts", "packages/ui/src/.hidden/a.tsx", "apps/web/[id]/(group)/page.tsx", "apps/web/a\nb/page.tsx"]) {
+    assert.match(checkScreenshot(t, changed, PAIR).stdout, /::warning title=pr-screenshot::Evidence: Evidence has no screenshot, but the PR changes apps\/web\/|packages\/ui\//, changed);
   }
   const config = { pr: { screenshots: { when: ["apps/*/page.tsx", "**/*.css"], uploader: "scripts/upload-evidence.mjs" } } };
   assert.match(checkScreenshot(t, "apps/web/page.tsx", PAIR, config).stdout, /the PR changes apps\/web\/page\.tsx/);
