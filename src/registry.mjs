@@ -1,6 +1,7 @@
 import baselineGrowth from "./checks/baseline-growth.mjs";
 import commitSubject from "./checks/commit-subject.mjs";
 import deadCode from "./checks/dead-code.mjs";
+import duplicates from "./checks/duplicates.mjs";
 import prBody from "./checks/pr-body.mjs";
 import prScreenshot from "./checks/pr-screenshot.mjs";
 import prSize from "./checks/pr-size.mjs";
@@ -31,4 +32,4 @@ import wiring from "./checks/wiring.mjs";
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates];
