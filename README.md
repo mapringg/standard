@@ -62,7 +62,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `size:XL` | 500 to 999 |
 | `size:XXL` | 1000 or more |
 
-When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the label if the repository lacks it, removes any other `size:` label and sets its own. The token needs `issues: write`. A label it cannot set is a warning.
+When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the label if the repository lacks it, removes any other `size:` label and sets its own. The token needs both `issues: write` and `pull-requests: write`: GitHub returns 403 when a token with only `issues: write` reads a pull request's labels. A label it cannot set is a warning.
 
 `baseline-growth` fails a pull request that adds a check to `pending`, or creates or grows a file under `.standard/baselines/`. The one exception is the pull request that removes that check from `pending`: it turns the check on and may start its baseline. It also fails when the head commit tracks a symlink under `.standard`, such as `.standard/config.json`. When the base commit has no `.standard/config.json`, it reads the base's `pending` from a root `standard.json`, so the pull request that moves the config adds nothing to `pending`.
 
