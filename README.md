@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.7.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.8.0" }
 }
 ```
 
@@ -79,6 +79,45 @@ When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the labe
 | `claude-md` | `CLAUDE.md` exists and is not exactly `@AGENTS.md` and a newline. |
 
 Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which standard merge replaces.`
+
+## Lint and format configs
+
+The package ships one oxlint config and one oxfmt config, tested with oxlint 1.92 and 1.93 and oxfmt 0.77 and 0.78. Each holds only the settings every adopting repository already agreed on, so a repository adds its own plugins, rules, ignores and Tailwind stylesheets on top.
+
+| Export | File | Holds |
+| --- | --- | --- |
+| `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names and no `any`. |
+| `@mapringg/standard/oxfmt` | `config/oxfmt.json` | Type imports first, then grouped value imports; sorted `package.json` scripts; `.claude/**` ignored. |
+
+`.oxlintrc.json` takes a path in `extends`, relative to the file that extends, and refuses a package name. A child's `plugins` adds to the shared list:
+
+```json
+{
+  "extends": ["../../node_modules/@mapringg/standard/config/oxlint.json"],
+  "plugins": ["react", "nextjs", "jsx-a11y", "react-perf"]
+}
+```
+
+`oxlint.config.ts` can import the export instead:
+
+```ts
+import { defineConfig } from "oxlint";
+import standard from "@mapringg/standard/oxlint" with { type: "json" };
+
+export default defineConfig({ extends: [standard], plugins: ["react"] });
+```
+
+oxfmt has no `extends`. Replace `.oxfmtrc.json` with `oxfmt.config.ts`, spread the export, and append to its lists rather than replace them:
+
+```ts
+import standard from "@mapringg/standard/oxfmt" with { type: "json" };
+
+export default {
+  ...standard,
+  ignorePatterns: [...standard.ignorePatterns, "apps/api/migrations/**"],
+  overrides: [{ files: ["apps/web/**"], options: { sortTailwindcss: { stylesheet: "./apps/web/src/app/globals.css" } } }],
+};
+```
 
 ## Merge
 
