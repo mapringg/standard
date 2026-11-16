@@ -29,27 +29,34 @@ function run(id, { event = "pull_request", started = "2026-11-10T10:00:00Z", att
 
 const green = run(1);
 
-function pages(items, key, size = 2) {
-  const chunks = [];
-  for (let i = 0; i < items.length; i += size) chunks.push({ total_count: items.length, [key]: items.slice(i, i + size) });
-  return chunks.length > 0 ? chunks : [{ total_count: 0, [key]: [] }];
+function lines(items) {
+  return items.map((item) => JSON.stringify(item)).join("\n");
 }
 
-function fakeGh(t, view, runs, events) {
+function fakeGh(t, view, { runs, before = runs, events, mergeFails = false }) {
   const bin = tempDir(t, "bin");
   const calls = join(bin, "calls");
   const answers = {
-    "check-runs": pages(runs.flatMap((r) => (r.checkRun ? [r.checkRun] : [])), "check_runs"),
-    "actions/runs": pages(runs.map((r) => r.workflowRun), "workflow_runs"),
-    "/events": [events.slice(0, 1), events.slice(1)],
+    "check-runs": lines(runs.flatMap((r) => (r.checkRun ? [r.checkRun] : []))),
+    "actions/runs": [lines(before.flatMap((r) => (r.workflowRun ? [r.workflowRun] : []))), lines(runs.flatMap((r) => (r.workflowRun ? [r.workflowRun] : [])))],
+    "/events": lines(events.filter((e) => e.event === "ready_for_review").map(({ created_at }) => ({ created_at }))),
   };
   const script = `#!/usr/bin/env node
-const { appendFileSync } = process.getBuiltinModule("node:fs");
+const { appendFileSync, readFileSync } = process.getBuiltinModule("node:fs");
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + "\\n");
 const answers = ${JSON.stringify(answers)};
 if (args[0] === "pr" && args[1] === "view") console.log(${JSON.stringify(JSON.stringify(view))});
-if (args[0] === "api") console.log(JSON.stringify(Object.entries(answers).find(([path]) => args.at(-1).includes(path))[1]));
+if (args[0] === "pr" && args[1] === "merge" && ${mergeFails}) {
+  console.error("Head branch was modified. Review and try the merge again.");
+  process.exit(1);
+}
+if (args[0] === "api") {
+  const path = args.at(-1);
+  const answer = Object.entries(answers).find(([key]) => path.includes(key))[1];
+  const reads = readFileSync(${JSON.stringify(calls)}, "utf8").split("\\n").filter((line) => line.includes(path)).length;
+  console.log(Array.isArray(answer) ? answer[Math.min(reads, answer.length) - 1] : answer);
+}
 `;
   writeFileSync(join(bin, "gh"), script);
   chmodSync(join(bin, "gh"), 0o755);
@@ -59,8 +66,8 @@ if (args[0] === "api") console.log(JSON.stringify(Object.entries(answers).find((
   };
 }
 
-function mergeWith(t, { view = {}, runs = [green], events = [], args = [] } = {}) {
-  const gh = fakeGh(t, { ...pr, ...view }, runs, events);
+function mergeWith(t, { view = {}, runs = [green], before, events = [], mergeFails, args = [] } = {}) {
+  const gh = fakeGh(t, { ...pr, ...view }, { runs, before, events, mergeFails });
   const result = standard(tempRepo(t), ["merge", "194", ...args], { env: gh.env });
   return { ...result, merged: gh.calls().filter(([command, sub]) => command === "pr" && sub === "merge") };
 }
@@ -84,15 +91,20 @@ test("merge squashes a green pull request with the reviewed head, the numbered t
   assert.equal(status, 0);
 });
 
-test("merge reads the pull request, its head's check runs and workflow runs, and its events live through gh", (t) => {
-  const gh = fakeGh(t, pr, [green], []);
+test("merge reads the pull request, its events, then the workflow runs on both sides of the check runs, live through gh", (t) => {
+  const gh = fakeGh(t, pr, { runs: [green], events: [] });
   standard(tempRepo(t), ["merge", "194"], { env: gh.env });
-  assert.deepEqual(gh.calls().slice(0, 4), [
-    ["pr", "view", "194", "--json", "number,title,state,isDraft,baseRefName,headRefOid"],
-    ["api", "--paginate", "--slurp", `repos/{owner}/{repo}/commits/${HEAD}/check-runs?filter=latest&per_page=100`],
-    ["api", "--paginate", "--slurp", `repos/{owner}/{repo}/actions/runs?head_sha=${HEAD}&per_page=100`],
-    ["api", "--paginate", "--slurp", "repos/{owner}/{repo}/issues/194/events?per_page=100"],
-  ]);
+  const [view, ...reads] = gh.calls().slice(0, 5);
+  assert.deepEqual(view, ["pr", "view", "194", "--json", "number,title,state,isDraft,baseRefName,headRefOid"]);
+  assert.deepEqual(
+    reads.map(([api, paginate, jq, filter, path]) => [api, paginate, jq, typeof filter, path]),
+    [
+      "repos/{owner}/{repo}/issues/194/events?per_page=100",
+      `repos/{owner}/{repo}/actions/runs?head_sha=${HEAD}&per_page=100`,
+      `repos/{owner}/{repo}/commits/${HEAD}/check-runs?filter=latest&per_page=100`,
+      `repos/{owner}/{repo}/actions/runs?head_sha=${HEAD}&per_page=100`,
+    ].map((path) => ["api", "--paginate", "--jq", "string", path]),
+  );
 });
 
 test("merge passes --admin through and still needs a green Check", (t) => {
@@ -132,7 +144,7 @@ test("merge waits for a newer Check that has not finished, even after an older s
     const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", status, conclusion: null })];
     assertRefused(
       mergeWith(t, { runs }),
-      new RegExp(`^ {2}wait: Check in pull_request run 2 attempt 1, the newest on aaaaaaa, is ${status}\\.$`, "m"),
+      new RegExp(`^ {2}wait: pull_request run 2 attempt 1, the newest on aaaaaaa, is ${status}\\.$`, "m"),
     );
   }
 });
@@ -141,7 +153,7 @@ test("merge waits for a newer workflow run that has no Check run yet", (t) => {
   const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", status: "pending", conclusion: null, check: null })];
   assertRefused(
     mergeWith(t, { runs }),
-    /^ {2}wait: pull_request run 2 attempt 1, the newest on aaaaaaa, is pending and has no Check run yet\.$/m,
+    /^ {2}wait: pull_request run 2 attempt 1, the newest on aaaaaaa, is pending\.$/m,
   );
 });
 
@@ -165,7 +177,7 @@ test("merge ignores older cancelled and skipped Check runs once the newest is gr
 test("merge orders runs by when their latest attempt started, so a rerun of an older run is the newest", (t) => {
   const rerun = run(1, { attempt: 2, started: "2026-11-10T12:00:00Z", status: "in_progress", conclusion: null });
   const runs = [rerun, run(2, { started: "2026-11-10T11:00:00Z" })];
-  assertRefused(mergeWith(t, { runs }), /wait: Check in pull_request run 1 attempt 2, the newest on aaaaaaa, is in_progress\./);
+  assertRefused(mergeWith(t, { runs }), /wait: pull_request run 1 attempt 2, the newest on aaaaaaa, is in_progress\./);
   const failedOlder = [run(1, { attempt: 2, started: "2026-11-10T10:00:00Z", conclusion: "failure" }), run(2, { started: "2026-11-10T11:00:00Z" })];
   assert.equal(mergeWith(t, { runs: failedOlder }).merged.length, 1);
 });
@@ -210,8 +222,30 @@ test("merge keeps the start of a Check that a partial rerun copied from a draft-
   assertRefused(mergeWith(t, { runs: [copied], events }), /started at 2026-11-10T10:00:00Z, before the pull request left draft/);
 });
 
-test("merge reads every page of check runs and workflow runs", (t) => {
-  const runs = [1, 2, 3, 4, 5].map((id) => run(id, { started: `2026-11-10T1${id}:00:00Z`, conclusion: id === 5 ? "success" : "cancelled" }));
+test("merge waits for a re-run attempt that carries a green Check from the earlier attempt", (t) => {
+  for (const status of ["queued", "in_progress"]) {
+    const carried = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", status, conclusion: null, check: { status: "completed", conclusion: "success" } });
+    assertRefused(mergeWith(t, { runs: [carried] }), new RegExp(`^ {2}wait: pull_request run 1 attempt 2, the newest on aaaaaaa, is ${status}\\.$`, "m"));
+  }
+});
+
+test("merge refuses with retry when the newest run changes between the reads around the check runs", (t) => {
+  const rerun = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", status: "queued", conclusion: null, check: null });
+  assertRefused(
+    mergeWith(t, { before: [green], runs: [{ ...rerun, checkRun: green.checkRun }] }),
+    /^ {2}retry: the newest pull_request run on aaaaaaa changed from run 1 attempt 1 completed to run 1 attempt 2 queued while standard merge read the runs\. Run standard merge again\.$/m,
+  );
+  const newer = run(2, { started: "2026-11-10T11:00:00Z" });
+  assertRefused(mergeWith(t, { before: [green], runs: [green, newer] }), /retry: .* from run 1 attempt 1 completed to run 2 attempt 1 completed/);
+  assertRefused(mergeWith(t, { before: [], runs: [green] }), /retry: .* from no run to run 1 attempt 1 completed/);
+});
+
+test("merge reads workflow runs larger than the default output buffer", (t) => {
+  const padding = "x".repeat(12_000);
+  const runs = Array.from({ length: 106 }, (_, i) => {
+    const r = run(i + 1, { started: i === 105 ? "2026-11-10T12:00:00Z" : "2026-11-10T10:00:00Z", conclusion: i === 105 ? "success" : "cancelled" });
+    return { ...r, workflowRun: { ...r.workflowRun, padding } };
+  });
   assert.equal(mergeWith(t, { runs }).merged.length, 1);
 });
 
@@ -243,4 +277,53 @@ test("merge needs a pull request number and takes only --admin", (t) => {
     assert.match(stderr, /merge needs a pull request number and takes only --admin\./);
     assert.equal(status, 1);
   }
+});
+
+const OLD = "2026-11-16T10:00:00Z";
+const MID = "2026-11-16T11:00:00Z";
+const NEW = "2026-11-16T12:00:00Z";
+const ready = (time) => ({ event: "ready_for_review", created_at: time });
+const at = (id, options = {}) => run(id, { started: OLD, ...options });
+const carried = (status) => at(1, { started: NEW, attempt: 2, status, conclusion: null, check: { status: "completed", conclusion: "success", started_at: OLD } });
+const fork = at(1);
+fork.workflowRun.head_repository = { fork: true };
+const manyCancelled = Array.from({ length: 105 }, (_, i) => at(i + 1, { conclusion: "cancelled" }));
+const unrelated = Array.from({ length: 105 }, (_, i) => ({ workflowRun: null, checkRun: { ...at(1).checkRun, name: `job-${i}` } }));
+
+const verifierCases = [
+  ["normal-green", true, [at(1)]],
+  ["never-drafted", true, [at(1)]],
+  ["cancelled-then-green", true, [at(1, { conclusion: "cancelled" }), at(2, { started: NEW })]],
+  ["skipped-then-green", true, [at(1, { conclusion: "skipped" }), at(2, { started: NEW })]],
+  ["newer-queued-no-check", false, [at(1), at(2, { started: NEW, status: "queued", conclusion: null, check: null })]],
+  ["newer-running-no-check", false, [at(1), at(2, { started: NEW, status: "in_progress", conclusion: null, check: null })]],
+  ["old-id-rerun-newest-failure", false, [at(2, { started: MID }), at(1, { started: NEW, attempt: 2, conclusion: "failure" })]],
+  ["old-id-rerun-newest-green", true, [at(2, { started: MID, conclusion: "failure" }), at(1, { started: NEW, attempt: 2 })]],
+  ["same-time-id-tie", false, [at(1), at(2, { conclusion: "failure" })]],
+  ["two-workflows-pr-green-push-failed", true, [at(1), at(2, { workflow: 8, event: "push", started: NEW, conclusion: "failure" })]],
+  ["two-workflows-pr-failed-push-green", false, [at(1, { conclusion: "failure" }), at(2, { workflow: 8, event: "push", started: NEW })]],
+  ["fork-pull-request", true, [fork]],
+  ["pull-request-target", false, [at(1, { event: "pull_request_target" })]],
+  ["non-actions-app", false, [at(1, { check: { app: { slug: "other-app" } } })]],
+  ["two-ready-events-stale", false, [at(1, { started: MID })], { events: [ready(OLD), { event: "convert_to_draft", created_at: MID }, ready(NEW)] }],
+  ["two-ready-events-fresh", true, [at(1, { started: NEW })], { events: [ready(OLD), { event: "convert_to_draft", created_at: MID }, ready(MID)] }],
+  ["partial-rerun-copies-draft-time", false, [at(1, { started: NEW, attempt: 2, check: { started_at: OLD } })], { events: [ready(MID)] }],
+  ["rerun-in-progress-copied-green-check", false, [carried("in_progress")]],
+  ["rerun-queued-copied-green-check", false, [carried("queued")]],
+  ["rerun-starts-between-check-and-workflow-reads", false, [{ ...at(1, { started: NEW, attempt: 2, status: "in_progress", conclusion: null }), checkRun: at(1).checkRun }]],
+  ["rerun-starts-between-the-workflow-reads", false, [{ ...at(1, { started: NEW, attempt: 2, status: "queued", conclusion: null }), checkRun: at(1).checkRun }], { before: [at(1)] }],
+  ["head-moved-after-reads", false, [at(1)], { mergeFails: true }],
+  ["over-100-checks-newest-green-on-page-2", true, [...manyCancelled, at(106, { started: NEW })]],
+  ["over-100-checks-newest-failure-on-page-2", false, [...manyCancelled, at(106, { started: NEW, conclusion: "failure" })]],
+  ["over-100-events-latest-ready-on-page-2", false, [at(1, { started: MID })], { events: [...Array.from({ length: 101 }, () => ({ event: "labeled", created_at: OLD })), ready(NEW)] }],
+  ["over-100-checks-one-workflow", true, [...unrelated, at(1)]],
+  ...["cancelled", "skipped", "neutral", "timed_out", "action_required", "failure", "stale"].map((conclusion) => [`latest-${conclusion}`, false, [at(1, { conclusion })]]),
+];
+
+test("merge decides every case of the independent verifier", (t) => {
+  const mismatches = verifierCases.flatMap(([name, merges, runs, options = {}]) => {
+    const { status, merged } = mergeWith(t, { runs, ...options });
+    return (merges ? status === 0 && merged.length === 1 : status !== 0) ? [] : [name];
+  });
+  assert.deepEqual(mismatches, []);
 });
