@@ -114,7 +114,7 @@ export const WIRED = {
   ".standard/config.json": {},
   "package.json": {
     scripts: { prepare: "standard install" },
-    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.6.0" },
+    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.6.1" },
   },
   ".github/workflows/ci.yml": [
     "on:",

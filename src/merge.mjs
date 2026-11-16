@@ -11,7 +11,7 @@ const GATE_APP = "github-actions";
 const EVENT = "pull_request";
 const PR_FIELDS = "number,title,state,isDraft,baseRefName,headRefOid";
 const CHECK_FIELDS = ".check_runs[] | {name, head_sha, status, conclusion, started_at, app: {slug: .app.slug}, check_suite: {id: .check_suite.id}}";
-const RUN_FIELDS = ".workflow_runs[] | {id, workflow_id, event, head_sha, check_suite_id, run_attempt, run_started_at, status, conclusion}";
+const RUN_FIELDS = ".workflow_runs[] | {id, workflow_id, event, head_sha, check_suite_id, run_attempt, created_at, run_started_at, status, conclusion}";
 const READY_FIELDS = '.[] | select(.event == "ready_for_review") | {created_at}';
 const OUTPUT_LIMIT = 256 * 1024 * 1024;
 const DESCRIPTION_CHECKS = ["pr-title", "pr-body", "pr-screenshot"];
@@ -43,6 +43,7 @@ export const retired = ["scripts/merge-pr.mjs", "scripts/merge-pr.test.mjs"];
  * @property {string} head_sha
  * @property {number} check_suite_id
  * @property {number} run_attempt
+ * @property {string} created_at
  * @property {string} run_started_at
  * @property {string} status
  * @property {string | null} conclusion
@@ -123,8 +124,11 @@ function gateRefusal(head, { checkRuns, workflowReads: [before, after], readyAt 
   if (!gate) return `${where} concluded ${newest.conclusion} without a ${GATE} run.`;
   if (gate.status !== "completed") return `${GATE} in ${where} is ${gate.status}.`;
   if (gate.conclusion !== "success") return `${GATE} in ${where} concluded ${gate.conclusion}.`;
+  if (readyAt && !(Date.parse(newest.created_at) >= Date.parse(readyAt))) {
+    return `${where} was triggered at ${newest.created_at}, before the pull request left draft at ${readyAt}. A rerun replays its draft-time event. Start ${GATE} from a new event: push, edit the pull request, or add ready_for_review to on.pull_request.types.`;
+  }
   if (readyAt && !(Date.parse(gate.started_at ?? "") >= Date.parse(readyAt))) {
-    return `${GATE} in ${where} started at ${gate.started_at}, before the pull request left draft at ${readyAt}. Rerun ${GATE}, or add ready_for_review to on.pull_request.types.`;
+    return `${GATE} in ${where} started at ${gate.started_at}, before the pull request left draft at ${readyAt}. Start ${GATE} from a new event: push, edit the pull request, or add ready_for_review to on.pull_request.types.`;
   }
   return null;
 }

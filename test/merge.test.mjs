@@ -42,8 +42,8 @@ const pr = {
 };
 const CI = 7;
 
-function run(id, { event = "pull_request", started = "2026-11-10T10:00:00Z", attempt = 1, status = "completed", conclusion = "success", check = {}, sha = HEAD, workflow = CI } = {}) {
-  const workflowRun = { id, workflow_id: workflow, event, head_sha: sha, check_suite_id: id * 10, run_attempt: attempt, run_started_at: started, status, conclusion };
+function run(id, { event = "pull_request", started = "2026-11-10T10:00:00Z", created = started, attempt = 1, status = "completed", conclusion = "success", check = {}, sha = HEAD, workflow = CI } = {}) {
+  const workflowRun = { id, workflow_id: workflow, event, head_sha: sha, check_suite_id: id * 10, run_attempt: attempt, created_at: created, run_started_at: started, status, conclusion };
   const checkRun = check && {
     name: "Check",
     head_sha: sha,
@@ -241,7 +241,7 @@ test("merge counts only Check runs from pull_request workflow runs, naming the e
   assert.equal(mergeWith(t, { runs: runsWithPush }).merged.length, 1);
 });
 
-test("merge refuses a Check that started before the pull request last left draft", (t) => {
+test("merge refuses a run triggered before the pull request last left draft", (t) => {
   const events = [
     { event: "ready_for_review", created_at: "2026-11-10T09:00:00Z" },
     { event: "convert_to_draft", created_at: "2026-11-10T09:30:00Z" },
@@ -249,10 +249,22 @@ test("merge refuses a Check that started before the pull request last left draft
   ];
   assertRefused(
     mergeWith(t, { events }),
-    new RegExp(String.raw`^ {2}Check in pull_request run 1 attempt 1, the newest on ${SHORT}, started at 2026-11-10T10:00:00Z, before the pull request left draft at 2026-11-10T10:30:00Z\. Rerun Check, or add ready_for_review to on.pull_request.types\.$`, "m"),
+    new RegExp(String.raw`^ {2}pull_request run 1 attempt 1, the newest on ${SHORT}, was triggered at 2026-11-10T10:00:00Z, before the pull request left draft at 2026-11-10T10:30:00Z\. A rerun replays its draft-time event\. Start Check from a new event: push, edit the pull request, or add ready_for_review to on\.pull_request\.types\.$`, "m"),
   );
   const after = [green, run(2, { started: "2026-11-10T10:31:00Z" })];
   assert.equal(mergeWith(t, { runs: after, events }).merged.length, 1);
+});
+
+test("merge refuses a full rerun of a run triggered while the pull request was a draft", (t) => {
+  const events = [{ event: "ready_for_review", created_at: "2026-11-10T10:30:00Z" }];
+  const replayed = run(1, { attempt: 2, created: "2026-11-10T10:00:00Z", started: "2026-11-10T12:00:00Z" });
+  const ready = run(2, { started: "2026-11-10T10:31:00Z", conclusion: "failure" });
+  assertRefused(
+    mergeWith(t, { runs: [replayed, ready], events }),
+    new RegExp(String.raw`^ {2}pull_request run 1 attempt 2, the newest on ${SHORT}, was triggered at 2026-11-10T10:00:00Z, before the pull request left draft at 2026-11-10T10:30:00Z\. A rerun replays its draft-time event\.`, "m"),
+  );
+  const rerunAfterReady = run(2, { attempt: 2, created: "2026-11-10T10:31:00Z", started: "2026-11-10T12:00:00Z" });
+  assert.equal(mergeWith(t, { runs: [run(1), rerunAfterReady], events }).merged.length, 1);
 });
 
 test("merge keeps the start of a Check that a partial rerun copied from a draft-time attempt", (t) => {
