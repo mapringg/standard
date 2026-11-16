@@ -17,7 +17,8 @@ Add the package at a tag and install its hooks when the repository installs:
 
 | Command | What it does |
 | --- | --- |
-| `standard check [<name>...]` | Runs every check. In GitHub Actions it reads the commits of the pull request or push from `GITHUB_EVENT_PATH`, so check out with `fetch-depth: 0`. |
+| `standard check [<name>...]` | Runs every check. In GitHub Actions it reads the pull request or push from `GITHUB_EVENT_PATH`, so check out with `fetch-depth: 0`. A `pull_request` event runs the commit, pull request and tree checks in one process. |
+| `standard check --pr <number>` | Runs the same checks locally on a pull request that `gh pr view` reads. The clone needs the pull request's base and head commits. |
 | `standard hook commit-msg <file>` | Checks the commit message. |
 | `standard hook pre-commit` | Runs the `hooks.pre-commit` lines. |
 | `standard hook pre-push` | Refuses a merge commit that `origin/develop` lacks, then runs the `hooks.pre-push` lines. |
@@ -32,6 +33,24 @@ Add the package at a tag and install its hooks when the repository installs:
 | A pull request | A merge commit. A broken subject rule is a warning, because the squash replaces the commit. |
 | A push to `develop` or `main` | Any broken rule, a merge commit, and a subject that does not end with its pull request number, such as `(#12)`. |
 
+`pr-title` applies the same subject rules to the pull request title, because the title becomes the squash subject. The 80-character limit counts the ` (#<number>)` the squash adds. A title from Dependabot only warns.
+
+`pr-body` warns when the description does not follow the pull request template. It never fails the run, because the description can change until the merge.
+
+| Rule | Warns when |
+| --- | --- |
+| Content | The description is empty or has fewer than 120 characters outside HTML comments. |
+| Sections | A `## Summary`, `## Evidence` or `## Merge Danger` heading is missing. |
+| Evidence | The Evidence section has no `**Before:**` and `**After:**` pair and no table with Before and After columns. |
+| Door | There is no `**Door:** one-way` or `**Door:** two-way`. |
+| Blast Radius | There is no `**Blast Radius:**`, or its value before the first period is more than one word. |
+| Placeholder | A template placeholder such as `<one-word description>` is left in. |
+| Ticket | With `pr.ticketPrefix`, a ticket line is optional, and when present it is the first line and reads `Ticket: ABC-123`. Without `pr.ticketPrefix`, any `Ticket:` line warns. |
+
+`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
+
+`baseline-growth` fails a pull request that adds a check to `pending`, or creates or grows a file under `.standard/baselines/`. The one exception is the pull request that removes that check from `pending`: it turns the check on and may start its baseline.
+
 ## standard.json
 
 The file is optional. An unknown key fails every command.
@@ -42,8 +61,12 @@ The file is optional. An unknown key fails every command.
     "pre-commit": ["pnpm exec lint-staged"],
     "pre-push": ["pnpm run typecheck"]
   },
-  "pending": ["commit-subject"]
+  "pending": ["commit-subject"],
+  "pr": {
+    "ticketPrefix": "ABC",
+    "screenshots": { "when": ["apps/web/**"], "uploader": "scripts/upload-evidence.mjs" }
+  }
 }
 ```
 
-`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run.
+`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticketPrefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one.

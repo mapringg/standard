@@ -50,20 +50,27 @@ test("hook commit-msg accepts a good message and ignores what git strips", (t) =
   }
 });
 
+test("the commit hook accepts a good message while a pull request check is pending", (t) => {
+  const cwd = tempRepo(t, { pending: ["pr-body"] });
+  const { stderr, status } = commitMsg(cwd, "Add the login page\n");
+  assert.equal(stderr, "");
+  assert.equal(status, 0);
+});
+
 test("a pending check does not run, in a hook or in CI", (t) => {
   const cwd = tempRepo(t, { pending: ["commit-subject"] });
   assert.equal(commitMsg(cwd, "fix stuff\n").status, 0);
 
   const before = commit(cwd, "Start the repository");
   const after = commit(cwd, "wip");
-  const { stdout, status } = checkEvent(t, cwd, { ref: "refs/heads/develop", before, after });
+  const { stdout, status } = checkEvent(t, cwd, { ref: "refs/heads/develop", before, after }, ["commit-subject"]);
   assert.equal(stdout.trim(), "commit-subject: pending in standard.json, so it did not run");
   assert.equal(status, 0);
 });
 
 test("standard.json fails on a key or a check this version does not know", (t) => {
   const cases = [
-    [{ lint: {} }, /standard\.json has an unknown key "lint"\. Known keys: hooks, pending\./],
+    [{ lint: {} }, /standard\.json has an unknown key "lint"\. Known keys: hooks, pending, pr\./],
     [{ hooks: { "post-merge": [] } }, /unknown key "hooks\.post-merge"\. Known keys: hooks\.pre-commit, hooks\.pre-push\./],
     [{ hooks: { "pre-push": "pnpm test" } }, /hooks\.pre-push must be a list of non-empty strings/],
     [{ pending: ["commit-subjects"] }, /pending names "commit-subjects", which is not a check in this version/],
@@ -78,8 +85,8 @@ test("standard.json fails on a key or a check this version does not know", (t) =
 test("check refuses an unknown name, an unknown flag, and a ratchet flag on a commit check", (t) => {
   const cwd = tempRepo(t);
   const cases = [
-    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject\./],
-    [["--nope"], /Unexpected argument --nope\. Use one of --init, --write, --prune\./],
+    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, baseline-growth\./],
+    [["--nope"], /Unexpected argument --nope\. Use --pr <number> or one of --init, --write, --prune\./],
     [["commit-subject", "--write"], /--write changes one baseline, so name exactly one tree check/],
   ];
   for (const [args, expected] of cases) {

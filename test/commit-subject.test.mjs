@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import commitSubject from "../src/checks/commit-subject.mjs";
-import { checkEvent, commit, eventFile, git, standard, tempRepo } from "./helpers.mjs";
+import { checkEvent, commit, eventFile, git, pullRequestEvent, standard, tempRepo } from "./helpers.mjs";
 
 function fixes(subject, { body = "", source = "message", parents = 1 } = {}) {
   return commitSubject
@@ -60,7 +60,7 @@ for (const subject of [
 }
 
 function pullRequest(base, head) {
-  return { pull_request: { base: { sha: base }, head: { sha: head } } };
+  return pullRequestEvent({ base, head });
 }
 
 function push(ref, before, after) {
@@ -72,7 +72,7 @@ test("passes pull request commits that follow the convention", (t) => {
   const base = commit(cwd, "Start the repository");
   commit(cwd, "Run the repository script tests in CI");
   const head = commit(cwd, "Merge branch 'develop' into t3/ci");
-  const { stdout, status } = checkEvent(t, cwd, pullRequest(base, head));
+  const { stdout, status } = checkEvent(t, cwd, pullRequest(base, head), ["commit-subject"]);
   assert.equal(stdout.trim(), "commit-subject: OK (2 commit(s))");
   assert.equal(status, 0);
 });
@@ -109,7 +109,7 @@ test("fails when the clone lacks the pull request's commits", (t) => {
   const cwd = tempRepo(t);
   const only = commit(cwd, "Start the repository");
   const { stderr, status } = checkEvent(t, cwd, pullRequest("1".repeat(40), only));
-  assert.match(stderr, /standard: git log .* failed/);
+  assert.match(stderr, /standard: Commit 1{40} of pull request #123 is not in this clone\. Check out with fetch-depth: 0\./);
   assert.equal(status, 1);
 });
 
@@ -141,7 +141,7 @@ for (const trunk of ["develop", "main"]) {
   test(`passes a linear range on ${trunk}`, (t) => {
     const cwd = repoWithMergeCommit(t, trunk);
     const event = pullRequest(git(cwd, "rev-parse", `${trunk}^`), git(cwd, "rev-parse", trunk));
-    const { stdout, status } = checkEvent(t, cwd, event);
+    const { stdout, status } = checkEvent(t, cwd, event, ["commit-subject"]);
     assert.equal(stdout.trim(), "commit-subject: OK (1 commit(s))");
     assert.equal(status, 0);
   });
@@ -165,7 +165,7 @@ for (const trunk of ["develop", "main"]) {
     const before = commit(cwd, "Start the repository");
     commit(cwd, "Add the feature (#12)");
     const after = commit(cwd, "Fix the build on a clean clone (#13)");
-    const { stdout, status } = checkEvent(t, cwd, push(`refs/heads/${trunk}`, before, after));
+    const { stdout, status } = checkEvent(t, cwd, push(`refs/heads/${trunk}`, before, after), ["commit-subject"]);
     assert.equal(stdout.trim(), "commit-subject: OK (2 commit(s))");
     assert.equal(status, 0);
   });
@@ -203,7 +203,7 @@ test("a created branch and an event without commits have nothing to check", (t) 
   const cwd = tempRepo(t);
   const after = commit(cwd, "wip");
   for (const event of [push("refs/heads/feature", "0".repeat(40), after), { schedule: "0 0 * * *" }]) {
-    const { stdout, status } = checkEvent(t, cwd, event);
+    const { stdout, status } = checkEvent(t, cwd, event, ["commit-subject"]);
     assert.equal(stdout.trim(), "commit-subject: skipped, this run has no commits to check");
     assert.equal(status, 0);
   }

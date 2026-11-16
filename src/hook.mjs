@@ -55,9 +55,10 @@ export const HOOKS = {
   async "commit-msg"(repo, [file]) {
     if (!file) throw new Error("hook commit-msg needs the path of the commit message file.");
     const results = await run({
-      checks: registry.filter((check) => check.subject === "commit"),
+      checks: registry,
+      names: registry.filter((check) => check.subject === "commit").map((check) => check.name),
       repo,
-      scope: { commits: [commitFromFile(file)] },
+      scope: { commits: [commitFromFile(file)], pr: null },
     });
     for (const result of results) {
       if (result.outcome !== "ran") continue;

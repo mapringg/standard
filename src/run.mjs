@@ -6,9 +6,7 @@ import { ratchet } from "./ratchet.mjs";
  * @typedef {import("./registry.mjs").Check} Check
  * @typedef {import("./registry.mjs").Finding} Finding
  * @typedef {import("./repo.mjs").Repo} Repo
- *
- * Null means this run has no subject of that kind.
- * @typedef {{ commits: import("./subjects.mjs").Commit[] | null }} Scope
+ * @typedef {import("./subjects.mjs").Subjects} Scope
  *
  * @typedef {{ check: string, outcome: "pending" }
  *   | { check: string, outcome: "skipped", because: string }
@@ -22,9 +20,10 @@ const BASELINES = ".standard/baselines";
  * @param {Repo} repo
  * @param {Scope} scope
  * @param {import("./ratchet.mjs").Mode} mode
+ * @param {Check[]} checks
  * @returns {Promise<Result>}
  */
-async function runCheck(check, repo, scope, mode) {
+async function runCheck(check, repo, scope, mode, checks) {
   const name = check.name;
   if (repo.config.pending.includes(name)) return { check: name, outcome: "pending" };
   switch (check.subject) {
@@ -49,6 +48,21 @@ async function runCheck(check, repo, scope, mode) {
         failed: findings.some((finding) => !finding.advisory),
         findings,
         message: findings.length === 0 ? `OK (${commits.length} commit(s))` : "",
+      };
+    }
+    case "pr": {
+      const applies = check.applies?.(repo) ?? { on: true };
+      if (!applies.on) return { check: name, outcome: "skipped", because: applies.because };
+      if (scope.pr === null) {
+        return { check: name, outcome: "skipped", because: "this run has no pull request to check" };
+      }
+      const findings = check.run(scope.pr, repo, checks);
+      return {
+        check: name,
+        outcome: "ran",
+        failed: findings.some((finding) => !finding.advisory),
+        findings,
+        message: findings.length === 0 ? `OK (#${scope.pr.number})` : "",
       };
     }
     case "tree": {
@@ -87,13 +101,16 @@ export async function run({ checks, repo, scope, names = [], mode = "check" }) {
       );
     }
   }
+  if (repo.config.pending.includes("baseline-growth")) {
+    throw new Error("standard.json pending names baseline-growth, which guards pending itself. Remove it from pending.");
+  }
   const selected = names.length > 0 ? checks.filter((check) => names.includes(check.name)) : checks;
   if (mode !== "check" && (selected.length !== 1 || selected[0].subject !== "tree")) {
     throw new Error(
       `--${mode} changes one baseline, so name exactly one tree check: standard check <name> --${mode}.`,
     );
   }
-  return Promise.all(selected.map((check) => runCheck(check, repo, scope, mode)));
+  return Promise.all(selected.map((check) => runCheck(check, repo, scope, mode, checks)));
 }
 
 /**

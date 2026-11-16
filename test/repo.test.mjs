@@ -20,7 +20,7 @@ test("a worktree has the main checkout's name and its own root", (t) => {
 });
 
 test("files lists tracked paths, narrowed by a glob, and read returns their text", (t) => {
-  const cwd = tempRepo(t, { pending: [] });
+  const cwd = tempRepo(t, { pending: [], pr: {} });
   mkdirSync(join(cwd, "src/checks"), { recursive: true });
   writeFileSync(join(cwd, "src/checks/a.mjs"), "export default 1;\n");
   writeFileSync(join(cwd, "src/b.mjs"), "");
@@ -32,5 +32,5 @@ test("files lists tracked paths, narrowed by a glob, and read returns their text
   assert.deepEqual(repo.files("src/*.mjs"), ["src/b.mjs"]);
   assert.deepEqual(repo.files("**/*.mjs"), ["src/b.mjs", "src/checks/a.mjs"]);
   assert.equal(repo.read("src/checks/a.mjs"), "export default 1;\n");
-  assert.deepEqual(repo.config, { hooks: { "pre-commit": [], "pre-push": [] }, pending: [] });
+  assert.deepEqual(repo.config, { hooks: { "pre-commit": [], "pre-push": [] }, pending: [], pr: {} });
 });

@@ -5,10 +5,10 @@ import { install } from "../src/install.mjs";
 import { registry } from "../src/registry.mjs";
 import { loadRepo } from "../src/repo.mjs";
 import { failed, report, run } from "../src/run.mjs";
-import { commitsFromEvent } from "../src/subjects.mjs";
+import { subjectsFromEvent, subjectsFromGh } from "../src/subjects.mjs";
 
 const USAGE = `Usage:
-  standard check [<name>...] [--init | --write | --prune]
+  standard check [<name>...] [--pr <number>] [--init | --write | --prune]
   standard hook <${Object.keys(HOOKS).join(" | ")}> [<git args>...]
   standard install`;
 
@@ -19,16 +19,26 @@ const MODES = ["--init", "--write", "--prune"];
  * @type {Record<string, (args: string[]) => ExitCode | Promise<ExitCode>>}
  */
 const COMMANDS = {
-  async check(args) {
+  async check(argv) {
+    const at = argv.indexOf("--pr");
+    const number = at === -1 ? null : argv[at + 1];
+    if (number !== null && !/^[1-9]\d*$/.test(number ?? "")) {
+      throw new Error("--pr needs a pull request number, such as --pr 12.");
+    }
+    const args = at === -1 ? argv : argv.toSpliced(at, 2);
     const flags = args.filter((arg) => arg.startsWith("--"));
     const stray = flags.find((flag) => !MODES.includes(flag)) ?? flags[1];
-    if (stray) throw new Error(`Unexpected argument ${stray}. Use one of ${MODES.join(", ")}.`);
+    if (stray) throw new Error(`Unexpected argument ${stray}. Use --pr <number> or one of ${MODES.join(", ")}.`);
     const repo = loadRepo(process.cwd());
     const event = process.env.GITHUB_EVENT_PATH;
     const results = await run({
       checks: registry,
       repo,
-      scope: { commits: event ? commitsFromEvent(repo.root, event) : null },
+      scope: number
+        ? subjectsFromGh(repo.root, Number(number))
+        : event
+          ? subjectsFromEvent(repo.root, event)
+          : { commits: null, pr: null },
       names: args.filter((arg) => !arg.startsWith("--")),
       mode: /** @type {import("../src/ratchet.mjs").Mode} */ (flags[0]?.slice(2) ?? "check"),
     });

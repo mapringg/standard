@@ -1,10 +1,15 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
  * @typedef {object} Config
  * @property {{ "pre-commit": readonly string[], "pre-push": readonly string[] }} hooks Shell lines each hook runs after its built-in rule.
  * @property {readonly string[]} pending Checks this repo has not adopted yet. They do not run.
+ * @property {PullRequestConfig} pr
+ *
+ * @typedef {object} PullRequestConfig
+ * @property {string} [ticketPrefix] The tracker's key, such as "ABC" in `Ticket: ABC-12`. Absent means the repo has no tickets.
+ * @property {{ when: readonly string[], uploader: string }} [screenshots] A pull request that changes a file matching a `when` glob needs a screenshot in Evidence; `uploader` is the repo script that uploads one.
  */
 
 const FILE = "standard.json";
@@ -42,6 +47,46 @@ function strings(value, at) {
   return Object.freeze([...value]);
 }
 
+const TICKET_PREFIX = /^[A-Z][A-Z0-9]*$/;
+
+/**
+ * @param {unknown} value
+ * @param {string} at
+ * @returns {string}
+ */
+function repoPath(value, at) {
+  if (typeof value !== "string" || value === "" || value.startsWith("/") || value.split("/").includes("..")) {
+    throw new Error(`${at} must be a path relative to the repository root, such as scripts/upload.mjs.`);
+  }
+  return value;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {PullRequestConfig}
+ */
+function pullRequest(value) {
+  const pr = section(value, "pr", ["ticketPrefix", "screenshots"]);
+  /** @type {PullRequestConfig} */
+  const parsed = {};
+  if (pr.ticketPrefix !== undefined) {
+    if (typeof pr.ticketPrefix !== "string" || !TICKET_PREFIX.test(pr.ticketPrefix)) {
+      throw new Error(`${FILE} pr.ticketPrefix must be capital letters and digits, such as "ABC".`);
+    }
+    parsed.ticketPrefix = pr.ticketPrefix;
+  }
+  if (pr.screenshots !== undefined) {
+    const screenshots = section(pr.screenshots, "pr.screenshots", ["when", "uploader"]);
+    const when = strings(screenshots.when, `${FILE} pr.screenshots.when`);
+    if (when.length === 0) throw new Error(`${FILE} pr.screenshots.when must list at least one glob.`);
+    parsed.screenshots = Object.freeze({
+      when,
+      uploader: repoPath(screenshots.uploader, `${FILE} pr.screenshots.uploader`),
+    });
+  }
+  return Object.freeze(parsed);
+}
+
 /**
  * @param {string} text
  * @returns {Config}
@@ -53,7 +98,7 @@ export function parseConfig(text) {
   } catch (error) {
     throw new Error(`${FILE} is not valid JSON: ${/** @type {Error} */ (error).message}`);
   }
-  const top = section(raw, "", ["hooks", "pending"]);
+  const top = section(raw, "", ["hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
   return Object.freeze({
     hooks: Object.freeze({
@@ -61,6 +106,7 @@ export function parseConfig(text) {
       "pre-push": strings(hooks["pre-push"] ?? [], `${FILE} hooks.pre-push`),
     }),
     pending: strings(top.pending ?? [], `${FILE} pending`),
+    pr: pullRequest(top.pr ?? {}),
   });
 }
 
@@ -70,5 +116,8 @@ export function parseConfig(text) {
  */
 export function loadConfig(root) {
   const path = join(root, FILE);
+  if (existsSync(path) && lstatSync(path).isSymbolicLink()) {
+    throw new Error(`${FILE} is a symlink. Make it a regular file, so every check reads the same config.`);
+  }
   return parseConfig(existsSync(path) ? readFileSync(path, "utf8") : "{}");
 }

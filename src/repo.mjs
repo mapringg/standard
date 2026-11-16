@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -11,6 +11,7 @@ import { loadConfig } from "./config.mjs";
  * @property {import("./config.mjs").Config} config
  * @property {(glob?: string) => string[]} files Tracked paths, posix, relative to root.
  * @property {(path: string) => string} read
+ * @property {(commit: string, path: string) => string | null} readAt
  */
 
 /**
@@ -55,5 +56,10 @@ export function loadRepo(cwd) {
         .split("\0")
         .filter(Boolean),
     read: (path) => readFileSync(join(root, path), "utf8"),
+    readAt(commit, path) {
+      const object = `${commit}:${path}`;
+      const exists = spawnSync("git", ["cat-file", "-e", object], { cwd: root }).status === 0;
+      return exists ? git(root, "show", object) : null;
+    },
   };
 }

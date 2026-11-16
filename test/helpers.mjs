@@ -70,3 +70,36 @@ export function checkEvent(t, cwd, event, args = []) {
     env: { GITHUB_ACTIONS: "true", GITHUB_EVENT_PATH: eventFile(t, event) },
   });
 }
+
+export const GOOD_BODY = [
+  "## Summary",
+  "",
+  "Check pull request titles and bodies from the standard package.",
+  "",
+  "## Evidence",
+  "",
+  "**Before:** 3 fail.",
+  "",
+  "**After:** 0 fail.",
+  "",
+  "## Merge Danger",
+  "",
+  "**Door:** two-way",
+  "",
+  "**Blast Radius:** annotations",
+].join("\n");
+
+export function pullRequestEvent({ base, head, number = 123, title = "Add the pull request checks", body = GOOD_BODY, author = "someone" }) {
+  return {
+    pull_request: {
+      number,
+      title,
+      body,
+      user: { login: author },
+      base: { ref: "develop", sha: base },
+      head: { ref: "feature", sha: head },
+      additions: 1,
+      deletions: 0,
+    },
+  };
+}

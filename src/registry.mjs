@@ -1,8 +1,13 @@
+import baselineGrowth from "./checks/baseline-growth.mjs";
 import commitSubject from "./checks/commit-subject.mjs";
+import prBody from "./checks/pr-body.mjs";
+import prScreenshot from "./checks/pr-screenshot.mjs";
+import prTitle from "./checks/pr-title.mjs";
 
 /**
  * @typedef {import("./repo.mjs").Repo} Repo
  * @typedef {import("./subjects.mjs").Commit} Commit
+ * @typedef {import("./subjects.mjs").PullRequest} PullRequest
  *
  * @typedef {object} Finding
  * @property {string} key Names what is wrong. A tree check's baseline lists keys.
@@ -15,10 +20,12 @@ import commitSubject from "./checks/commit-subject.mjs";
  * @typedef {object} Named
  * @property {string} name
  * @property {string[]} retired Paths of the repo scripts this check replaces.
+ * @property {string} since The package version that added this check.
  *
  * @typedef {(Named & { subject: "commit", run(commit: Commit, repo: Repo): Finding[] })
+ *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, run(pr: PullRequest, repo: Repo, checks: readonly Named[]): Finding[] })
  *   | (Named & { subject: "tree", applies(repo: Repo): Applies, run(repo: Repo): Finding[] | Promise<Finding[]> })} Check
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, baselineGrowth];
