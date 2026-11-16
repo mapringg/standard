@@ -196,6 +196,17 @@ test("pr-screenshot globs match dotfiles and dot folders, and keep * inside one 
   assert.equal(checkScreenshot(t, "apps/web/src/page.tsx", PAIR, config).stdout.trim(), "pr-screenshot: OK (#123)");
 });
 
+test("pr-screenshot skips files a ! entry in when excludes, and needs one entry that includes", (t) => {
+  const config = (when) => ({ pr: { screenshots: { when, uploader: "scripts/upload-evidence.mjs" } } });
+  const excluding = config(["apps/web/**", "!apps/web/**/*.test.tsx", "!apps/web/docs/**"]);
+  assert.equal(checkScreenshot(t, "apps/web/src/page.test.tsx", PAIR, excluding).stdout.trim(), "pr-screenshot: OK (#123)");
+  assert.equal(checkScreenshot(t, "apps/web/docs/guide.md", PAIR, excluding).stdout.trim(), "pr-screenshot: OK (#123)");
+  assert.match(checkScreenshot(t, "apps/web/src/page.tsx", PAIR, excluding).stdout, /the PR changes apps\/web\/src\/page\.tsx/);
+  const { stderr, status } = checkScreenshot(t, "apps/web/src/page.tsx", PAIR, config(["!apps/web/docs/**"]));
+  assert.match(stderr, /pr\.screenshots\.when must list at least one glob that does not start with "!"/);
+  assert.equal(status, 1);
+});
+
 test("pr-screenshot accepts a UI change whose Evidence embeds a screenshot", (t) => {
   const evidence = `${PAIR}\n\n![after](https://example.com/b.png)`;
   assert.equal(checkScreenshot(t, "packages/ui/src/button.tsx", evidence).stdout.trim(), "pr-screenshot: OK (#123)");

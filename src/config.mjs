@@ -101,7 +101,9 @@ function pullRequest(value) {
   if (pr.screenshots !== undefined) {
     const screenshots = section(pr.screenshots, "pr.screenshots", ["when", "uploader"]);
     const when = strings(screenshots.when, `${FILE} pr.screenshots.when`);
-    if (when.length === 0) throw new Error(`${FILE} pr.screenshots.when must list at least one glob.`);
+    if (!when.some((glob) => !glob.startsWith("!"))) {
+      throw new Error(`${FILE} pr.screenshots.when must list at least one glob that does not start with "!".`);
+    }
     parsed.screenshots = Object.freeze({
       when,
       uploader: repoPath(screenshots.uploader, `${FILE} pr.screenshots.uploader`),

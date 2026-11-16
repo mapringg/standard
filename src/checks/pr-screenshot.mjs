@@ -18,7 +18,7 @@ export default {
       repo.config.pr.screenshots
     );
     const range = `${pr.baseSha}...${pr.headSha}`;
-    const pathspecs = when.map((glob) => `:(glob)${glob}`);
+    const pathspecs = when.map((glob) => (glob.startsWith("!") ? `:(glob,exclude)${glob.slice(1)}` : `:(glob)${glob}`));
     const visual = git(repo.root, "diff", "--name-only", "-z", range, "--", ...pathspecs).split("\0").filter(Boolean);
     if (visual.length === 0 || evidenceHasImage(pr.body)) return [];
     const shown = visual.length > 3 ? `${visual.slice(0, 3).join(", ")} and ${visual.length - 3} more` : visual.join(", ");
