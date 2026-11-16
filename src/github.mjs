@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { constants } from "node:http2";
 
 const NEXT_PAGE = /<([^>]+)>;\s*rel="next"/;
@@ -81,5 +82,34 @@ export async function expectOk(request, tolerated = []) {
   const response = await request;
   if (!response.ok && !tolerated.includes(response.status)) {
     throw new Error(`${response.url}: ${response.status} ${await response.text()}`);
+  }
+}
+
+export class GhError extends Error {
+  /**
+   * @param {string} message
+   * @param {string} detail What gh printed to stderr, such as "gh: Branch not protected (HTTP 404)".
+   * @param {number | null} status The HTTP status gh reports, or null when it reports none.
+   */
+  constructor(message, detail, status) {
+    super(message);
+    this.detail = detail;
+    this.status = status;
+  }
+}
+
+/**
+ * @param {string} cwd
+ * @param {string[]} args
+ * @returns {string}
+ */
+export function gh(cwd, args) {
+  try {
+    return execFileSync("gh", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    const { stderr = "", message } = /** @type {Error & { stderr?: string }} */ (error);
+    const detail = stderr.trim() || message;
+    const status = /\(HTTP (\d{3})\)/.exec(detail)?.[1];
+    throw new GhError(`gh ${args.join(" ")} failed in ${cwd}. ${detail}`, detail, status === undefined ? null : Number(status));
   }
 }

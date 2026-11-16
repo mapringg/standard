@@ -1,12 +1,13 @@
-import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
 import { FILE, pendingProblem } from "./config.mjs";
+import { gh } from "./github.mjs";
 import { hookProblems } from "./install.mjs";
 import { newer, PACKAGE, pinOf, REPOSITORY } from "./pin.mjs";
 import { baselineEntries } from "./ratchet.mjs";
 import { registry } from "./registry.mjs";
 import { loadRepo, tracked } from "./repo.mjs";
+import { settingsNotes } from "./settings.mjs";
 import { PROBES } from "./wiring.mjs";
 
 /**
@@ -17,7 +18,7 @@ import { PROBES } from "./wiring.mjs";
  * @typedef {object} Cell
  * @property {"wiring" | "checks" | "github"} group
  * @property {string} row
- * @property {"ok" | "fail" | "on" | "pending" | `debt ${number}` | "absent" | "n/a"} status
+ * @property {"ok" | "fail" | "unknown" | "on" | "pending" | `debt ${number}` | "absent" | "n/a"} status
  * @property {boolean | null} pass
  * @property {string[]} notes
  *
@@ -26,18 +27,7 @@ import { PROBES } from "./wiring.mjs";
  * @property {Cell[]} cells
  * @property {number} passing
  * @property {number} total
- *
- * @typedef {Record<string, unknown>} Settings
  */
-
-/** @type {{ row: string, want: Settings }[]} */
-const SETTINGS = [
-  { row: "default-branch", want: { default_branch: "develop" } },
-  { row: "squash-only", want: { allow_squash_merge: true, allow_merge_commit: false, allow_rebase_merge: false } },
-  { row: "pr-title", want: { squash_merge_commit_title: "PR_TITLE" } },
-  { row: "blank-message", want: { squash_merge_commit_message: "BLANK" } },
-  { row: "delete-branch", want: { delete_branch_on_merge: true } },
-];
 
 /**
  * @param {Check} check
@@ -65,20 +55,6 @@ function checkStatus(check, repo, pin) {
     if (count) return { status: `debt ${count}`, pass: false, notes: [`${path} lists ${count} findings to fix.`] };
   }
   return { status: "on", pass: true, notes: [] };
-}
-
-/**
- * @param {string} cwd
- * @param {string[]} args
- * @returns {string}
- */
-function gh(cwd, args) {
-  try {
-    return execFileSync("gh", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  } catch (error) {
-    const { stderr = "", message } = /** @type {Error & { stderr?: string }} */ (error);
-    throw new Error(`gh ${args.join(" ")} failed in ${cwd}. ${stderr.trim() || message}`);
-  }
 }
 
 /**
@@ -119,17 +95,13 @@ function passOrFail(group, row, notes) {
  * @returns {Cell[]}
  */
 function githubCells(root, pin, latest) {
-  /** @type {Settings} */
-  const settings = JSON.parse(gh(root, ["api", "repos/{owner}/{repo}"]));
-  return [
-    ...SETTINGS.map(({ row, want }) => {
-      const notes = Object.entries(want)
-        .filter(([field, value]) => settings[field] !== value)
-        .map(([field, value]) => `Set ${field} to ${JSON.stringify(value)}; it is ${JSON.stringify(settings[field])}.`);
-      return passOrFail("github", row, notes);
-    }),
-    passOrFail("github", "current", currentNotes(pin, latest)),
-  ];
+  const { fail, unknown } = settingsNotes(root);
+  /** @type {Cell} */
+  const settings =
+    fail.length === 0 && unknown.length > 0
+      ? { group: "github", row: "settings", status: "unknown", pass: null, notes: unknown }
+      : passOrFail("github", "settings", [...fail, ...unknown]);
+  return [settings, passOrFail("github", "current", currentNotes(pin, latest))];
 }
 
 /**
