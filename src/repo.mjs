@@ -47,14 +47,16 @@ export function commonDir(cwd) {
  */
 export function loadRepo(cwd) {
   const root = git(cwd, "rev-parse", "--show-toplevel");
+  /** @type {Repo["files"]} */
+  const files = (glob) =>
+    git(root, "ls-files", "-z", ...(glob ? ["--", `:(glob)${glob}`] : []))
+      .split("\0")
+      .filter(Boolean);
   return {
     root,
     name: basename(dirname(commonDir(root))),
-    config: loadConfig(root),
-    files: (glob) =>
-      git(root, "ls-files", "-z", ...(glob ? ["--", `:(glob)${glob}`] : []))
-        .split("\0")
-        .filter(Boolean),
+    config: loadConfig(root, (path) => files(path).includes(path)),
+    files,
     read: (path) => readFileSync(join(root, path), "utf8"),
     readAt(commit, path) {
       const object = `${commit}:${path}`;

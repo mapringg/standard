@@ -1,5 +1,6 @@
 import { matchesGlob } from "node:path/posix";
 
+import { FILE } from "../config.mjs";
 import { evidenceHasImage } from "./support/markdown.mjs";
 
 /** @type {import("../registry.mjs").Check} */
@@ -7,11 +8,11 @@ export default {
   name: "pr-screenshot",
   since: "0.2.0",
   subject: "pr",
-  retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs"],
+  retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   applies(repo) {
     return repo.config.pr.screenshots
       ? { on: true }
-      : { on: false, because: "standard.json sets no pr.screenshots" };
+      : { on: false, because: `${FILE} sets no pr.screenshots` };
   },
   run(pr, repo) {
     const { when, uploader } = /** @type {{ when: readonly string[], uploader: string }} */ (

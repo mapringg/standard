@@ -76,7 +76,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  wiring           on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
-      `pr-screenshot in ${name}: n/a, standard.json sets no pr.screenshots`,
+      `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
       "",
       `${name}: 13 of 14 pass`,
       "",
@@ -89,7 +89,7 @@ test("an n/a row leaves the denominator, and a row that applies joins it", (t) =
   const { status, repos } = scoreJson(repoWith(t, WIRED), []);
   assert.deepEqual(
     repos[0].cells.find((cell) => cell.row === "pr-screenshot"),
-    { group: "checks", row: "pr-screenshot", status: "n/a", pass: null, notes: ["standard.json sets no pr.screenshots"] },
+    { group: "checks", row: "pr-screenshot", status: "n/a", pass: null, notes: [".standard/config.json sets no pr.screenshots"] },
   );
   assert.deepEqual([repos[0].passing, repos[0].total], [14, 14]);
   assert.equal(status, 0);
@@ -115,7 +115,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
     row: "pr-screenshot",
     status: "pending",
     pass: false,
-    notes: ["standard.json pending lists it, so it does not run."],
+    notes: [".standard/config.json pending lists it, so it does not run."],
   });
   assert.deepEqual([repos[0].passing, repos[0].total], [14, 15]);
   assert.equal(status, 1);
@@ -123,8 +123,8 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, 'standard.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring.'],
-    [{ pending: ["baseline-growth"] }, "standard.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring.'],
+    [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
     const cwd = repoWith(t, WIRED, config);
@@ -167,7 +167,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.4.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.5.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -225,7 +225,7 @@ test("a note that holds for several repos prints once and names them", (t) => {
   const { stdout } = standard(a, ["score", a, b]);
   const names = `${basename(a)}, ${basename(b)}`;
   assert.match(stdout, new RegExp(`^pr-size in ${names}: The repo does not install @mapringg/standard\\.$`, "m"));
-  assert.match(stdout, new RegExp(`^pr-screenshot in ${names}: n/a, standard\\.json sets no pr\\.screenshots$`, "m"));
+  assert.match(stdout, new RegExp(`^pr-screenshot in ${names}: n/a, \\.standard/config\\.json sets no pr\\.screenshots$`, "m"));
   assert.equal(stdout.match(/^pr-size in /gm).length, 1);
 });
 
@@ -275,7 +275,7 @@ test("--remote fails current when a newer release tag than the pin exists", (t) 
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.10.0, the latest release; the repo pins 0.4.0."],
+    notes: ["Bump @mapringg/standard to v0.10.0, the latest release; the repo pins 0.5.0."],
   });
   assert.equal(status, 1);
 });

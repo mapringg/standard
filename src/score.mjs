@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { pendingProblem } from "./config.mjs";
+import { FILE, pendingProblem } from "./config.mjs";
 import { hookProblems } from "./install.mjs";
 import { newer, PACKAGE, pinOf, REPOSITORY } from "./pin.mjs";
 import { baselineEntries } from "./ratchet.mjs";
@@ -47,7 +47,7 @@ const SETTINGS = [
  */
 function checkStatus(check, repo, pin) {
   if (repo.config.pending.includes(check.name)) {
-    return { status: "pending", pass: false, notes: ["standard.json pending lists it, so it does not run."] };
+    return { status: "pending", pass: false, notes: [`${FILE} pending lists it, so it does not run.`] };
   }
   /** @type {import("./registry.mjs").Applies} */
   const applies = check.subject === "commit" ? { on: true } : (check.applies?.(repo) ?? { on: true });

@@ -25,10 +25,10 @@ test("files lists tracked paths, narrowed by a glob, and read returns their text
   writeFileSync(join(cwd, "src/checks/a.mjs"), "export default 1;\n");
   writeFileSync(join(cwd, "src/b.mjs"), "");
   writeFileSync(join(cwd, "untracked.mjs"), "");
-  git(cwd, "add", "standard.json", "src");
+  git(cwd, "add", ".standard", "src");
 
   const repo = loadRepo(cwd);
-  assert.deepEqual(repo.files(), ["src/b.mjs", "src/checks/a.mjs", "standard.json"]);
+  assert.deepEqual(repo.files(), [".standard/config.json", "src/b.mjs", "src/checks/a.mjs"]);
   assert.deepEqual(repo.files("src/*.mjs"), ["src/b.mjs"]);
   assert.deepEqual(repo.files("**/*.mjs"), ["src/b.mjs", "src/checks/a.mjs"]);
   assert.equal(repo.read("src/checks/a.mjs"), "export default 1;\n");

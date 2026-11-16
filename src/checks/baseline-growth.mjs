@@ -1,3 +1,4 @@
+import { FILE } from "../config.mjs";
 import { newer, pinOf } from "../pin.mjs";
 import { baselineEntries } from "../ratchet.mjs";
 import { git } from "../repo.mjs";
@@ -10,7 +11,7 @@ const BASELINES = /^\.standard\/baselines\/([^/]+)\.json$/;
  * @returns {string[]}
  */
 function rawPendingAt(repo, commit) {
-  const text = repo.readAt(commit, "standard.json");
+  const text = repo.readAt(commit, FILE) ?? repo.readAt(commit, "standard.json");
   try {
     const pending = text === null ? [] : JSON.parse(text).pending;
     return Array.isArray(pending) ? pending.filter((name) => typeof name === "string") : [];
@@ -53,12 +54,11 @@ export default {
       .filter((name) => !before.includes(name) && !arrived(name))
       .map((name) => ({
         key: `pending ${name}`,
-        fix: `standard.json adds "${name}" to pending. pending only shrinks: fix what ${name} finds, or start its baseline in the PR that removes it from pending.`,
+        fix: `${FILE} adds "${name}" to pending. pending only shrinks: fix what ${name} finds, or start its baseline in the PR that removes it from pending.`,
       }));
 
     const tracked = git(repo.root, "ls-tree", "-r", "--name-only", pr.headSha, "--", ".standard");
-    const guarded = ["standard.json", ...tracked.split("\n").filter(Boolean)];
-    for (const path of guarded) {
+    for (const path of tracked.split("\n").filter(Boolean)) {
       if (isSymlinkAt(repo, pr.headSha, path)) {
         findings.push({ key: path, fix: `${path} is a symlink. Make it a regular file, so the checks and this guard read the same content.` });
       }
@@ -76,7 +76,7 @@ export default {
       } else if (was === null) {
         findings.push({
           key: path,
-          fix: `This PR creates ${path} with ${count} entries. A baseline starts only in the PR that removes ${check} from standard.json pending. Fix the findings instead.`,
+          fix: `This PR creates ${path} with ${count} entries. A baseline starts only in the PR that removes ${check} from ${FILE} pending. Fix the findings instead.`,
         });
       } else if (count > was) {
         findings.push({

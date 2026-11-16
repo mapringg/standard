@@ -45,7 +45,7 @@ export function tempDir(t, prefix) {
 export function tempRepo(t, config) {
   const cwd = tempDir(t, "repo");
   git(cwd, "init", "-q", "-b", "develop");
-  if (config) writeFileSync(join(cwd, "standard.json"), JSON.stringify(config));
+  if (config) write(cwd, { ".standard/config.json": config });
   return cwd;
 }
 
@@ -113,7 +113,7 @@ export function pullRequestEvent({ base, head, number = 123, title = "Add the pu
 export const WIRED = {
   "package.json": {
     scripts: { prepare: "standard install" },
-    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.4.0" },
+    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.5.0" },
   },
   ".github/workflows/ci.yml": [
     "on:",

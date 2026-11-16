@@ -7,7 +7,7 @@ export default {
   name: "pr-title",
   since: "0.2.0",
   subject: "pr",
-  retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs"],
+  retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   run(pr) {
     const advisory = SELF_TITLED.includes(pr.author);
     return subjectNotes(pr.title, ` (#${pr.number})`).map((note) => ({
