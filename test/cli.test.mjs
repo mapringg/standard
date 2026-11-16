@@ -85,7 +85,7 @@ test("standard.json fails on a key or a check this version does not know", (t) =
 test("check refuses an unknown name, an unknown flag, and a ratchet flag on a commit check", (t) => {
   const cwd = tempRepo(t);
   const cases = [
-    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, baseline-growth\./],
+    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth\./],
     [["--nope"], /Unexpected argument --nope\. Use --pr <number> or one of --init, --write, --prune\./],
     [["commit-subject", "--write"], /--write changes one baseline, so name exactly one tree check/],
   ];
@@ -97,8 +97,8 @@ test("check refuses an unknown name, an unknown flag, and a ratchet flag on a co
 });
 
 test("an unknown command prints the usage", (t) => {
-  const { stderr, status } = standard(tempRepo(t), ["merge"]);
-  assert.match(stderr, /Unknown command merge\.\nUsage:\n {2}standard check/);
+  const { stderr, status } = standard(tempRepo(t), ["score"]);
+  assert.match(stderr, /Unknown command score\.\nUsage:\n {2}standard check/);
   assert.equal(status, 1);
 });
 

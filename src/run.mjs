@@ -56,13 +56,13 @@ async function runCheck(check, repo, scope, mode, checks) {
       if (scope.pr === null) {
         return { check: name, outcome: "skipped", because: "this run has no pull request to check" };
       }
-      const findings = check.run(scope.pr, repo, checks);
+      const findings = await check.run(scope.pr, repo, checks);
       return {
         check: name,
         outcome: "ran",
         failed: findings.some((finding) => !finding.advisory),
         findings,
-        message: findings.length === 0 ? `OK (#${scope.pr.number})` : "",
+        message: check.summary?.(scope.pr) ?? (findings.length === 0 ? `OK (#${scope.pr.number})` : ""),
       };
     }
     case "tree": {

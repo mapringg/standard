@@ -1,36 +1,11 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
-import { GOOD_BODY, checkEvent, git, pullRequestEvent, standard, tempDir, tempRepo } from "./helpers.mjs";
+import { GOOD_BODY, checkEvent, git, pullRequestEvent, pullRequestRepo, standard, tempDir, tempRepo, write } from "./helpers.mjs";
 
 const PAIR = "**Before:** 3 fail.\n\n**After:** 0 fail.";
-
-function write(cwd, files) {
-  for (const [path, content] of Object.entries(files)) {
-    const full = join(cwd, path);
-    if (content === null) {
-      rmSync(full);
-      continue;
-    }
-    mkdirSync(dirname(full), { recursive: true });
-    writeFileSync(full, typeof content === "string" ? content : JSON.stringify(content));
-  }
-}
-
-function pullRequestRepo(t, { base = {}, head = { "README.md": "changed" } } = {}) {
-  const cwd = tempRepo(t);
-  write(cwd, base);
-  git(cwd, "add", "-A");
-  git(cwd, "commit", "-q", "--allow-empty", "--no-verify", "-m", "Start the repository");
-  const baseSha = git(cwd, "rev-parse", "HEAD");
-  git(cwd, "switch", "-q", "-c", "feature");
-  write(cwd, head);
-  git(cwd, "add", "-A");
-  git(cwd, "commit", "-q", "--no-verify", "-m", "Change the sample files");
-  return { cwd, base: baseSha, head: git(cwd, "rev-parse", "HEAD") };
-}
 
 function checkPullRequest(t, repo, pr = {}, names = []) {
   return checkEvent(t, repo.cwd, pullRequestEvent({ base: repo.base, head: repo.head, ...pr }), names);
@@ -352,6 +327,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "pr-title: OK (#123)",
       "pr-body: OK (#123)",
       "pr-screenshot: skipped, standard.json sets no pr.screenshots",
+      "pr-size: size:XS, 1 changed line(s) (#123)",
       "baseline-growth: OK (#123)",
     ].join("\n"),
   );

@@ -2,6 +2,7 @@
 
 import { HOOKS } from "../src/hook.mjs";
 import { install } from "../src/install.mjs";
+import { merge } from "../src/merge.mjs";
 import { registry } from "../src/registry.mjs";
 import { loadRepo } from "../src/repo.mjs";
 import { failed, report, run } from "../src/run.mjs";
@@ -10,7 +11,8 @@ import { subjectsFromEvent, subjectsFromGh } from "../src/subjects.mjs";
 const USAGE = `Usage:
   standard check [<name>...] [--pr <number>] [--init | --write | --prune]
   standard hook <${Object.keys(HOOKS).join(" | ")}> [<git args>...]
-  standard install`;
+  standard install
+  standard merge <number> [--admin]`;
 
 const MODES = ["--init", "--write", "--prune"];
 
@@ -54,6 +56,12 @@ const COMMANDS = {
     for (const change of changes) console.log(`standard install: ${change}`);
     if (changes.length === 0) console.log("standard install: hooks already up to date");
     return 0;
+  },
+  merge([number, ...flags]) {
+    if (!/^[1-9]\d*$/.test(number ?? "") || flags.some((flag) => flag !== "--admin")) {
+      throw new Error(`merge needs a pull request number and takes only --admin.\n${USAGE}`);
+    }
+    return merge(process.cwd(), Number(number), flags.includes("--admin"));
   },
 };
 

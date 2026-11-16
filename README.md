@@ -22,6 +22,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `standard hook commit-msg <file>` | Checks the commit message. |
 | `standard hook pre-commit` | Runs the `hooks.pre-commit` lines. |
 | `standard hook pre-push` | Refuses a merge commit that `origin/develop` lacks, then runs the `hooks.pre-push` lines. |
+| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its `Check` run is green. See [Merge](#merge). |
 
 ## Checks
 
@@ -49,7 +50,31 @@ Add the package at a tag and install its hooks when the repository installs:
 
 `pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
 
+`pr-size` reports the pull request's size from its changed lines and never fails the run. It leaves out `pnpm-lock.yaml`, and leaves out test files unless the pull request changes only tests. A binary file and a pure rename count nothing.
+
+| Label | Changed lines |
+| --- | --- |
+| `size:XS` | under 10 |
+| `size:S` | 10 to 29 |
+| `size:M` | 30 to 99 |
+| `size:L` | 100 to 499 |
+| `size:XL` | 500 to 999 |
+| `size:XXL` | 1000 or more |
+
+When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the label if the repository lacks it, removes any other `size:` label and sets its own. The token needs `issues: write`. A label it cannot set is a warning.
+
 `baseline-growth` fails a pull request that adds a check to `pending`, or creates or grows a file under `.standard/baselines/`. The one exception is the pull request that removes that check from `pending`: it turns the check on and may start its baseline.
+
+## Merge
+
+`standard merge <number>` is the one way to merge a pull request. It reads the pull request and its head commit's check runs live through `gh`, and refuses unless all of these hold:
+
+- The pull request is open and not a draft.
+- Its base is `develop`.
+- Its title passes the `pr-title` rules with ` (#<number>)` added.
+- A check run named `Check` from GitHub Actions on the exact head commit has concluded `success`. A missing run, a run on an older commit, or a run in any other state refuses, and the message names the runs it found.
+
+Then it runs `gh pr merge <number> --squash --match-head-commit <sha> --subject "<title> (#<number>)" --body ""`, so a push after the check cannot be merged unseen. `--admin` passes GitHub's admin flag through for required reviews and still needs a green `Check`. Name the CI job `Check` so the gate can find it.
 
 ## standard.json
 

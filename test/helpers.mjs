@@ -1,12 +1,12 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export const CLI = join(import.meta.dirname, "../bin/standard.mjs");
 
 const inherited = Object.fromEntries(
-  Object.entries(process.env).filter(([name]) => !/^(GIT_|GITHUB_)/.test(name)),
+  Object.entries(process.env).filter(([name]) => !/^(GIT_|GITHUB_|GH_)/.test(name)),
 );
 
 export const ENV = {
@@ -102,4 +102,29 @@ export function pullRequestEvent({ base, head, number = 123, title = "Add the pu
       deletions: 0,
     },
   };
+}
+
+export function write(cwd, files) {
+  for (const [path, content] of Object.entries(files)) {
+    const full = join(cwd, path);
+    if (content === null) {
+      rmSync(full);
+      continue;
+    }
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, typeof content === "string" || Buffer.isBuffer(content) ? content : JSON.stringify(content));
+  }
+}
+
+export function pullRequestRepo(t, { base = {}, head = { "README.md": "changed" } } = {}) {
+  const cwd = tempRepo(t);
+  write(cwd, base);
+  git(cwd, "add", "-A");
+  git(cwd, "commit", "-q", "--allow-empty", "--no-verify", "-m", "Start the repository");
+  const baseSha = git(cwd, "rev-parse", "HEAD");
+  git(cwd, "switch", "-q", "-c", "feature");
+  write(cwd, head);
+  git(cwd, "add", "-A");
+  git(cwd, "commit", "-q", "--no-verify", "-m", "Change the sample files");
+  return { cwd, base: baseSha, head: git(cwd, "rev-parse", "HEAD") };
 }

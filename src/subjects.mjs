@@ -26,8 +26,11 @@ import { git } from "./repo.mjs";
  * @property {string} headSha
  * @property {Commit[]} commits
  * @property {string[]} changedFiles
+ * @property {LineChange[]} lineChanges One per changed file. A binary file counts zero lines.
  * @property {number} additions
  * @property {number} deletions
+ *
+ * @typedef {{ path: string, additions: number, deletions: number }} LineChange
  *
  * @typedef {{ commits: Commit[] | null, pr: PullRequest | null }} Subjects
  */
@@ -120,7 +123,7 @@ function count(value, field, source) {
 }
 
 /**
- * @typedef {Omit<PullRequest, "commits" | "changedFiles">} Header
+ * @typedef {Omit<PullRequest, "commits" | "changedFiles" | "lineChanges">} Header
  * @param {string} root
  * @param {Header} header
  * @param {string} fetchHint
@@ -134,13 +137,36 @@ function withHistory(root, header, fetchHint) {
       throw new Error(`Commit ${commit} of pull request #${header.number} is not in this clone. ${fetchHint}`);
     }
   }
+  const lineChanges = numstat(git(root, "diff", "--numstat", "-z", `${header.baseSha}...${header.headSha}`));
   return {
     ...header,
     commits: commitsInRange(root, `${header.baseSha}..${header.headSha}`, "branch"),
-    changedFiles: git(root, "diff", "--name-only", "-z", `${header.baseSha}...${header.headSha}`)
-      .split("\0")
-      .filter(Boolean),
+    changedFiles: lineChanges.map(({ path }) => path),
+    lineChanges,
   };
+}
+
+/**
+ * A rename's line has an empty path, and the old and new paths follow as two more fields.
+ * @param {string} output git diff --numstat -z
+ * @returns {LineChange[]}
+ */
+function numstat(output) {
+  const fields = output.split("\0");
+  /** @type {LineChange[]} */
+  const changes = [];
+  for (let at = 0; at < fields.length; at++) {
+    if (!fields[at]) continue;
+    const [additions, deletions, path] = fields[at].split("\t");
+    const renamed = path === "";
+    changes.push({
+      path: renamed ? fields[at + 2] : path,
+      additions: Number(additions) || 0,
+      deletions: Number(deletions) || 0,
+    });
+    if (renamed) at += 2;
+  }
+  return changes;
 }
 
 /**

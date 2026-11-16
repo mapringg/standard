@@ -2,6 +2,7 @@ import baselineGrowth from "./checks/baseline-growth.mjs";
 import commitSubject from "./checks/commit-subject.mjs";
 import prBody from "./checks/pr-body.mjs";
 import prScreenshot from "./checks/pr-screenshot.mjs";
+import prSize from "./checks/pr-size.mjs";
 import prTitle from "./checks/pr-title.mjs";
 
 /**
@@ -23,9 +24,9 @@ import prTitle from "./checks/pr-title.mjs";
  * @property {string} since The package version that added this check.
  *
  * @typedef {(Named & { subject: "commit", run(commit: Commit, repo: Repo): Finding[] })
- *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, run(pr: PullRequest, repo: Repo, checks: readonly Named[]): Finding[] })
+ *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, summary?(pr: PullRequest): string, run(pr: PullRequest, repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })
  *   | (Named & { subject: "tree", applies(repo: Repo): Applies, run(repo: Repo): Finding[] | Promise<Finding[]> })} Check
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, baselineGrowth];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth];
