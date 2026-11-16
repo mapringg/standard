@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.3" }
 }
 ```
 
@@ -22,7 +22,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `standard hook commit-msg <file>` | Checks the commit message. |
 | `standard hook pre-commit` | Runs the `hooks.pre-commit` lines. |
 | `standard hook pre-push` | Refuses a merge commit that `origin/develop` lacks, then runs the `hooks.pre-push` lines. |
-| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its `Check` run is green. See [Merge](#merge). |
+| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its newest `Check` run is green. See [Merge](#merge). |
 | `standard score [<path>...] [--remote] [--json]` | Reports how far each repository follows the standard. See [Score](#score). |
 
 ## Checks
@@ -62,7 +62,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `size:XL` | 500 to 999 |
 | `size:XXL` | 1000 or more |
 
-When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the label if the repository lacks it, removes any other `size:` label and sets its own. The token needs `issues: write`. A label it cannot set is a warning.
+When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the label if the repository lacks it, removes any other `size:` label and sets its own. The token needs both `issues: write` and `pull-requests: write`: GitHub returns 403 when a token with only `issues: write` reads a pull request's labels. A label it cannot set is a warning.
 
 `baseline-growth` fails a pull request that adds a check to `pending`, or creates or grows a file under `.standard/baselines/`. The one exception is the pull request that removes that check from `pending`: it turns the check on and may start its baseline. It also fails when the head commit tracks a symlink under `.standard`, such as `.standard/config.json`. When the base commit has no `.standard/config.json`, it reads the base's `pending` from a root `standard.json`, so the pull request that moves the config adds nothing to `pending`.
 
@@ -82,14 +82,27 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 
 ## Merge
 
-`standard merge <number>` is the one way to merge a pull request. It reads the pull request and its head commit's check runs live through `gh`, and refuses unless all of these hold:
+`standard merge <number>` is the one way to merge a pull request. It reads the pull request, its `ready_for_review` events, the head commit's workflow runs, its check runs, and its workflow runs again, live through `gh`, and refuses unless all of these hold:
 
 - The pull request is open and not a draft.
 - Its base is `develop`.
 - Its title passes the `pr-title` rules with ` (#<number>)` added.
-- A check run named `Check` from GitHub Actions on the exact head commit has concluded `success`. A missing run, a run on an older commit, or a run in any other state refuses, and the message names the runs it found.
+- The newest `Check` run on the exact head commit has concluded `success`. The gate counts only check runs named `Check` from GitHub Actions whose workflow run came from a `pull_request` event, so a `push` run on the same commit does not count. Among the `pull_request` runs of the workflow that holds `Check`, the newest is the one whose latest attempt started last (`run_started_at`, then the higher run id). A re-run moves that time forward, and a run that waits in a concurrency group has it before its `Check` run exists, so an older success cannot stand in for a newer run. If the newest run's id, attempt or status differs between the two workflow run reads, the gate refuses with `retry:`, because the check runs it read between them may belong to another attempt. When both reads show the same completed attempt, that attempt ended before the check runs were read, so its `Check` run is the one GitHub lists. A `Check` that did not conclude `success` refuses and names its conclusion. Older runs on the same commit, such as one that `cancel-in-progress` cancelled or one skipped on a `closed` event, do not block. A missing run or a run on an older commit refuses, and the message names the runs it found and the event of each.
+- Every `pull_request` workflow run on the head commit has completed, in both workflow run reads. Until then the gate refuses with `wait:`. This covers a run of a workflow whose `Check` run does not exist yet and a re-run that carries a green `Check` from an earlier attempt. So a merge waits for every `pull_request` workflow on the head to finish, not only the one that holds `Check`. Runs from other events, such as `push`, do not hold it.
+- That `Check` run started after the pull request last left draft, as its `ready_for_review` events show. The gate reads the start of the `Check` run itself, which a re-run of failed jobs copies from the earlier attempt, so a draft-time result cannot pass through a later attempt. A draft-time run refuses until `Check` runs again.
 
 Then it runs `gh pr merge <number> --squash --match-head-commit <sha> --subject "<title> (#<number>)" --body ""`, so a push after the check cannot be merged unseen. `--admin` passes GitHub's admin flag through for required reviews and still needs a green `Check`. Name the CI job `Check` so the gate can find it.
+
+Because only the newest run decides, the CI workflow can cancel a run that a newer one replaces. Add `ready_for_review` so leaving draft runs `Check` again, and `edited` so a title or description fix runs it again:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+```
 
 ## Score
 
