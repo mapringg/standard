@@ -7,8 +7,9 @@ const PR_NUMBER = / \(#[1-9]\d*\)$/;
  * @returns {string[]}
  */
 function messageNotes(commit) {
-  if (GENERATED.test(commit.subject)) return [];
-  const notes = subjectNotes(commit.subject);
+  if (commit.source !== "trunk" && GENERATED.test(commit.subject)) return [];
+  const suffix = commit.source === "trunk" ? (commit.subject.match(PR_NUMBER)?.[0] ?? "") : "";
+  const notes = subjectNotes(commit.subject.slice(0, commit.subject.length - suffix.length), suffix);
   if (commit.body.trim()) {
     notes.push("Commit has a body or trailer. Keep the subject line only, with no Co-Authored-By.");
   }
