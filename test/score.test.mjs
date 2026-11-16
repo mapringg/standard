@@ -134,9 +134,11 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  baseline-growth  on",
       "  wiring           on",
       "  dead-code        on",
+      "  duplicates       n/a",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
+      `duplicates in ${name}: n/a, git tracks no TypeScript source to scan`,
       "",
       `${name}: 15 of 16 pass`,
       "",
@@ -183,7 +185,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -259,6 +261,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     "baseline-growth": "absent",
     wiring: "absent",
     "dead-code": "n/a",
+    duplicates: "n/a",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 15]);
 });

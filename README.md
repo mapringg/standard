@@ -82,7 +82,16 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 
 `dead-code` runs knip 6.45.1 from the package's own install at the repository root, so the repository's `knip.json` applies and the repository needs no knip of its own. Each knip issue is one finding, named by the file, the knip issue type and the name, such as `src/a.ts exports parse`. Its fix names the change, such as `Unused export parse in src/a.ts:12. Delete it, or drop the 'export' keyword if only this file uses it.` A knip report of another shape, such as a row without its issue lists, fails the run and names the knip version. The check does not apply when git tracks no `package.json`. It replaces `scripts/check-dead-code.mjs`, its test and `scripts/baselines/dead-code.json`.
 
-Like `wiring`, `dead-code` keeps no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps it in `pending` until it finds none.
+`duplicates` fails on code that repeats. It parses the `.ts` and `.tsx` files git tracks, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and anything under a `test/`, `tests/` or `__tests__/` folder. It replaces `scripts/check-duplicates.mjs`, its test and `scripts/baselines/duplicates.json`.
+
+| Rule | What it means |
+| --- | --- |
+| Unit | A function body or a conditional expression with 8 or more AST nodes. |
+| Same | Two units match once types are dropped and the names each unit declares are renamed in order. Literals, property names and names from outside the unit must be equal. |
+| Nesting | A copy inside a larger reported copy is not reported again. |
+| Finding | Each copy is one finding, named by the file and the symbol path, such as `src/form.tsx#Form>submit`, with `@2` on the second copy that shares a path. Its fix names the other copies with their lines. |
+
+Like `wiring`, `dead-code` and `duplicates` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 
 ## Lint and format configs
 
@@ -178,8 +187,8 @@ checks
 retired in web: Delete scripts/merge-pr.mjs, which standard merge replaces.
 pr-screenshot in api: n/a, .standard/config.json sets no pr.screenshots
 
-api: 16 of 16 pass
-web: 16 of 17 pass
+api: 17 of 17 pass
+web: 17 of 18 pass
 ```
 
 | Row | Passes when |
