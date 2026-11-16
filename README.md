@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.6.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.6.1" }
 }
 ```
 
@@ -88,7 +88,7 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 - Its base is `develop`.
 - The newest `Check` run on the exact head commit has concluded `success`. The gate counts only check runs named `Check` from GitHub Actions whose workflow run came from a `pull_request` event, so a `push` run on the same commit does not count. Among the `pull_request` runs of the workflow that holds `Check`, the newest is the one whose latest attempt started last (`run_started_at`, then the higher run id). A re-run moves that time forward, and a run that waits in a concurrency group has it before its `Check` run exists, so an older success cannot stand in for a newer run. If the newest run's id, attempt or status differs between the two workflow run reads, the gate refuses with `retry:`, because the check runs it read between them may belong to another attempt. When both reads show the same completed attempt, that attempt ended before the check runs were read, so its `Check` run is the one GitHub lists. A `Check` that did not conclude `success` refuses and names its conclusion. Older runs on the same commit, such as one that `cancel-in-progress` cancelled or one skipped on a `closed` event, do not block. A missing run or a run on an older commit refuses, and the message names the runs it found and the event of each.
 - Every `pull_request` workflow run on the head commit has completed, in both workflow run reads. Until then the gate refuses with `wait:`. This covers a run of a workflow whose `Check` run does not exist yet and a re-run that carries a green `Check` from an earlier attempt. So a merge waits for every `pull_request` workflow on the head to finish, not only the one that holds `Check`. Runs from other events, such as `push`, do not hold it.
-- That `Check` run started after the pull request last left draft, as its `ready_for_review` events show. The gate reads the start of the `Check` run itself, which a re-run of failed jobs copies from the earlier attempt, so a draft-time result cannot pass through a later attempt. A draft-time run refuses until `Check` runs again.
+- That `Check` run started after the pull request last left draft, as its `ready_for_review` events show. The gate reads the start of the `Check` run itself, which a re-run of failed jobs copies from the earlier attempt, so a draft-time result cannot pass through a later attempt. The workflow run must also have been triggered after that, because a rerun replays the event it started from, including `draft: true`, so its draft-only skips would run again. A draft-time run refuses until a new event starts `Check`.
 
 Once those hold, it reads the pull request again, right before the merge, and refuses unless all of these hold:
 
