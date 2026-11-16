@@ -1,4 +1,4 @@
-import { matchesGlob } from "node:path/posix";
+import { matchesGlob } from "./support/glob.mjs";
 
 import { FILE } from "../config.mjs";
 import { evidenceHasImage } from "./support/markdown.mjs";

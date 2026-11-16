@@ -186,6 +186,16 @@ test("pr-screenshot warns when a UI change has no screenshot in Evidence, naming
   assert.equal(status, 0);
 });
 
+test("pr-screenshot globs match dotfiles and dot folders, and keep * inside one folder", (t) => {
+  for (const changed of ["apps/web/.env.example", "apps/web/.storybook/main.ts", "packages/ui/src/.hidden/a.tsx"]) {
+    assert.match(checkScreenshot(t, changed, PAIR).stdout, new RegExp(`the PR changes ${changed.replaceAll(".", "\\.")}`));
+  }
+  const config = { pr: { screenshots: { when: ["apps/*/page.tsx", "**/*.css"], uploader: "scripts/upload-evidence.mjs" } } };
+  assert.match(checkScreenshot(t, "apps/web/page.tsx", PAIR, config).stdout, /the PR changes apps\/web\/page\.tsx/);
+  assert.match(checkScreenshot(t, "styles.css", PAIR, config).stdout, /the PR changes styles\.css/);
+  assert.equal(checkScreenshot(t, "apps/web/src/page.tsx", PAIR, config).stdout.trim(), "pr-screenshot: OK (#123)");
+});
+
 test("pr-screenshot accepts a UI change whose Evidence embeds a screenshot", (t) => {
   const evidence = `${PAIR}\n\n![after](https://example.com/b.png)`;
   assert.equal(checkScreenshot(t, "packages/ui/src/button.tsx", evidence).stdout.trim(), "pr-screenshot: OK (#123)");
