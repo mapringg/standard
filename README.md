@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.3" }
 }
 ```
 
