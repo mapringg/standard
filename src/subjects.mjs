@@ -74,7 +74,7 @@ export function commitFromFile(path) {
  * @param {CommitSource} source
  * @returns {Commit[]}
  */
-export function commitsInRange(root, range, source) {
+function commitsInRange(root, range, source) {
   return git(root, "log", `--format=%H${FIELD_END}%P${FIELD_END}%B${RECORD_END}`, range)
     .split(RECORD_END)
     .filter((record) => record.trim())

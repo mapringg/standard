@@ -139,7 +139,7 @@ function gateRefusal(head, { checkRuns, workflowReads: [before, after], readyAt 
  * @param {boolean} admin
  * @returns {Decision}
  */
-export function mergeDecision(pr, runs, admin) {
+function mergeDecision(pr, runs, admin) {
   const reasons = [];
   if (pr.state !== "OPEN") reasons.push(`it is ${pr.state.toLowerCase()}, not open.`);
   if (pr.isDraft) reasons.push("it is a draft.");

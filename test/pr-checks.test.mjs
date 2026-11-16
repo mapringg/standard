@@ -387,6 +387,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "pr-size: size:XS, 1 changed line(s) (#123)",
       "baseline-growth: OK (#123)",
       "wiring: OK",
+      "dead-code: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);

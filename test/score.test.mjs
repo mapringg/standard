@@ -133,11 +133,12 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  pr-size          on",
       "  baseline-growth  on",
       "  wiring           on",
+      "  dead-code        on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
       "",
-      `${name}: 14 of 15 pass`,
+      `${name}: 15 of 16 pass`,
       "",
     ].join("\n"),
   );
@@ -150,20 +151,20 @@ test("an n/a row leaves the denominator, and a row that applies joins it", (t) =
     repos[0].cells.find((cell) => cell.row === "pr-screenshot"),
     { group: "checks", row: "pr-screenshot", status: "n/a", pass: null, notes: [".standard/config.json sets no pr.screenshots"] },
   );
-  assert.deepEqual([repos[0].passing, repos[0].total], [15, 15]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [16, 16]);
   assert.equal(status, 0);
 
   const screenshots = { pr: { screenshots: { when: ["web/**"], uploader: "scripts/upload.mjs" } } };
   const applied = scoreJson(repoWith(t, WIRED, screenshots), []);
   assert.equal(statuses(applied.repos[0])["pr-screenshot"], "on");
-  assert.deepEqual([applied.repos[0].passing, applied.repos[0].total], [16, 16]);
+  assert.deepEqual([applied.repos[0].passing, applied.repos[0].total], [17, 17]);
 });
 
 test("pending stays in the denominator and fails", (t) => {
   const { status, repos } = scoreJson(repoWith(t, { ...WIRED, "scripts/check-pr-convention.mjs": "old" }, { pending: ["pr-body"] }), []);
   assert.equal(statuses(repos[0])["pr-body"], "pending");
   assert.equal(statuses(repos[0]).retired, "ok");
-  assert.deepEqual([repos[0].passing, repos[0].total], [14, 15]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [15, 16]);
   assert.equal(status, 1);
 });
 
@@ -176,13 +177,13 @@ test("a pending check shows pending and fails even where it would not apply", (t
     pass: false,
     notes: [".standard/config.json pending lists it, so it does not run."],
   });
-  assert.deepEqual([repos[0].passing, repos[0].total], [15, 16]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [16, 17]);
   assert.equal(status, 1);
 });
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -257,6 +258,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     "pr-size": "absent",
     "baseline-growth": "absent",
     wiring: "absent",
+    "dead-code": "n/a",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 15]);
 });
@@ -276,7 +278,7 @@ test("several paths print a matrix with a column and a count per repo", (t) => {
   assert.match(stdout, /^ {2}claude-md {8}ok {2,}fail$/m);
   assert.match(stdout, new RegExp(`^claude-md in ${b}: Make CLAUDE.md exactly "@AGENTS.md" and a newline`, "m"));
   assert.doesNotMatch(stdout, new RegExp(`claude-md in ${a}`));
-  assert.deepEqual(lines.slice(-2), [`${a}: 15 of 15 pass`, `${b}: 14 of 15 pass`]);
+  assert.deepEqual(lines.slice(-2), [`${a}: 16 of 16 pass`, `${b}: 15 of 16 pass`]);
   assert.equal(status, 1);
 });
 
@@ -294,7 +296,7 @@ test("several paths in JSON give one entry per repo, by folder name", (t) => {
   const other = repoWith(t, WIRED);
   const { status, repos } = scoreJson(tempDir(t, "elsewhere"), [wired, other]);
   assert.deepEqual(repos.map((repo) => repo.name), [basename(wired), basename(other)]);
-  assert.deepEqual(repos.map((repo) => [repo.passing, repo.total]), [[15, 15], [15, 15]]);
+  assert.deepEqual(repos.map((repo) => [repo.passing, repo.total]), [[16, 16], [16, 16]]);
   assert.equal(status, 0);
 });
 
@@ -331,7 +333,7 @@ test("--remote reads each repo's GitHub settings through gh and names the fix fo
       { group: "github", row: "current", status: "ok", pass: true, notes: [] },
     ],
   );
-  assert.deepEqual([repos[0].passing, repos[0].total], [16, 17]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [17, 18]);
   assert.equal(status, 1);
 });
 

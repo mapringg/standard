@@ -80,6 +80,10 @@ When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the labe
 
 Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which standard merge replaces.`
 
+`dead-code` runs knip 6.45.1 from the package's own install at the repository root, so the repository's `knip.json` applies and the repository needs no knip of its own. Each knip issue is one finding, named by the file, the knip issue type and the name, such as `src/a.ts exports parse`. Its fix names the change, such as `Unused export parse in src/a.ts:12. Delete it, or drop the 'export' keyword if only this file uses it.` A knip report of another shape, such as a row without its issue lists, fails the run and names the knip version. The check does not apply when git tracks no `package.json`. It replaces `scripts/check-dead-code.mjs`, its test and `scripts/baselines/dead-code.json`.
+
+Like `wiring`, `dead-code` keeps no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps it in `pending` until it finds none.
+
 ## Lint and format configs
 
 The package ships one oxlint config and one oxfmt config, tested with oxlint 1.92 and 1.93 and oxfmt 0.77 and 0.78. Each holds only the settings every adopting repository already agreed on, so a repository adds its own plugins, rules, ignores and Tailwind stylesheets on top.
@@ -174,8 +178,8 @@ checks
 retired in web: Delete scripts/merge-pr.mjs, which standard merge replaces.
 pr-screenshot in api: n/a, .standard/config.json sets no pr.screenshots
 
-api: 15 of 15 pass
-web: 15 of 16 pass
+api: 16 of 16 pass
+web: 16 of 17 pass
 ```
 
 | Row | Passes when |
