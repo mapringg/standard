@@ -141,7 +141,7 @@ function checkTitle(t, title, pr = {}) {
 
 test("pr-title fails a title that breaks the subject rules", (t) => {
   const { stdout, status } = checkTitle(t, "fixed stuff.");
-  assert.match(stdout, /::error title=pr-title::fixed stuff\.: Subject ends with a period\. Drop it\. The title becomes the squash commit's subject\./);
+  assert.match(stdout, /::error title=pr-title::fixed stuff\.: Subject ends with a period\. Drop it\. The title becomes the squash commit's subject, which the push to develop checks\./);
   assert.match(stdout, /::error title=pr-title::fixed stuff\.: Subject does not start with a capital letter/);
   assert.equal(status, 1);
 });
@@ -163,12 +163,11 @@ test("pr-title counts the squash suffix, so a 78-character title fails as #123",
   assert.equal(checkTitle(t, fits).status, 0);
 });
 
-test("pr-title only warns on a Dependabot title", (t) => {
+test("pr-title fails a Dependabot title like any other, since its squash subject meets the same push check", (t) => {
   const title = `Bump the npm group across ${"1".repeat(2)} directories with ${"many ".repeat(12)}updates`;
   const { stdout, status } = checkTitle(t, title, { author: "dependabot[bot]" });
-  assert.match(stdout, /::warning title=pr-title::.*keep it to 80 or fewer/);
-  assert.doesNotMatch(stdout, /::error/);
-  assert.equal(status, 0);
+  assert.match(stdout, /::error title=pr-title::.*keep it to 80 or fewer/);
+  assert.equal(status, 1);
 });
 
 const SCREENSHOTS = { pr: { screenshots: { when: ["apps/web/**", "packages/ui/**"], uploader: "scripts/upload-evidence.mjs" } } };
@@ -413,12 +412,12 @@ test("check --pr reads the pull request through gh and runs the same checks", (t
   assert.equal(status, 1);
 });
 
-test("check --pr maps gh's bot login to the event's, so a Dependabot title only warns", (t) => {
+test("check --pr fails a Dependabot title that breaks the subject rules", (t) => {
   const repo = pullRequestRepo(t);
   const env = fakeGh(t, ghPullRequest(repo, { title: "bump x", author: { login: "app/dependabot", is_bot: true } }));
   const { stdout, status } = standard(repo.cwd, ["check", "pr-title", "--pr", "7"], { env });
-  assert.match(stdout, /^pr-title: warning: bump x: Subject does not start with a capital letter/m);
-  assert.equal(status, 0);
+  assert.match(stdout, /^pr-title: bump x: Subject does not start with a capital letter/m);
+  assert.equal(status, 1);
 });
 
 test("check --pr says how to fetch a head the clone lacks, and needs a number", (t) => {
