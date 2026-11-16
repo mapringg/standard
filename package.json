@@ -25,6 +25,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "knip": "6.45.1",
     "yaml": "2.9.1"
   }
 }

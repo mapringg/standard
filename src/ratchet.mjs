@@ -94,7 +94,7 @@ function total(counts) {
  * @param {Mode} input.mode
  * @returns {{ failed: boolean, lines: string[], write?: Baseline | null }} `write` is the baseline to store; null deletes the file.
  */
-export function verdict({ check, shown, findings, baseline, mode }) {
+function verdict({ check, shown, findings, baseline, mode }) {
   const fixes = new Map();
   const groups = new Map();
   for (const finding of findings) {
