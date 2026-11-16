@@ -70,7 +70,7 @@ const COMMANDS = {
     if (!/^[1-9]\d*$/.test(number ?? "") || flags.some((flag) => flag !== "--admin")) {
       throw new Error(`merge needs a pull request number and takes only --admin.\n${USAGE}`);
     }
-    return merge(process.cwd(), Number(number), flags.includes("--admin"));
+    return merge(process.cwd(), Number(number), flags.includes("--admin"), registry);
   },
   score(argv) {
     const { values, positionals } = parseArgs({

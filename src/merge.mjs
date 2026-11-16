@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
 
 import { subjectNotes } from "./checks/support/subject-rules.mjs";
+import { FILE, parseConfig } from "./config.mjs";
+import { loadRepo } from "./repo.mjs";
+import { report, run } from "./run.mjs";
+import { subjectsFromGh } from "./subjects.mjs";
 
 const BASE = "develop";
 const GATE = "Check";
@@ -11,6 +15,7 @@ const CHECK_FIELDS = ".check_runs[] | {name, head_sha, status, conclusion, start
 const RUN_FIELDS = ".workflow_runs[] | {id, workflow_id, event, head_sha, check_suite_id, run_attempt, run_started_at, status, conclusion}";
 const READY_FIELDS = '.[] | select(.event == "ready_for_review") | {created_at}';
 const OUTPUT_LIMIT = 256 * 1024 * 1024;
+const DESCRIPTION_CHECKS = ["pr-body", "pr-screenshot"];
 
 export const retired = ["scripts/merge-pr.mjs", "scripts/merge-pr.test.mjs"];
 
@@ -49,6 +54,8 @@ export const retired = ["scripts/merge-pr.mjs", "scripts/merge-pr.test.mjs"];
  * @property {string | null} readyAt
  *
  * @typedef {{ merge: true, args: string[] } | { merge: false, reasons: string[] }} Decision
+ * @typedef {import("./subjects.mjs").PullRequest} PullRequest
+ * @typedef {import("./run.mjs").Result} Result
  */
 
 /**
@@ -197,13 +204,67 @@ function quote(arg) {
 }
 
 /**
+ * @param {MergeTarget} pr
+ * @param {PullRequest} live
+ * @param {readonly Result[]} results
+ * @returns {string[]}
+ */
+function descriptionRefusal(pr, live, results) {
+  if (live.headSha !== pr.headRefOid) {
+    return [`retry: the head moved from ${pr.headRefOid.slice(0, 7)} to ${live.headSha.slice(0, 7)} while standard merge read the pull request. Run standard merge again.`];
+  }
+  if (live.title !== pr.title.trim()) {
+    return [`retry: the title changed from "${pr.title.trim()}" to "${live.title}" while standard merge read the pull request. Run standard merge again.`];
+  }
+  const flagged = results.filter((result) => result.outcome === "ran" && result.findings.length > 0);
+  if (flagged.length === 0) return [];
+  return [
+    "its description breaks the pull request rules, and standard merge allows no finding, not even a warning:",
+    ...report([...flagged], false).map((line) => `  ${line}`),
+    "Edit the pull request description to fix them, no push needed, then run standard merge again.",
+  ];
+}
+
+/**
+ * @param {string} cwd
+ * @param {number} number
+ * @param {readonly import("./registry.mjs").Check[]} checks
+ * @param {MergeTarget} pr
+ * @returns {Promise<string[]>}
+ */
+async function reread(cwd, number, checks, pr) {
+  const repo = loadRepo(cwd);
+  const live = /** @type {PullRequest} */ (subjectsFromGh(repo.root, number).pr);
+  const config = parseConfig(repo.readAt(live.headSha, FILE) ?? "{}");
+  const results = await run({
+    checks: [...checks],
+    repo: { ...repo, config },
+    scope: { commits: null, pr: live },
+    names: DESCRIPTION_CHECKS,
+  });
+  return descriptionRefusal(pr, live, results);
+}
+
+/**
+ * @param {number} number
+ * @param {readonly string[]} reasons
+ * @returns {1}
+ */
+function refuse(number, reasons) {
+  console.error(`standard merge: refusing #${number}, because`);
+  for (const reason of reasons) console.error(`  ${reason}`);
+  return 1;
+}
+
+/**
  * Reads the pull request, its head's runs and its events live, so a push after review cannot slip in.
  * @param {string} cwd
  * @param {number} number
  * @param {boolean} admin
- * @returns {0 | 1}
+ * @param {readonly import("./registry.mjs").Check[]} checks
+ * @returns {Promise<0 | 1>}
  */
-export function merge(cwd, number, admin) {
+export async function merge(cwd, number, admin, checks) {
   /** @type {MergeTarget} */
   const pr = JSON.parse(gh(cwd, ["pr", "view", String(number), "--json", PR_FIELDS]));
   /** @type {{ created_at: string }[]} */
@@ -216,11 +277,9 @@ export function merge(cwd, number, admin) {
   const after = readWorkflowRuns();
   const readyAt = readyEvents.map((event) => event.created_at).sort().at(-1) ?? null;
   const decision = mergeDecision(pr, { checkRuns, workflowReads: [before, after], readyAt }, admin);
-  if (!decision.merge) {
-    console.error(`standard merge: refusing #${number}, because`);
-    for (const reason of decision.reasons) console.error(`  ${reason}`);
-    return 1;
-  }
+  if (!decision.merge) return refuse(number, decision.reasons);
+  const reasons = await reread(cwd, number, checks, pr);
+  if (reasons.length > 0) return refuse(number, reasons);
   console.log(`standard merge: gh ${decision.args.map(quote).join(" ")}`);
   execFileSync("gh", decision.args, { cwd, stdio: "inherit" });
   return 0;

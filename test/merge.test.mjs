@@ -1,15 +1,45 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 
-import { standard, tempDir, tempRepo } from "./helpers.mjs";
+import { GOOD_BODY, git, pullRequestRepo, standard, tempDir, tempRepo, write } from "./helpers.mjs";
 
-const HEAD = "a".repeat(40);
+function sharedRepo() {
+  const cwd = mkdtempSync(join(tmpdir(), "standard-merge-"));
+  after(() => rmSync(cwd, { recursive: true, force: true }));
+  git(cwd, "init", "-q", "-b", "develop");
+  write(cwd, { ".standard/config.json": {}, "README.md": "start" });
+  git(cwd, "add", "-A");
+  git(cwd, "commit", "-q", "--no-verify", "-m", "Start the repository");
+  const base = git(cwd, "rev-parse", "HEAD");
+  git(cwd, "switch", "-q", "-c", "feature");
+  write(cwd, { "README.md": "changed" });
+  git(cwd, "commit", "-q", "-a", "--no-verify", "-m", "Change the sample files");
+  return { cwd, base, head: git(cwd, "rev-parse", "HEAD") };
+}
+
+const shared = sharedRepo();
+const HEAD = shared.head;
+const SHORT = HEAD.slice(0, 7);
 const OLDER = "b".repeat(40);
 const TITLE = "Keep environment examples complete across every app";
 
-const pr = { number: 194, title: TITLE, state: "OPEN", isDraft: false, baseRefName: "develop", headRefOid: HEAD };
+const pr = {
+  number: 194,
+  title: TITLE,
+  state: "OPEN",
+  isDraft: false,
+  baseRefName: "develop",
+  headRefOid: HEAD,
+  baseRefOid: shared.base,
+  headRefName: "feature",
+  body: GOOD_BODY,
+  author: { login: "someone" },
+  additions: 1,
+  deletions: 0,
+};
 const CI = 7;
 
 function run(id, { event = "pull_request", started = "2026-11-10T10:00:00Z", attempt = 1, status = "completed", conclusion = "success", check = {}, sha = HEAD, workflow = CI } = {}) {
@@ -33,7 +63,7 @@ function lines(items) {
   return items.map((item) => JSON.stringify(item)).join("\n");
 }
 
-function fakeGh(t, view, { runs, before = runs, events, mergeFails = false }) {
+function fakeGh(t, views, { runs, before = runs, events, mergeFails = false }) {
   const bin = tempDir(t, "bin");
   const calls = join(bin, "calls");
   const answers = {
@@ -46,7 +76,11 @@ const { appendFileSync, readFileSync } = process.getBuiltinModule("node:fs");
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + "\\n");
 const answers = ${JSON.stringify(answers)};
-if (args[0] === "pr" && args[1] === "view") console.log(${JSON.stringify(JSON.stringify(view))});
+const views = ${JSON.stringify(views)};
+if (args[0] === "pr" && args[1] === "view") {
+  const reads = readFileSync(${JSON.stringify(calls)}, "utf8").split("\\n").filter((line) => line.startsWith('["pr","view"')).length;
+  console.log(JSON.stringify(views[Math.min(reads, views.length) - 1]));
+}
 if (args[0] === "pr" && args[1] === "merge" && ${mergeFails}) {
   console.error("Head branch was modified. Review and try the merge again.");
   process.exit(1);
@@ -66,9 +100,9 @@ if (args[0] === "api") {
   };
 }
 
-function mergeWith(t, { view = {}, runs = [green], before, events = [], mergeFails, args = [] } = {}) {
-  const gh = fakeGh(t, { ...pr, ...view }, { runs, before, events, mergeFails });
-  const result = standard(tempRepo(t), ["merge", "194", ...args], { env: gh.env });
+function mergeWith(t, { view = {}, reread = view, cwd = shared.cwd, runs = [green], before, events = [], mergeFails, args = [] } = {}) {
+  const gh = fakeGh(t, [{ ...pr, ...view }, { ...pr, ...view, ...reread }], { runs, before, events, mergeFails });
+  const result = standard(cwd, ["merge", "194", ...args], { env: gh.env });
   return { ...result, merged: gh.calls().filter(([command, sub]) => command === "pr" && sub === "merge") };
 }
 
@@ -92,8 +126,8 @@ test("merge squashes a green pull request with the reviewed head, the numbered t
 });
 
 test("merge reads the pull request, its events, then the workflow runs on both sides of the check runs, live through gh", (t) => {
-  const gh = fakeGh(t, pr, { runs: [green], events: [] });
-  standard(tempRepo(t), ["merge", "194"], { env: gh.env });
+  const gh = fakeGh(t, [pr], { runs: [green], events: [] });
+  standard(shared.cwd, ["merge", "194"], { env: gh.env });
   const [view, ...reads] = gh.calls().slice(0, 5);
   assert.deepEqual(view, ["pr", "view", "194", "--json", "number,title,state,isDraft,baseRefName,headRefOid"]);
   assert.deepEqual(
@@ -134,7 +168,7 @@ test("merge refuses when the newest Check concluded anything but success, naming
     const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", conclusion })];
     assertRefused(
       mergeWith(t, { runs }),
-      new RegExp(`^ {2}Check in pull_request run 2 attempt 1, the newest on aaaaaaa, concluded ${conclusion}\\.$`, "m"),
+      new RegExp(`^ {2}Check in pull_request run 2 attempt 1, the newest on ${SHORT}, concluded ${conclusion}\\.$`, "m"),
     );
   }
 });
@@ -144,7 +178,7 @@ test("merge waits for a newer Check that has not finished, even after an older s
     const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", status, conclusion: null })];
     assertRefused(
       mergeWith(t, { runs }),
-      new RegExp(`^ {2}wait: pull_request run 2 attempt 1 of workflow 7 on aaaaaaa is ${status}\\.$`, "m"),
+      new RegExp(`^ {2}wait: pull_request run 2 attempt 1 of workflow 7 on ${SHORT} is ${status}\\.$`, "m"),
     );
   }
 });
@@ -153,7 +187,7 @@ test("merge waits for a newer workflow run that has no Check run yet", (t) => {
   const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", status: "pending", conclusion: null, check: null })];
   assertRefused(
     mergeWith(t, { runs }),
-    /^ {2}wait: pull_request run 2 attempt 1 of workflow 7 on aaaaaaa is pending\.$/m,
+    new RegExp(String.raw`^ {2}wait: pull_request run 2 attempt 1 of workflow 7 on ${SHORT} is pending\.$`, "m"),
   );
 });
 
@@ -161,7 +195,7 @@ test("merge refuses when the newest workflow run ended without a Check run", (t)
   const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", conclusion: "startup_failure", check: null })];
   assertRefused(
     mergeWith(t, { runs }),
-    /^ {2}pull_request run 2 attempt 1, the newest on aaaaaaa, concluded startup_failure without a Check run\.$/m,
+    new RegExp(String.raw`^ {2}pull_request run 2 attempt 1, the newest on ${SHORT}, concluded startup_failure without a Check run\.$`, "m"),
   );
 });
 
@@ -177,14 +211,14 @@ test("merge ignores older cancelled and skipped Check runs once the newest is gr
 test("merge orders runs by when their latest attempt started, so a rerun of an older run is the newest", (t) => {
   const rerun = run(1, { attempt: 2, started: "2026-11-10T12:00:00Z", conclusion: "failure" });
   const runs = [rerun, run(2, { started: "2026-11-10T11:00:00Z" })];
-  assertRefused(mergeWith(t, { runs }), /Check in pull_request run 1 attempt 2, the newest on aaaaaaa, concluded failure\./);
+  assertRefused(mergeWith(t, { runs }), new RegExp(String.raw`Check in pull_request run 1 attempt 2, the newest on ${SHORT}, concluded failure\.`));
   const failedOlder = [run(1, { attempt: 2, started: "2026-11-10T10:00:00Z", conclusion: "failure" }), run(2, { started: "2026-11-10T11:00:00Z" })];
   assert.equal(mergeWith(t, { runs: failedOlder }).merged.length, 1);
 });
 
 test("merge breaks a tie in start time by the later workflow run", (t) => {
   const runs = [run(3, { conclusion: "cancelled" }), run(2)];
-  assertRefused(mergeWith(t, { runs }), /Check in pull_request run 3 attempt 1, the newest on aaaaaaa, concluded cancelled\./);
+  assertRefused(mergeWith(t, { runs }), new RegExp(String.raw`Check in pull_request run 3 attempt 1, the newest on ${SHORT}, concluded cancelled\.`));
 });
 
 test("merge ignores runs of workflows that hold no Check", (t) => {
@@ -196,7 +230,7 @@ test("merge counts only Check runs from pull_request workflow runs, naming the e
   const runs = [run(1, { event: "push" }), run(2, { event: "pull_request_target", started: "2026-11-10T11:00:00Z" })];
   assertRefused(
     mergeWith(t, { runs }),
-    /no Check run from github-actions in a pull_request run on head a{40}\. Found Check from github-actions on aaaaaaa in a push run concluded success; Check from github-actions on aaaaaaa in a pull_request_target run concluded success\./,
+    new RegExp(String.raw`no Check run from github-actions in a pull_request run on head ${HEAD}\. Found Check from github-actions on ${SHORT} in a push run concluded success; Check from github-actions on ${SHORT} in a pull_request_target run concluded success\.`),
   );
   const runsWithPush = [green, run(2, { event: "push", started: "2026-11-10T11:00:00Z", conclusion: "failure" })];
   assert.equal(mergeWith(t, { runs: runsWithPush }).merged.length, 1);
@@ -210,7 +244,7 @@ test("merge refuses a Check that started before the pull request last left draft
   ];
   assertRefused(
     mergeWith(t, { events }),
-    /^ {2}Check in pull_request run 1 attempt 1, the newest on aaaaaaa, started at 2026-11-10T10:00:00Z, before the pull request left draft at 2026-11-10T10:30:00Z\. Rerun Check, or add ready_for_review to on.pull_request.types\.$/m,
+    new RegExp(String.raw`^ {2}Check in pull_request run 1 attempt 1, the newest on ${SHORT}, started at 2026-11-10T10:00:00Z, before the pull request left draft at 2026-11-10T10:30:00Z\. Rerun Check, or add ready_for_review to on.pull_request.types\.$`, "m"),
   );
   const after = [green, run(2, { started: "2026-11-10T10:31:00Z" })];
   assert.equal(mergeWith(t, { runs: after, events }).merged.length, 1);
@@ -225,7 +259,7 @@ test("merge keeps the start of a Check that a partial rerun copied from a draft-
 test("merge waits for a re-run attempt that carries a green Check from the earlier attempt", (t) => {
   for (const status of ["queued", "in_progress"]) {
     const carried = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", status, conclusion: null, check: { status: "completed", conclusion: "success" } });
-    assertRefused(mergeWith(t, { runs: [carried] }), new RegExp(`^ {2}wait: pull_request run 1 attempt 2 of workflow 7 on aaaaaaa is ${status}\\.$`, "m"));
+    assertRefused(mergeWith(t, { runs: [carried] }), new RegExp(`^ {2}wait: pull_request run 1 attempt 2 of workflow 7 on ${SHORT} is ${status}\\.$`, "m"));
   }
 });
 
@@ -233,7 +267,7 @@ test("merge refuses with retry when the newest run changes between the reads aro
   const rerun = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", conclusion: "failure" });
   assertRefused(
     mergeWith(t, { before: [green], runs: [{ ...rerun, checkRun: green.checkRun }] }),
-    /^ {2}retry: the newest pull_request run on aaaaaaa changed from run 1 attempt 1 completed to run 1 attempt 2 completed while standard merge read the runs\. Run standard merge again\.$/m,
+    new RegExp(String.raw`^ {2}retry: the newest pull_request run on ${SHORT} changed from run 1 attempt 1 completed to run 1 attempt 2 completed while standard merge read the runs\. Run standard merge again\.$`, "m"),
   );
   const newer = run(2, { started: "2026-11-10T11:00:00Z" });
   assertRefused(mergeWith(t, { before: [green], runs: [green, newer] }), /retry: .* from run 1 attempt 1 completed to run 2 attempt 1 completed/);
@@ -254,14 +288,14 @@ test("merge refuses a missing Check, naming the runs it found", (t) => {
   const others = [run(1, { check: { name: "lint" } }), run(2, { check: { app: { slug: "some-app" } } })];
   assertRefused(
     mergeWith(t, { runs: others }),
-    /Found lint from github-actions on aaaaaaa in a pull_request run concluded success; Check from some-app on aaaaaaa in a pull_request run concluded success\./,
+    new RegExp(String.raw`Found lint from github-actions on ${SHORT} in a pull_request run concluded success; Check from some-app on ${SHORT} in a pull_request run concluded success\.`),
   );
 });
 
 test("merge refuses a green Check on an older commit", (t) => {
   assertRefused(
     mergeWith(t, { runs: [run(1, { sha: OLDER })] }),
-    /no Check run from github-actions in a pull_request run on head a{40}\. Found Check from github-actions on bbbbbbb in a pull_request run concluded success\./,
+    new RegExp(String.raw`no Check run from github-actions in a pull_request run on head ${HEAD}\. Found Check from github-actions on bbbbbbb in a pull_request run concluded success\.`),
   );
 });
 
@@ -322,8 +356,8 @@ const verifierCases = [
 
 test("merge waits for every pull_request workflow run on the head, even one whose Check run does not exist yet", (t) => {
   const otherWorkflow = run(2, { workflow: 8, started: "2026-11-10T11:00:00Z", status: "queued", conclusion: null, check: null });
-  assertRefused(mergeWith(t, { before: [green], runs: [green, otherWorkflow] }), /^ {2}wait: pull_request run 2 attempt 1 of workflow 8 on aaaaaaa is queued\.$/m);
-  assertRefused(mergeWith(t, { before: [green, otherWorkflow], runs: [green] }), /wait: pull_request run 2 attempt 1 of workflow 8 on aaaaaaa is queued\./);
+  assertRefused(mergeWith(t, { before: [green], runs: [green, otherWorkflow] }), new RegExp(String.raw`^ {2}wait: pull_request run 2 attempt 1 of workflow 8 on ${SHORT} is queued\.$`, "m"));
+  assertRefused(mergeWith(t, { before: [green, otherWorkflow], runs: [green] }), new RegExp(String.raw`wait: pull_request run 2 attempt 1 of workflow 8 on ${SHORT} is queued\.`));
   const pushRun = run(3, { event: "push", started: "2026-11-10T11:00:00Z", status: "in_progress", conclusion: null, check: null });
   assert.equal(mergeWith(t, { runs: [green, pushRun] }).merged.length, 1);
 });
@@ -349,4 +383,87 @@ test("merge decides every case of the independent verifier", (t) => {
     return (merges ? status === 0 && merged.length === 1 : status !== 0) ? [] : [name];
   });
   assert.deepEqual(mismatches, []);
+});
+
+const WARNED_BODY = [
+  "## Summary",
+  "",
+  "Keep every environment example complete, so a new app starts with the keys it needs.",
+  "",
+  "## Evidence",
+  "",
+  "Ran the example check on every app.",
+  "",
+  "## Merge Danger",
+  "",
+  "**Door:** two-way",
+  "",
+  "**Blast Radius:** env examples only",
+].join("\n");
+
+test("merge refuses a description with warnings, listing each finding with its fix, even with --admin", (t) => {
+  for (const args of [[], ["--admin"]]) {
+    const result = mergeWith(t, { view: { body: WARNED_BODY }, args });
+    assertRefused(result, /^ {2}its description breaks the pull request rules, and standard merge allows no finding, not even a warning:$/m);
+    assert.match(result.stderr, /^ {4}pr-body: warning: Evidence: Evidence has no "\*\*Before:\*\*" \/ "\*\*After:\*\*" pair and no table with Before and After columns\.$/m);
+    assert.match(result.stderr, /^ {4}pr-body: warning: Blast Radius: Blast Radius "env examples only" is more than one word\. Name the area in one word, then describe the risk below it\.$/m);
+    assert.match(result.stderr, /^ {2}Edit the pull request description to fix them, no push needed, then run standard merge again\.$/m);
+  }
+});
+
+test("merge reads the description again after the Check decision, right before it merges", (t) => {
+  const gh = fakeGh(t, [pr], { runs: [green], events: [] });
+  standard(shared.cwd, ["merge", "194"], { env: gh.env });
+  const calls = gh.calls();
+  assert.deepEqual(calls.at(-2).slice(0, 2), ["pr", "view"]);
+  assert.match(calls.at(-2)[4], /\bbody\b/);
+  assert.deepEqual(calls.at(-1).slice(0, 2), ["pr", "merge"]);
+});
+
+test("merge judges the description it reads last, not the one it read first", (t) => {
+  assertRefused(mergeWith(t, { reread: { body: WARNED_BODY } }), /pr-body: warning: Blast Radius/);
+  assert.equal(mergeWith(t, { view: { body: WARNED_BODY }, reread: { body: GOOD_BODY } }).merged.length, 1);
+});
+
+test("merge refuses with retry when the head or the title changes between its reads", (t) => {
+  const moved = mergeWith(t, { reread: { headRefOid: shared.base } });
+  assertRefused(moved, new RegExp(String.raw`^ {2}retry: the head moved from ${SHORT} to ${shared.base.slice(0, 7)} while standard merge read the pull request\. Run standard merge again\.$`, "m"));
+  const retitled = mergeWith(t, { reread: { title: "Keep only some environment examples" } });
+  assertRefused(retitled, new RegExp(String.raw`^ {2}retry: the title changed from "${TITLE}" to "Keep only some environment examples" while standard merge read the pull request\. Run standard merge again\.$`, "m"));
+});
+
+test("merge does not enforce a pending pr-body", (t) => {
+  const repo = pullRequestRepo(t, { base: { ".standard/config.json": { pending: ["pr-body"] } } });
+  const runs = [run(1, { sha: repo.head })];
+  const view = { body: WARNED_BODY, headRefOid: repo.head, baseRefOid: repo.base };
+  assert.equal(mergeWith(t, { cwd: repo.cwd, runs, view }).merged.length, 1);
+});
+
+test("merge needs a screenshot under pr.screenshots as the head commit's config sets it", (t) => {
+  const screenshots = { when: ["apps/web/**"], uploader: "scripts/upload-evidence.mjs" };
+  const repo = pullRequestRepo(t, {
+    base: { ".standard/config.json": {} },
+    head: { ".standard/config.json": { pr: { screenshots } }, "apps/web/page.tsx": "changed" },
+  });
+  git(repo.cwd, "switch", "-q", "develop");
+  const runs = [run(1, { sha: repo.head })];
+  const view = { headRefOid: repo.head, baseRefOid: repo.base };
+  assertRefused(
+    mergeWith(t, { cwd: repo.cwd, runs, view }),
+    /^ {4}pr-screenshot: warning: Evidence: Evidence has no screenshot, but the PR changes apps\/web\/page\.tsx\. Upload one with scripts\/upload-evidence\.mjs\.$/m,
+  );
+  const shown = GOOD_BODY.replace("**After:** 0 fail.", "**After:** 0 fail.\n\n![after](https://example.com/after.png)");
+  assert.equal(mergeWith(t, { cwd: repo.cwd, runs, view: { ...view, body: shown } }).merged.length, 1);
+});
+
+test("merge fetches a base or head commit the clone lacks from origin", (t) => {
+  const origin = pullRequestRepo(t);
+  const clone = tempDir(t, "clone");
+  git(clone, "clone", "-q", origin.cwd, ".");
+  git(origin.cwd, "switch", "-q", "develop");
+  git(origin.cwd, "commit", "-q", "--allow-empty", "--no-verify", "-m", "Move develop past the clone");
+  const base = git(origin.cwd, "rev-parse", "HEAD");
+  const runs = [run(1, { sha: origin.head })];
+  const view = { headRefOid: origin.head, baseRefOid: base };
+  assert.equal(mergeWith(t, { cwd: clone, runs, view }).merged.length, 1);
 });
