@@ -13,7 +13,7 @@ Add the package at a tag and install its hooks when the repository installs:
 }
 ```
 
-`standard install` writes three hook shims into the `.git/hooks` folder that all worktrees share and unsets `core.hooksPath`. Each shim calls `node_modules/.bin/standard`. A worktree whose checkout has `.standard/config.json` but no `node_modules` fails the hook. A worktree without `.standard/config.json` and without `node_modules` skips the hook, so installing in one worktree does not break another worktree of the same clone that is on a branch from before the repository adopted the standard. Commit `.standard/config.json`, even as `{}`, so the hooks know the repository has adopted.
+`standard install` writes three hook shims into the `.git/hooks` folder that all worktrees share and unsets `core.hooksPath`. Each shim calls `node_modules/.bin/standard`. A worktree whose checkout has `.standard/config.json` but no `node_modules` fails the hook. A worktree without `.standard/config.json` and without `node_modules` skips the hook, so installing in one worktree does not break another worktree of the same clone that is on a branch from before the repository adopted the standard. Commit `.standard/config.json`, even as `{}`, so the hooks know the repository has adopted; the `config-file` probe fails until you do.
 
 | Command | What it does |
 | --- | --- |
@@ -75,6 +75,7 @@ When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the labe
 | `pin` | `package.json` does not pin `@mapringg/standard` to an exact version, such as `0.5.0`, or a tag, such as `github:mapringg/standard#v0.5.0`. |
 | `installed` | `node_modules/@mapringg/standard` is missing or holds a version other than the exact pin in `package.json`, so `pnpm install` has not run since the pin changed. |
 | `prepare` | `scripts.prepare` does not start with `standard install` or `pnpm exec standard install`, followed by nothing or by ` && `. |
+| `config-file` | Git does not track `.standard/config.json`. Commit it, even as `{}`, so the hook shims know the repository has adopted the standard. |
 | `claude-md` | `CLAUDE.md` exists and is not exactly `@AGENTS.md` and a newline. |
 
 Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which standard merge replaces.`
@@ -111,8 +112,8 @@ checks
 retired in web: Delete scripts/merge-pr.mjs, which standard merge replaces.
 pr-screenshot in api: n/a, .standard/config.json sets no pr.screenshots
 
-api: 14 of 14 pass
-web: 14 of 15 pass
+api: 15 of 15 pass
+web: 15 of 16 pass
 ```
 
 | Row | Passes when |
@@ -130,7 +131,11 @@ A check that does not apply, such as `pr-screenshot` without `pr.screenshots`, s
 
 ## .standard/config.json
 
-The file is optional, but the hook shims treat a checkout without it as one that has not adopted the standard. Every key is kebab-case. A key with a capital letter fails every command and the message names the kebab-case key, such as `"ticketPrefix" in .standard/config.json is camelCase; name it "ticket-prefix".` An unknown key fails every command and the message lists the known keys. A root `standard.json` that git tracks also fails every command; move it to `.standard/config.json`.
+Commit the file, even as `{}`. The `config-file` probe fails without it, and the hook shims treat a checkout without it as one that has not adopted the standard. Every key is kebab-case. A key with a capital letter fails every command and the message names the kebab-case key, such as `"ticketPrefix" in .standard/config.json is camelCase; name it "ticket-prefix".` An unknown key fails every command and the message lists the known keys. A key that appears twice in one object fails every command and the message names its line and column. A root `standard.json` that git tracks also fails every command. A repository that upgrades from 0.4 moves the file and renames `ticketPrefix` in the same pull request:
+
+```sh
+mkdir -p .standard && git mv standard.json .standard/config.json
+```
 
 ```json
 {

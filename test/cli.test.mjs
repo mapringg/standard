@@ -319,6 +319,20 @@ test("the config names the kebab-case key for a camelCase key and lists the know
   }
 });
 
+test("the config fails on a repeated key, at the top level or nested, and names where", (t) => {
+  const cases = [
+    ['{"pr":{"ticket-prefix":"ABC","mystery":true},"pr":{}}', "line 1, column 46"],
+    ['{\n  "hooks": {\n    "pre-push": [],\n    "pre-push": ["x"]\n  }\n}\n', "line 4, column 5"],
+  ];
+  for (const [text, where] of cases) {
+    const cwd = tempRepo(t);
+    write(cwd, { ".standard/config.json": text });
+    const { stderr, status } = commitMsg(cwd, "Add the login page\n");
+    assert.equal(stderr, `standard: .standard/config.json repeats a key at ${where}. Keep one copy of each key.\n`);
+    assert.equal(status, 1);
+  }
+});
+
 test("a tracked root standard.json fails and says where the config moved", (t) => {
   const cwd = tempRepo(t);
   write(cwd, { "standard.json": { pending: ["commit-subject"] } });

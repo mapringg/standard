@@ -4,8 +4,9 @@ import { test } from "node:test";
 import { git, installPackage, standard, tempRepo, WIRED, write } from "./helpers.mjs";
 
 function wiredRepo(t, files = {}, config) {
-  const cwd = tempRepo(t, config);
-  write(cwd, Object.fromEntries(Object.entries({ ...WIRED, ...files }).filter(([, content]) => content !== null)));
+  const cwd = tempRepo(t);
+  const settings = config ? { ".standard/config.json": config } : {};
+  write(cwd, Object.fromEntries(Object.entries({ ...WIRED, ...settings, ...files }).filter(([, content]) => content !== null)));
   git(cwd, "add", "-A");
   installPackage(cwd);
   return cwd;
@@ -45,6 +46,17 @@ function edit(...pairs) {
 
 test("a wired repo passes", (t) => {
   assertPasses(wiredRepo(t));
+});
+
+test("config-file fails until git tracks .standard/config.json, which passes as {}", (t) => {
+  const cwd = wiredRepo(t, { ".standard/config.json": null });
+  assertFails(cwd, ".standard/config.json: Commit .standard/config.json, even as {}, so the hooks know this repository uses the standard.");
+
+  write(cwd, { ".standard/config.json": {} });
+  assertFails(cwd, ".standard/config.json: Commit .standard/config.json, even as {}, so the hooks know this repository uses the standard.");
+
+  git(cwd, "add", ".standard/config.json");
+  assertPasses(cwd);
 });
 
 test("a retired script that is still tracked fails once its check is on", (t) => {

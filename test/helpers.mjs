@@ -111,6 +111,7 @@ export function pullRequestEvent({ base, head, number = 123, title = "Add the pu
 }
 
 export const WIRED = {
+  ".standard/config.json": {},
   "package.json": {
     scripts: { prepare: "standard install" },
     devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.5.0" },

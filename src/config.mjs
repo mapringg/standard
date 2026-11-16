@@ -1,6 +1,8 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { parseDocument } from "yaml";
+
 /**
  * @typedef {object} Config
  * @property {{ "pre-commit": readonly string[], "pre-push": readonly string[] }} hooks Shell lines each hook runs after its built-in rule.
@@ -118,6 +120,11 @@ export function parseConfig(text) {
     raw = JSON.parse(text);
   } catch (error) {
     throw new Error(`${FILE} is not valid JSON: ${/** @type {Error} */ (error).message}`);
+  }
+  const duplicate = parseDocument(text).errors.find((error) => error.code === "DUPLICATE_KEY");
+  if (duplicate) {
+    const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
+    throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
   const top = section(raw, "", ["hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
