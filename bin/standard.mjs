@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 
 import { HOOKS } from "../src/hook.mjs";
@@ -56,6 +57,10 @@ const COMMANDS = {
     return HOOKS[name](loadRepo(process.cwd()), args);
   },
   install() {
+    if (spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { stdio: "ignore" }).status !== 0) {
+      console.log("standard install: not inside a git work tree, so there are no hooks to install");
+      return 0;
+    }
     const changes = install(loadRepo(process.cwd()).root);
     for (const change of changes) console.log(`standard install: ${change}`);
     if (changes.length === 0) console.log("standard install: hooks already up to date");

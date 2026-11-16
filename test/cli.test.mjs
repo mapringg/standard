@@ -134,6 +134,14 @@ test("install writes the same shims every time and unsets core.hooksPath", (t) =
   assert.deepEqual(shims(cwd), written);
 });
 
+test("install outside a git work tree exits 0 and writes nothing, so a Docker build's pnpm install passes", (t) => {
+  const cwd = tempDir(t, "image");
+  const { stdout, stderr, status } = standard(cwd, ["install"], { env: { GIT_CEILING_DIRECTORIES: cwd } });
+  assert.equal(stdout, "standard install: not inside a git work tree, so there are no hooks to install\n");
+  assert.equal(stderr, "");
+  assert.equal(status, 0);
+});
+
 test("install unsets an empty core.hooksPath, which would otherwise skip the hooks", (t) => {
   const cwd = tempRepo(t);
   git(cwd, "config", "core.hooksPath", "");
