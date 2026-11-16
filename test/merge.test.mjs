@@ -144,7 +144,7 @@ test("merge waits for a newer Check that has not finished, even after an older s
     const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", status, conclusion: null })];
     assertRefused(
       mergeWith(t, { runs }),
-      new RegExp(`^ {2}wait: pull_request run 2 attempt 1, the newest on aaaaaaa, is ${status}\\.$`, "m"),
+      new RegExp(`^ {2}wait: pull_request run 2 attempt 1 of workflow 7 on aaaaaaa is ${status}\\.$`, "m"),
     );
   }
 });
@@ -153,7 +153,7 @@ test("merge waits for a newer workflow run that has no Check run yet", (t) => {
   const runs = [green, run(2, { started: "2026-11-10T11:00:00Z", status: "pending", conclusion: null, check: null })];
   assertRefused(
     mergeWith(t, { runs }),
-    /^ {2}wait: pull_request run 2 attempt 1, the newest on aaaaaaa, is pending\.$/m,
+    /^ {2}wait: pull_request run 2 attempt 1 of workflow 7 on aaaaaaa is pending\.$/m,
   );
 });
 
@@ -175,9 +175,9 @@ test("merge ignores older cancelled and skipped Check runs once the newest is gr
 });
 
 test("merge orders runs by when their latest attempt started, so a rerun of an older run is the newest", (t) => {
-  const rerun = run(1, { attempt: 2, started: "2026-11-10T12:00:00Z", status: "in_progress", conclusion: null });
+  const rerun = run(1, { attempt: 2, started: "2026-11-10T12:00:00Z", conclusion: "failure" });
   const runs = [rerun, run(2, { started: "2026-11-10T11:00:00Z" })];
-  assertRefused(mergeWith(t, { runs }), /wait: pull_request run 1 attempt 2, the newest on aaaaaaa, is in_progress\./);
+  assertRefused(mergeWith(t, { runs }), /Check in pull_request run 1 attempt 2, the newest on aaaaaaa, concluded failure\./);
   const failedOlder = [run(1, { attempt: 2, started: "2026-11-10T10:00:00Z", conclusion: "failure" }), run(2, { started: "2026-11-10T11:00:00Z" })];
   assert.equal(mergeWith(t, { runs: failedOlder }).merged.length, 1);
 });
@@ -225,15 +225,15 @@ test("merge keeps the start of a Check that a partial rerun copied from a draft-
 test("merge waits for a re-run attempt that carries a green Check from the earlier attempt", (t) => {
   for (const status of ["queued", "in_progress"]) {
     const carried = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", status, conclusion: null, check: { status: "completed", conclusion: "success" } });
-    assertRefused(mergeWith(t, { runs: [carried] }), new RegExp(`^ {2}wait: pull_request run 1 attempt 2, the newest on aaaaaaa, is ${status}\\.$`, "m"));
+    assertRefused(mergeWith(t, { runs: [carried] }), new RegExp(`^ {2}wait: pull_request run 1 attempt 2 of workflow 7 on aaaaaaa is ${status}\\.$`, "m"));
   }
 });
 
 test("merge refuses with retry when the newest run changes between the reads around the check runs", (t) => {
-  const rerun = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", status: "queued", conclusion: null, check: null });
+  const rerun = run(1, { attempt: 2, started: "2026-11-10T11:00:00Z", conclusion: "failure" });
   assertRefused(
     mergeWith(t, { before: [green], runs: [{ ...rerun, checkRun: green.checkRun }] }),
-    /^ {2}retry: the newest pull_request run on aaaaaaa changed from run 1 attempt 1 completed to run 1 attempt 2 queued while standard merge read the runs\. Run standard merge again\.$/m,
+    /^ {2}retry: the newest pull_request run on aaaaaaa changed from run 1 attempt 1 completed to run 1 attempt 2 completed while standard merge read the runs\. Run standard merge again\.$/m,
   );
   const newer = run(2, { started: "2026-11-10T11:00:00Z" });
   assertRefused(mergeWith(t, { before: [green], runs: [green, newer] }), /retry: .* from run 1 attempt 1 completed to run 2 attempt 1 completed/);
@@ -320,8 +320,31 @@ const verifierCases = [
   ...["cancelled", "skipped", "neutral", "timed_out", "action_required", "failure", "stale"].map((conclusion) => [`latest-${conclusion}`, false, [at(1, { conclusion })]]),
 ];
 
+test("merge waits for every pull_request workflow run on the head, even one whose Check run does not exist yet", (t) => {
+  const otherWorkflow = run(2, { workflow: 8, started: "2026-11-10T11:00:00Z", status: "queued", conclusion: null, check: null });
+  assertRefused(mergeWith(t, { before: [green], runs: [green, otherWorkflow] }), /^ {2}wait: pull_request run 2 attempt 1 of workflow 8 on aaaaaaa is queued\.$/m);
+  assertRefused(mergeWith(t, { before: [green, otherWorkflow], runs: [green] }), /wait: pull_request run 2 attempt 1 of workflow 8 on aaaaaaa is queued\./);
+  const pushRun = run(3, { event: "push", started: "2026-11-10T11:00:00Z", status: "in_progress", conclusion: null, check: null });
+  assert.equal(mergeWith(t, { runs: [green, pushRun] }).merged.length, 1);
+});
+
+const newer = (options = {}) => at(2, { started: NEW, ...options });
+const manyCancelledLater = Array.from({ length: 6000 }, (_, i) => at(i + 100, { started: "2026-11-16T09:00:00Z", conclusion: "cancelled", check: null }));
+const freshCases = [
+  ["new-id-completed-between-reads", false, [at(1), newer({ check: null })], { before: [at(1)] }],
+  ["new-id-queued-between-reads", false, [at(1), newer({ status: "queued", conclusion: null, check: null })], { before: [at(1)] }],
+  ["same-tuple-changed-start-time", true, [at(1, { started: NEW, check: { started_at: OLD } })], { before: [at(1)] }],
+  ["completed-newest-check-missing", false, [at(1), newer({ check: null })]],
+  ["only-completed-check-missing", false, [at(1, { check: null })]],
+  ["check-success-later-job-failure", true, [{ ...at(1), workflowRun: { ...at(1).workflowRun, conclusion: "failure" } }, { workflowRun: null, checkRun: { ...at(1).checkRun, name: "Deploy", conclusion: "failure" } }]],
+  ["jq-two-pages-multiple-documents", true, [{ workflowRun: null, checkRun: { ...at(1).checkRun, name: "Lint" } }, at(1)], { events: [{ event: "labeled", created_at: "2026-11-16T13:00:00Z" }, ready("2026-11-16T09:00:00Z"), ready("2026-11-16T09:30:00Z")] }],
+  ["projection-large-raw-responses", true, [{ ...at(1), workflowRun: { ...at(1).workflowRun, padding: "x".repeat(2 * 1024 * 1024) } }]],
+  ["projected-output-over-one-mib", true, [...manyCancelledLater, at(1)]],
+  ["brand-new-check-workflow-between-reads", false, [at(1), newer({ workflow: 8, status: "queued", conclusion: null, check: null })], { before: [at(1)] }],
+];
+
 test("merge decides every case of the independent verifier", (t) => {
-  const mismatches = verifierCases.flatMap(([name, merges, runs, options = {}]) => {
+  const mismatches = [...verifierCases, ...freshCases].flatMap(([name, merges, runs, options = {}]) => {
     const { status, merged } = mergeWith(t, { runs, ...options });
     return (merges ? status === 0 && merged.length === 1 : status !== 0) ? [] : [name];
   });

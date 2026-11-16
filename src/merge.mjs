@@ -96,6 +96,10 @@ function attempt(run) {
  * @returns {string | null} The reason to refuse.
  */
 function gateRefusal(head, { checkRuns, workflowReads: [before, after], readyAt }) {
+  const unfinished = [...after, ...before].find((run) => run.event === EVENT && run.head_sha === head && run.status !== "completed");
+  if (unfinished) {
+    return `wait: ${EVENT} run ${unfinished.id} attempt ${unfinished.run_attempt} of workflow ${unfinished.workflow_id} on ${head.slice(0, 7)} is ${unfinished.status}.`;
+  }
   const bySuite = new Map(after.map((run) => [run.check_suite_id, run]));
   const gates = checkRuns.filter((run) => run.name === GATE && run.app?.slug === GATE_APP && run.head_sha === head);
   const workflows = new Set(gates.map((run) => bySuite.get(run.check_suite.id)?.workflow_id));
@@ -109,7 +113,6 @@ function gateRefusal(head, { checkRuns, workflowReads: [before, after], readyAt 
     return `retry: the newest ${EVENT} run on ${head.slice(0, 7)} changed from ${attempt(earlier)} to ${attempt(newest)} while standard merge read the runs. Run standard merge again.`;
   }
   const where = `${EVENT} run ${newest.id} attempt ${newest.run_attempt}, the newest on ${head.slice(0, 7)},`;
-  if (newest.status !== "completed") return `wait: ${where} is ${newest.status}.`;
   const gate = gates.find((run) => run.check_suite.id === newest.check_suite_id);
   if (!gate) return `${where} concluded ${newest.conclusion} without a ${GATE} run.`;
   if (gate.status !== "completed") return `${GATE} in ${where} is ${gate.status}.`;
