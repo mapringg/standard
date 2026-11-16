@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 
-import { subjectNotes } from "./checks/support/subject-rules.mjs";
 import { FILE, parseConfig } from "./config.mjs";
 import { loadRepo } from "./repo.mjs";
 import { report, run } from "./run.mjs";
@@ -15,7 +14,7 @@ const CHECK_FIELDS = ".check_runs[] | {name, head_sha, status, conclusion, start
 const RUN_FIELDS = ".workflow_runs[] | {id, workflow_id, event, head_sha, check_suite_id, run_attempt, run_started_at, status, conclusion}";
 const READY_FIELDS = '.[] | select(.event == "ready_for_review") | {created_at}';
 const OUTPUT_LIMIT = 256 * 1024 * 1024;
-const DESCRIPTION_CHECKS = ["pr-body", "pr-screenshot"];
+const DESCRIPTION_CHECKS = ["pr-title", "pr-body", "pr-screenshot"];
 
 export const retired = ["scripts/merge-pr.mjs", "scripts/merge-pr.test.mjs"];
 
@@ -142,10 +141,6 @@ export function mergeDecision(pr, runs, admin) {
   if (pr.isDraft) reasons.push("it is a draft.");
   if (pr.baseRefName !== BASE) reasons.push(`its base is ${pr.baseRefName}, not ${BASE}.`);
 
-  const title = pr.title.replace(/ \(#\d+\)$/, "");
-  const suffix = ` (#${pr.number})`;
-  for (const note of subjectNotes(title, suffix)) reasons.push(`its title breaks a subject rule. ${note}`);
-
   const refusal = gateRefusal(pr.headRefOid, runs);
   if (refusal) reasons.push(refusal);
 
@@ -160,7 +155,7 @@ export function mergeDecision(pr, runs, admin) {
       "--match-head-commit",
       pr.headRefOid,
       "--subject",
-      `${title}${suffix}`,
+      `${pr.title.trim()} (#${pr.number})`,
       "--body",
       "",
       ...(admin ? ["--admin"] : []),
@@ -219,9 +214,9 @@ function descriptionRefusal(pr, live, results) {
   const flagged = results.filter((result) => result.outcome === "ran" && result.findings.length > 0);
   if (flagged.length === 0) return [];
   return [
-    "its description breaks the pull request rules, and standard merge allows no finding, not even a warning:",
+    "its title or description breaks the pull request rules, and standard merge allows no finding, not even a warning:",
     ...report([...flagged], false).map((line) => `  ${line}`),
-    "Edit the pull request description to fix them, no push needed, then run standard merge again.",
+    "Edit the pull request title or description to fix them, no push needed, then run standard merge again.",
   ];
 }
 

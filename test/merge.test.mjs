@@ -146,9 +146,14 @@ test("merge passes --admin through and still needs a green Check", (t) => {
   assertRefused(mergeWith(t, { args: ["--admin"], runs: [] }), /no Check run from github-actions in a pull_request run/);
 });
 
-test("merge replaces a stale number at the end of the title", (t) => {
+test("merge judges the title as pr-title does, with a stale number left in and the new one added", (t) => {
+  const stale = `Keep all ${"a".repeat(58)} (#193)`;
+  assertRefused(
+    mergeWith(t, { view: { title: stale } }),
+    /^ {4}pr-title: Keep all a{58} \(#193\): Subject is 81 characters with the " \(#194\)" the squash adds; keep it to 80 or fewer\./m,
+  );
   const { merged } = mergeWith(t, { view: { title: `${TITLE} (#193)` } });
-  assert.equal(merged[0][7], `${TITLE} (#194)`);
+  assert.equal(merged[0][7], `${TITLE} (#193) (#194)`);
 });
 
 test("merge refuses a draft", (t) => {
@@ -300,7 +305,7 @@ test("merge refuses a green Check on an older commit", (t) => {
 });
 
 test("merge refuses a title that breaks the subject rules", (t) => {
-  assertRefused(mergeWith(t, { view: { title: "fixed stuff" } }), /its title breaks a subject rule\. Subject does not start with a capital letter\./);
+  assertRefused(mergeWith(t, { view: { title: "fixed stuff" } }), /^ {4}pr-title: fixed stuff: Subject does not start with a capital letter\./m);
   const long = "Keep every environment example complete across each app in this whole repo";
   assertRefused(mergeWith(t, { view: { title: long } }), /Subject is 81 characters with the " \(#194\)" the squash adds/);
 });
@@ -404,10 +409,10 @@ const WARNED_BODY = [
 test("merge refuses a description with warnings, listing each finding with its fix, even with --admin", (t) => {
   for (const args of [[], ["--admin"]]) {
     const result = mergeWith(t, { view: { body: WARNED_BODY }, args });
-    assertRefused(result, /^ {2}its description breaks the pull request rules, and standard merge allows no finding, not even a warning:$/m);
+    assertRefused(result, /^ {2}its title or description breaks the pull request rules, and standard merge allows no finding, not even a warning:$/m);
     assert.match(result.stderr, /^ {4}pr-body: warning: Evidence: Evidence has no "\*\*Before:\*\*" \/ "\*\*After:\*\*" pair and no table with Before and After columns\.$/m);
     assert.match(result.stderr, /^ {4}pr-body: warning: Blast Radius: Blast Radius "env examples only" is more than one word\. Name the area in one word, then describe the risk below it\.$/m);
-    assert.match(result.stderr, /^ {2}Edit the pull request description to fix them, no push needed, then run standard merge again\.$/m);
+    assert.match(result.stderr, /^ {2}Edit the pull request title or description to fix them, no push needed, then run standard merge again\.$/m);
   }
 });
 
@@ -432,11 +437,11 @@ test("merge refuses with retry when the head or the title changes between its re
   assertRefused(retitled, new RegExp(String.raw`^ {2}retry: the title changed from "${TITLE}" to "Keep only some environment examples" while standard merge read the pull request\. Run standard merge again\.$`, "m"));
 });
 
-test("merge does not enforce a pending pr-body", (t) => {
-  const repo = pullRequestRepo(t, { base: { ".standard/config.json": { pending: ["pr-body"] } } });
+test("merge does not enforce a pending pr-body or pr-title", (t) => {
+  const repo = pullRequestRepo(t, { base: { ".standard/config.json": { pending: ["pr-title", "pr-body"] } } });
   const runs = [run(1, { sha: repo.head })];
-  const view = { body: WARNED_BODY, headRefOid: repo.head, baseRefOid: repo.base };
-  assert.equal(mergeWith(t, { cwd: repo.cwd, runs, view }).merged.length, 1);
+  const view = { title: "fixed stuff", body: WARNED_BODY, headRefOid: repo.head, baseRefOid: repo.base };
+  assert.equal(mergeWith(t, { cwd: repo.cwd, runs, view }).merged[0][7], "fixed stuff (#194)");
 });
 
 test("merge needs a screenshot under pr.screenshots as the head commit's config sets it", (t) => {
