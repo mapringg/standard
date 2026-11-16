@@ -190,6 +190,16 @@ test("fails a root commit pushed to develop, since trunk takes one-parent squash
   assert.equal(status, 1);
 });
 
+test("a trunk squash subject meets the title rules on the part before its PR number, with no generated exemption", () => {
+  const trunk = (subject) => fixes(subject, { source: "trunk" });
+  assert.match(trunk("Fix the build. (#123)"), /ends with a period/);
+  assert.match(trunk("Fix build (#123)"), /too short to describe the change/);
+  assert.match(trunk("fixup! Fix the build (#123)"), /does not start with a capital letter/);
+  assert.match(trunk(`Merge ${"the long branch name ".repeat(5)}(#123)`), /characters with the " \(#123\)" the squash adds/);
+  assert.equal(trunk("Fix the flaky login test (#123)"), "");
+  assert.equal(fixes("fixup! Fix the build"), "");
+});
+
 test("a push to any other branch gets the pull request rules", (t) => {
   const cwd = tempRepo(t);
   const before = commit(cwd, "Start the repository");

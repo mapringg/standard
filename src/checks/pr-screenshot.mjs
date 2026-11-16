@@ -1,6 +1,5 @@
-import { matchesGlob } from "node:path/posix";
-
 import { FILE } from "../config.mjs";
+import { git } from "../repo.mjs";
 import { evidenceHasImage } from "./support/markdown.mjs";
 
 /** @type {import("../registry.mjs").Check} */
@@ -18,7 +17,9 @@ export default {
     const { when, uploader } = /** @type {{ when: readonly string[], uploader: string }} */ (
       repo.config.pr.screenshots
     );
-    const visual = pr.changedFiles.filter((file) => when.some((glob) => matchesGlob(file, glob)));
+    const range = `${pr.baseSha}...${pr.headSha}`;
+    const pathspecs = when.map((glob) => `:(glob)${glob}`);
+    const visual = git(repo.root, "diff", "--name-only", "-z", range, "--", ...pathspecs).split("\0").filter(Boolean);
     if (visual.length === 0 || evidenceHasImage(pr.body)) return [];
     const shown = visual.length > 3 ? `${visual.slice(0, 3).join(", ")} and ${visual.length - 3} more` : visual.join(", ");
     return [

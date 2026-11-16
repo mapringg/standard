@@ -35,7 +35,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | A pull request | A merge commit. A broken subject rule is a warning, because the squash replaces the commit. |
 | A push to `develop` or `main` | Any broken rule, a merge commit, and a subject that does not end with its pull request number, such as `(#12)`. |
 
-`pr-title` applies the same subject rules to the pull request title, because the title becomes the squash subject. The 80-character limit counts the ` (#<number>)` the squash adds. A title from Dependabot only warns.
+`pr-title` applies the same subject rules to the pull request title, because the title becomes the squash subject. The 80-character limit counts the ` (#<number>)` the squash adds. A title from Dependabot fails the same way, because its squash subject meets the same push check; shorten it before merging.
 
 `pr-body` warns when the description does not follow the pull request template. It never fails the run, because the description can change until the merge.
 
@@ -49,7 +49,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | Placeholder | A template placeholder such as `<one-word description>` is left in. |
 | Ticket | With `pr.ticket-prefix`, a ticket line is optional, and when present it is the first line and reads `Ticket: ABC-123`. Without `pr.ticket-prefix`, any `Ticket:` line warns. |
 
-`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
+`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob, which git matches as a `:(glob)` pathspec (so `**` crosses folders, `*` does not, and dotfiles count), and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
 
 `pr-size` reports the pull request's size from its changed lines and never fails the run. It leaves out `pnpm-lock.yaml`, and leaves out test files unless the pull request changes only tests. A binary file and a pure rename count nothing.
 
