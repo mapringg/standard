@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.6.1" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.7.0" }
 }
 ```
 
@@ -145,12 +145,12 @@ web: 15 of 16 pass
 | `hooks` | The three shims that `standard install` writes are in the hooks folder of the repository's git common dir, and `core.hooksPath` is unset. |
 | `config` | `standard check` accepts `.standard/config.json`: `pending` names only checks of this version and not `baseline-growth`. The note is the message `standard check` prints. |
 | Each check | It is `on`. It is `pending` when `.standard/config.json` lists it, even where it would not apply, `debt N` when its baseline lists N findings, and `absent` when the repository does not install the package or pins a version older than the check. |
-| Each GitHub setting, with `--remote` | The default branch is `develop`; pull requests merge by squash only; the squash title is the pull request title; the squash message is blank; merged branches are deleted. `gh api` reads each repository's settings once. |
+| `settings`, with `--remote` | The repository's live GitHub settings match the one state the standard expects: the default branch is `develop`; pull requests merge by squash only (`allow_squash_merge` on, `allow_merge_commit` and `allow_rebase_merge` off); the squash title is `PR_TITLE` and the squash message `BLANK`; merged branches are deleted; an active ruleset, or classic protection, on `develop` requires a pull request, and every ruleset pull request rule there allows only `squash` (the approval count is not checked); an active ruleset, or classic protection, on `main` blocks deletion and force-push. `gh api` reads the repository, then `rules/branches/develop` and `rules/branches/main` with `--paginate`, and reads a branch's classic protection only when its rulesets do not meet an expectation. Classic protection cannot limit merge methods, so on `develop` the repository's squash-only settings cover them. Each failing note names the setting, its live value, the expected value and the `gh api` command or settings page that fixes it; nothing is changed for you. When the token cannot read a branch's rules or classic protection (HTTP 403 or 404, such as a private repository on a plan without rulesets) and nothing it can read meets the expectation, the row is `unknown` with the reason and leaves the count, unless another setting fails. Output that is not JSON of the expected shape fails the row. |
 | `current`, with `--remote` | The pin is not older than the latest `v<major>.<minor>.<patch>` tag of `mapringg/standard`, which `gh api` reads once per run. It is score-only, so a release never fails a repository's CI. |
 
-`hooks`, `config` and `current` are score-only; `standard check` already refuses an invalid `.standard/config.json`. No row checks yet that `AGENTS.md` points agents at `standard explain`, because that command does not exist yet.
+`hooks`, `config`, `settings` and `current` are score-only; `standard check` already refuses an invalid `.standard/config.json`. No row checks yet that `AGENTS.md` points agents at `standard explain`, because that command does not exist yet.
 
-A check that does not apply, such as `pr-screenshot` without `pr.screenshots`, shows `n/a` with the reason and leaves the count, so a repository is not marked down for a check that cannot apply to it. `pending`, `debt N` and `absent` stay in the count and fail. `--json` prints the same rows. The command exits 1 when any row fails.
+A check that does not apply, such as `pr-screenshot` without `pr.screenshots`, shows `n/a` with the reason and leaves the count, as an `unknown` `settings` row does, so a repository is not marked down for a check that cannot apply to it. `pending`, `debt N` and `absent` stay in the count and fail. `--json` prints the same rows. The command exits 1 when any row fails.
 
 ## .standard/config.json
 
