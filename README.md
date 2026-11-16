@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.4" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.6.0" }
 }
 ```
 
@@ -18,11 +18,11 @@ Add the package at a tag and install its hooks when the repository installs:
 | Command | What it does |
 | --- | --- |
 | `standard check [<name>...]` | Runs every check. In GitHub Actions it reads the pull request or push from `GITHUB_EVENT_PATH`, so check out with `fetch-depth: 0`. A `pull_request` event runs the commit, pull request and tree checks in one process. |
-| `standard check --pr <number>` | Runs the same checks locally on a pull request that `gh pr view` reads. The clone needs the pull request's base and head commits. |
+| `standard check --pr <number>` | Runs the same checks locally on a pull request that `gh pr view` reads. It fetches the pull request's base and head commits from `origin` when the clone lacks them. |
 | `standard hook commit-msg <file>` | Checks the commit message. |
 | `standard hook pre-commit` | Runs the `hooks.pre-commit` lines. |
 | `standard hook pre-push` | Refuses a merge commit that `origin/develop` lacks, then runs the `hooks.pre-push` lines. |
-| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its newest `Check` run is green. See [Merge](#merge). |
+| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its newest `Check` run is green and its title and description pass `pr-title`, `pr-body` and `pr-screenshot` with no warning. See [Merge](#merge). |
 | `standard score [<path>...] [--remote] [--json]` | Reports how far each repository follows the standard. See [Score](#score). |
 
 ## Checks
@@ -37,7 +37,7 @@ Add the package at a tag and install its hooks when the repository installs:
 
 `pr-title` applies the same subject rules to the pull request title, because the title becomes the squash subject. The 80-character limit counts the ` (#<number>)` the squash adds. A title from Dependabot fails the same way, because its squash subject meets the same push check; shorten it before merging.
 
-`pr-body` warns when the description does not follow the pull request template. It never fails the run, because the description can change until the merge.
+`pr-body` warns when the description does not follow the pull request template. It never fails the run, because the description can change until the merge. `standard merge` enforces it: it refuses a pull request whose description draws any `pr-body` warning.
 
 | Rule | Warns when |
 | --- | --- |
@@ -49,7 +49,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | Placeholder | A template placeholder such as `<one-word description>` is left in. |
 | Ticket | With `pr.ticket-prefix`, a ticket line is optional, and when present it is the first line and reads `Ticket: ABC-123`. Without `pr.ticket-prefix`, any `Ticket:` line warns. |
 
-`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob, which git matches as a `:(glob)` pathspec (so `**` crosses folders, `*` does not, and dotfiles count), and no `when` entry that starts with `!` excludes it, and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
+`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob, which git matches as a `:(glob)` pathspec (so `**` crosses folders, `*` does not, and dotfiles count), and no `when` entry that starts with `!` excludes it, and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply. Like `pr-body`, it warns in CI and `standard merge` enforces it.
 
 `pr-size` reports the pull request's size from its changed lines and never fails the run. It leaves out `pnpm-lock.yaml`, and leaves out test files unless the pull request changes only tests. A binary file and a pure rename count nothing.
 
@@ -86,12 +86,20 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 
 - The pull request is open and not a draft.
 - Its base is `develop`.
-- Its title passes the `pr-title` rules with ` (#<number>)` added.
 - The newest `Check` run on the exact head commit has concluded `success`. The gate counts only check runs named `Check` from GitHub Actions whose workflow run came from a `pull_request` event, so a `push` run on the same commit does not count. Among the `pull_request` runs of the workflow that holds `Check`, the newest is the one whose latest attempt started last (`run_started_at`, then the higher run id). A re-run moves that time forward, and a run that waits in a concurrency group has it before its `Check` run exists, so an older success cannot stand in for a newer run. If the newest run's id, attempt or status differs between the two workflow run reads, the gate refuses with `retry:`, because the check runs it read between them may belong to another attempt. When both reads show the same completed attempt, that attempt ended before the check runs were read, so its `Check` run is the one GitHub lists. A `Check` that did not conclude `success` refuses and names its conclusion. Older runs on the same commit, such as one that `cancel-in-progress` cancelled or one skipped on a `closed` event, do not block. A missing run or a run on an older commit refuses, and the message names the runs it found and the event of each.
 - Every `pull_request` workflow run on the head commit has completed, in both workflow run reads. Until then the gate refuses with `wait:`. This covers a run of a workflow whose `Check` run does not exist yet and a re-run that carries a green `Check` from an earlier attempt. So a merge waits for every `pull_request` workflow on the head to finish, not only the one that holds `Check`. Runs from other events, such as `push`, do not hold it.
 - That `Check` run started after the pull request last left draft, as its `ready_for_review` events show. The gate reads the start of the `Check` run itself, which a re-run of failed jobs copies from the earlier attempt, so a draft-time result cannot pass through a later attempt. A draft-time run refuses until `Check` runs again.
 
-Then it runs `gh pr merge <number> --squash --match-head-commit <sha> --subject "<title> (#<number>)" --body ""`, so a push after the check cannot be merged unseen. `--admin` passes GitHub's admin flag through for required reviews and still needs a green `Check`. Name the CI job `Check` so the gate can find it.
+Once those hold, it reads the pull request again, right before the merge, and refuses unless all of these hold:
+
+- The head and the title are the ones it read first. Otherwise it refuses with `retry:`, because the `Check` decision and the squash subject belong to the first read.
+- The title and description pass `pr-title`, `pr-body` and `pr-screenshot` with no finding, warnings included. They are the same checks `standard check` runs in CI, with the `.standard/config.json` of the head commit, so a check in `pending` is not enforced, the squash subject is the title `pr-title` approved with ` (#<number>)` added, and a repository without `pr.screenshots` needs no screenshot. The refusal lists each finding with its fix, as `standard check` prints it. Editing the title or description fixes it; no push is needed.
+
+`pr-screenshot` diffs the base and head commits, so `standard merge` fetches them from `origin` when the clone lacks them.
+
+Then it runs `gh pr merge <number> --squash --match-head-commit <sha> --subject "<title> (#<number>)" --body ""`, so a push after the check cannot be merged unseen. `--admin` passes GitHub's admin flag through for required reviews and still needs a green `Check` and a description with no finding; there is no flag that skips the description. Name the CI job `Check` so the gate can find it.
+
+A description edited after the second read and before GitHub merges is not checked. The squash body is empty, so the description never reaches the commit, and GitHub lets anyone edit a description after the merge too, so no gate can keep it fixed. What the gate guarantees is that the title and description passed the rules on the head it merges, at the second read.
 
 Because only the newest run decides, the CI workflow can cancel a run that a newer one replaces. Add `ready_for_review` so leaving draft runs `Check` again, and `edited` so a title or description fix runs it again:
 
