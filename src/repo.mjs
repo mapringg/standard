@@ -63,3 +63,12 @@ export function loadRepo(cwd) {
     },
   };
 }
+
+/**
+ * @param {Repo} repo
+ * @param {string} path
+ * @returns {string | null}
+ */
+export function tracked(repo, path) {
+  return repo.files(path).includes(path) ? repo.read(path) : null;
+}

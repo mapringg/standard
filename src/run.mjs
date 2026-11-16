@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { pendingProblem } from "./config.mjs";
 import { ratchet } from "./ratchet.mjs";
 
 /**
@@ -68,14 +69,12 @@ async function runCheck(check, repo, scope, mode, checks) {
     case "tree": {
       const applies = check.applies(repo);
       if (!applies.on) return { check: name, outcome: "skipped", because: applies.because };
+      const findings = await check.run(repo, checks);
+      if (check.baseline === false) {
+        return { check: name, outcome: "ran", failed: findings.length > 0, findings, message: findings.length === 0 ? "OK" : "" };
+      }
       const shown = `${BASELINES}/${name}.json`;
-      const verdict = ratchet({
-        check: name,
-        path: join(repo.root, shown),
-        shown,
-        findings: await check.run(repo),
-        mode,
-      });
+      const verdict = ratchet({ check: name, path: join(repo.root, shown), shown, findings, mode });
       return { check: name, outcome: "ran", findings: [], ...verdict };
     }
   }
@@ -92,23 +91,20 @@ async function runCheck(check, repo, scope, mode, checks) {
  */
 export async function run({ checks, repo, scope, names = [], mode = "check" }) {
   const known = checks.map((check) => check.name);
-  const sources = { "standard.json pending": repo.config.pending, "standard check": names };
-  for (const [source, listed] of Object.entries(sources)) {
-    const unknown = listed.find((name) => !known.includes(name));
-    if (unknown) {
-      throw new Error(
-        `${source} names "${unknown}", which is not a check in this version. Checks: ${known.join(", ")}.`,
-      );
-    }
-  }
-  if (repo.config.pending.includes("baseline-growth")) {
-    throw new Error("standard.json pending names baseline-growth, which guards pending itself. Remove it from pending.");
+  const problem = pendingProblem(repo.config, known);
+  if (problem) throw new Error(problem);
+  const unknown = names.find((name) => !known.includes(name));
+  if (unknown) {
+    throw new Error(`standard check names "${unknown}", which is not a check in this version. Checks: ${known.join(", ")}.`);
   }
   const selected = names.length > 0 ? checks.filter((check) => names.includes(check.name)) : checks;
   if (mode !== "check" && (selected.length !== 1 || selected[0].subject !== "tree")) {
     throw new Error(
       `--${mode} changes one baseline, so name exactly one tree check: standard check <name> --${mode}.`,
     );
+  }
+  if (mode !== "check" && selected[0].subject === "tree" && selected[0].baseline === false) {
+    throw new Error(`${selected[0].name} allows no findings, so it has no baseline for --${mode}. Fix what it finds.`);
   }
   return Promise.all(selected.map((check) => runCheck(check, repo, scope, mode, checks)));
 }

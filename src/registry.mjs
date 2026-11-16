@@ -4,6 +4,7 @@ import prBody from "./checks/pr-body.mjs";
 import prScreenshot from "./checks/pr-screenshot.mjs";
 import prSize from "./checks/pr-size.mjs";
 import prTitle from "./checks/pr-title.mjs";
+import wiring from "./checks/wiring.mjs";
 
 /**
  * @typedef {import("./repo.mjs").Repo} Repo
@@ -25,8 +26,8 @@ import prTitle from "./checks/pr-title.mjs";
  *
  * @typedef {(Named & { subject: "commit", run(commit: Commit, repo: Repo): Finding[] })
  *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, summary?(pr: PullRequest): string, run(pr: PullRequest, repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })
- *   | (Named & { subject: "tree", applies(repo: Repo): Applies, run(repo: Repo): Finding[] | Promise<Finding[]> })} Check
+ *   | (Named & { subject: "tree", baseline?: false, applies(repo: Repo): Applies, run(repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })} Check
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring];

@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "One repository standard for every project, run by one command.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -20,5 +20,8 @@
   },
   "scripts": {
     "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
   }
 }

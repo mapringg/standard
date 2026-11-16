@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 
+import { parseArgs } from "node:util";
+
 import { HOOKS } from "../src/hook.mjs";
 import { install } from "../src/install.mjs";
 import { merge } from "../src/merge.mjs";
 import { registry } from "../src/registry.mjs";
 import { loadRepo } from "../src/repo.mjs";
 import { failed, report, run } from "../src/run.mjs";
+import { anyFails, formatScore, score } from "../src/score.mjs";
 import { subjectsFromEvent, subjectsFromGh } from "../src/subjects.mjs";
 
 const USAGE = `Usage:
   standard check [<name>...] [--pr <number>] [--init | --write | --prune]
   standard hook <${Object.keys(HOOKS).join(" | ")}> [<git args>...]
   standard install
-  standard merge <number> [--admin]`;
+  standard merge <number> [--admin]
+  standard score [<path>...] [--remote] [--json]`;
 
 const MODES = ["--init", "--write", "--prune"];
 
@@ -62,6 +66,16 @@ const COMMANDS = {
       throw new Error(`merge needs a pull request number and takes only --admin.\n${USAGE}`);
     }
     return merge(process.cwd(), Number(number), flags.includes("--admin"));
+  },
+  score(argv) {
+    const { values, positionals } = parseArgs({
+      args: argv,
+      options: { remote: { type: "boolean" }, json: { type: "boolean" } },
+      allowPositionals: true,
+    });
+    const scores = score(positionals.length > 0 ? positionals : [process.cwd()], values.remote ?? false);
+    console.log(values.json ? JSON.stringify({ repos: scores }, null, 2) : formatScore(scores).join("\n"));
+    return anyFails(scores) ? 1 : 0;
   },
 };
 

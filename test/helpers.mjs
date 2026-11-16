@@ -57,6 +57,12 @@ export function commit(cwd, message) {
 export function linkPackage(root) {
   mkdirSync(join(root, "node_modules/.bin"), { recursive: true });
   symlinkSync(CLI, join(root, "node_modules/.bin/standard"));
+  installPackage(root);
+}
+
+export function installPackage(root) {
+  mkdirSync(join(root, "node_modules/@mapringg"), { recursive: true });
+  symlinkSync(join(import.meta.dirname, ".."), join(root, "node_modules/@mapringg/standard"));
 }
 
 export function eventFile(t, event) {
@@ -104,6 +110,28 @@ export function pullRequestEvent({ base, head, number = 123, title = "Add the pu
   };
 }
 
+export const WIRED = {
+  "package.json": {
+    scripts: { prepare: "standard install" },
+    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.4.0" },
+  },
+  ".github/workflows/ci.yml": [
+    "on:",
+    "  pull_request:",
+    "jobs:",
+    "  check:",
+    "    name: Check",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/checkout@v7",
+    "        with:",
+    "          fetch-depth: 0",
+    "      - run: pnpm install",
+    "      - run: pnpm exec standard check",
+    "",
+  ].join("\n"),
+};
+
 export function write(cwd, files) {
   for (const [path, content] of Object.entries(files)) {
     const full = join(cwd, path);
@@ -126,5 +154,6 @@ export function pullRequestRepo(t, { base = {}, head = { "README.md": "changed" 
   write(cwd, head);
   git(cwd, "add", "-A");
   git(cwd, "commit", "-q", "--no-verify", "-m", "Change the sample files");
+  installPackage(cwd);
   return { cwd, base: baseSha, head: git(cwd, "rev-parse", "HEAD") };
 }

@@ -81,7 +81,7 @@ test("names the pull request commit and the rule it breaks, as a warning", (t) =
   const cwd = tempRepo(t);
   const base = commit(cwd, "Start the repository");
   const head = commit(cwd, "Fixed the build");
-  const { stdout, status } = checkEvent(t, cwd, pullRequest(base, head));
+  const { stdout, status } = checkEvent(t, cwd, pullRequest(base, head), ["commit-subject"]);
   assert.match(
     stdout,
     new RegExp(`::warning title=commit-subject::${head.slice(0, 7)} Fixed the build: Subject starts with "Fixed"`),
@@ -194,7 +194,7 @@ test("a push to any other branch gets the pull request rules", (t) => {
   const cwd = tempRepo(t);
   const before = commit(cwd, "Start the repository");
   const after = commit(cwd, "Fixed the build");
-  const { stdout, status } = checkEvent(t, cwd, push("refs/heads/feature", before, after));
+  const { stdout, status } = checkEvent(t, cwd, push("refs/heads/feature", before, after), ["commit-subject"]);
   assert.match(stdout, /::warning title=commit-subject::\w{7} Fixed the build: Subject starts with "Fixed"/);
   assert.equal(status, 0);
 });

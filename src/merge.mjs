@@ -7,6 +7,8 @@ const GATE = "Check";
 const GATE_APP = "github-actions";
 const PR_FIELDS = "number,title,state,isDraft,baseRefName,headRefOid";
 
+export const retired = ["scripts/merge-pr.mjs", "scripts/merge-pr.test.mjs"];
+
 /**
  * @typedef {object} MergeTarget
  * @property {number} number

@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { GOOD_BODY, checkEvent, git, pullRequestEvent, pullRequestRepo, standard, tempDir, tempRepo, write } from "./helpers.mjs";
+import { GOOD_BODY, checkEvent, git, pullRequestEvent, pullRequestRepo, standard, tempDir, tempRepo, WIRED, write } from "./helpers.mjs";
 
 const PAIR = "**Before:** 3 fail.\n\n**After:** 0 fail.";
 
@@ -318,7 +318,7 @@ test("baseline-growth passes a baseline that shrinks, keeps its size, or is dele
 });
 
 test("a pull_request event runs commit, pull request and tree checks in one process", (t) => {
-  const repo = pullRequestRepo(t);
+  const repo = pullRequestRepo(t, { base: WIRED });
   const { stdout, status } = checkPullRequest(t, repo, { body: GOOD_BODY });
   assert.equal(
     stdout.trim(),
@@ -329,13 +329,14 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "pr-screenshot: skipped, standard.json sets no pr.screenshots",
       "pr-size: size:XS, 1 changed line(s) (#123)",
       "baseline-growth: OK (#123)",
+      "wiring: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);
 });
 
 test("a push event skips the pull request checks", (t) => {
-  const repo = pullRequestRepo(t);
+  const repo = pullRequestRepo(t, { base: WIRED });
   const { stdout, status } = checkEvent(t, repo.cwd, { ref: "refs/heads/feature", before: repo.base, after: repo.head });
   assert.match(stdout, /^pr-title: skipped, this run has no pull request to check$/m);
   assert.match(stdout, /^baseline-growth: skipped, this run has no pull request to check$/m);

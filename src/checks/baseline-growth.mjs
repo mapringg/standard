@@ -1,3 +1,5 @@
+import { newer, pinOf } from "../pin.mjs";
+import { baselineEntries } from "../ratchet.mjs";
 import { git } from "../repo.mjs";
 
 const BASELINES = /^\.standard\/baselines\/([^/]+)\.json$/;
@@ -18,61 +20,6 @@ function rawPendingAt(repo, commit) {
 }
 
 /**
- * @param {string | null} text
- * @returns {number | null}
- */
-function entries(text) {
-  if (text === null) return null;
-  try {
-    const groups = Object.values(JSON.parse(text));
-    return groups.every(Array.isArray) ? groups.reduce((sum, keys) => sum + keys.length, 0) : null;
-  } catch {
-    return null;
-  }
-}
-
-const PACKAGE = "@mapringg/standard";
-
-/**
- * @param {string} version
- * @returns {number[]}
- */
-function parts(version) {
-  return version.split(".").map(Number);
-}
-
-/**
- * @param {string} a
- * @param {string} b
- * @returns {boolean}
- */
-function newer(a, b) {
-  const [x, y] = [parts(a), parts(b)];
-  const at = x.findIndex((part, index) => part !== y[index]);
-  return at !== -1 && x[at] > y[at];
-}
-
-/**
- * How a commit installs the standard: not at all, at a version, or with a spec no version can be read from.
- * @param {import("../repo.mjs").Repo} repo
- * @param {string} commit
- * @returns {{ installed: false } | { installed: true, version: string | null }}
- */
-function pinnedAt(repo, commit) {
-  const text = repo.readAt(commit, "package.json");
-  if (text === null) return { installed: false };
-  let spec;
-  try {
-    const manifest = JSON.parse(text);
-    spec = manifest.devDependencies?.[PACKAGE] ?? manifest.dependencies?.[PACKAGE];
-  } catch {
-    return { installed: true, version: null };
-  }
-  if (typeof spec !== "string") return { installed: false };
-  return { installed: true, version: /(\d+\.\d+\.\d+)/.exec(spec)?.[1] ?? null };
-}
-
-/**
  * @param {import("../repo.mjs").Repo} repo
  * @param {string} commit
  * @param {string} path
@@ -89,11 +36,11 @@ export default {
   subject: "pr",
   retired: [],
   run(pr, repo, checks) {
-    const base = pinnedAt(repo, pr.baseSha);
-    const head = pinnedAt(repo, pr.headSha);
+    const base = pinOf(repo.readAt(pr.baseSha, "package.json"));
+    const head = pinOf(repo.readAt(pr.headSha, "package.json"));
     const arrived = (/** @type {string} */ name) => {
-      if (!base.installed) return true;
-      if (!base.version || !head.installed || !head.version) return false;
+      if (base.kind === "none") return true;
+      if (base.kind !== "pinned" || head.kind !== "pinned" || !base.version || !head.version) return false;
       const [from, to] = [base.version, head.version];
       return checks.some(
         (check) => check.name === name && newer(check.since, from) && !newer(check.since, to),
@@ -120,10 +67,10 @@ export default {
     for (const path of pr.changedFiles) {
       const check = BASELINES.exec(path)?.[1];
       if (!check || adopted.includes(check)) continue;
-      const was = entries(repo.readAt(pr.baseSha, path));
+      const was = baselineEntries(repo.readAt(pr.baseSha, path));
       const now = repo.readAt(pr.headSha, path);
       if (now === null) continue;
-      const count = entries(now);
+      const count = baselineEntries(now);
       if (count === null) {
         findings.push({ key: path, fix: `${path} is not a baseline: an object of lists of finding keys.` });
       } else if (was === null) {

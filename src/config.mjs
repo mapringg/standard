@@ -111,6 +111,22 @@ export function parseConfig(text) {
 }
 
 /**
+ * @param {Config} config
+ * @param {readonly string[]} checks Names of the checks in this version.
+ * @returns {string | null} Why the runner refuses this config, or null when it accepts it.
+ */
+export function pendingProblem(config, checks) {
+  const unknown = config.pending.find((name) => !checks.includes(name));
+  if (unknown) {
+    return `${FILE} pending names "${unknown}", which is not a check in this version. Checks: ${checks.join(", ")}.`;
+  }
+  if (config.pending.includes("baseline-growth")) {
+    return `${FILE} pending names baseline-growth, which guards pending itself. Remove it from pending.`;
+  }
+  return null;
+}
+
+/**
  * @param {string} root
  * @returns {Config}
  */

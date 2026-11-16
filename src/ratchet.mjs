@@ -10,6 +10,20 @@ import { dirname } from "node:path";
  */
 
 /**
+ * @param {string | null} baseline
+ * @returns {number | null}
+ */
+export function baselineEntries(baseline) {
+  if (baseline === null) return null;
+  try {
+    const groups = Object.values(JSON.parse(baseline));
+    return groups.every(Array.isArray) ? groups.reduce((sum, keys) => sum + keys.length, 0) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {Iterable<string>} keys
  * @returns {Map<string, number>}
  */

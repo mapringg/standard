@@ -5,7 +5,7 @@ import { test } from "node:test";
 
 import { sizeOf } from "../src/checks/pr-size.mjs";
 import { githubRequest } from "../src/github.mjs";
-import { CLI, ENV, checkEvent, eventFile, pullRequestEvent, pullRequestRepo } from "./helpers.mjs";
+import { CLI, ENV, checkEvent, eventFile, pullRequestEvent, pullRequestRepo, WIRED } from "./helpers.mjs";
 
 /** @param {[string, number, number][]} files */
 function size(files) {
@@ -54,7 +54,7 @@ const lines = (count, word) => Array.from({ length: count }, (_, at) => `${word}
 
 function fixture(t) {
   return pullRequestRepo(t, {
-    base: { "src/app.mjs": lines(5, "old"), "src/old-name.mjs": lines(20, "same") },
+    base: { ...WIRED, "src/app.mjs": lines(5, "old"), "src/old-name.mjs": lines(20, "same") },
     head: {
       "src/app.mjs": lines(5, "new"),
       "src/app.test.mjs": lines(300, "test"),
