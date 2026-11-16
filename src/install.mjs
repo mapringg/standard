@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { FILE } from "./config.mjs";
 import { HOOKS } from "./hook.mjs";
 import { commonDir, git } from "./repo.mjs";
 
@@ -17,7 +18,13 @@ import { commonDir, git } from "./repo.mjs";
  * @param {string} hook
  */
 function shim(hook) {
-  return `#!/bin/sh\nexec "$(git rev-parse --show-toplevel)/node_modules/.bin/standard" hook ${hook} "$@"\n`;
+  return [
+    "#!/bin/sh",
+    'root="$(git rev-parse --show-toplevel)"',
+    `[ -e "$root/node_modules/.bin/standard" ] || [ -e "$root/${FILE}" ] || exit 0`,
+    `exec "$root/node_modules/.bin/standard" hook ${hook} "$@"`,
+    "",
+  ].join("\n");
 }
 
 /**

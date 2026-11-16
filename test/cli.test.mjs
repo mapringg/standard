@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { checkEvent, commit, git, linkPackage, standard, tempDir, tempRepo, tryGit } from "./helpers.mjs";
+import { checkEvent, commit, git, linkPackage, standard, tempDir, tempRepo, tryGit, write } from "./helpers.mjs";
 
 const HOOKS = ["commit-msg", "pre-commit", "pre-push"];
 
@@ -64,13 +64,13 @@ test("a pending check does not run, in a hook or in CI", (t) => {
   const before = commit(cwd, "Start the repository");
   const after = commit(cwd, "wip");
   const { stdout, status } = checkEvent(t, cwd, { ref: "refs/heads/develop", before, after }, ["commit-subject"]);
-  assert.equal(stdout.trim(), "commit-subject: pending in standard.json, so it did not run");
+  assert.equal(stdout.trim(), "commit-subject: pending in .standard/config.json, so it did not run");
   assert.equal(status, 0);
 });
 
-test("standard.json fails on a key or a check this version does not know", (t) => {
+test("the config fails on a key or a check this version does not know", (t) => {
   const cases = [
-    [{ lint: {} }, /standard\.json has an unknown key "lint"\. Known keys: hooks, pending, pr\./],
+    [{ lint: {} }, /\.standard\/config\.json has an unknown key "lint"\. Known keys: hooks, pending, pr\./],
     [{ hooks: { "post-merge": [] } }, /unknown key "hooks\.post-merge"\. Known keys: hooks\.pre-commit, hooks\.pre-push\./],
     [{ hooks: { "pre-push": "pnpm test" } }, /hooks\.pre-push must be a list of non-empty strings/],
     [{ pending: ["commit-subjects"] }, /pending names "commit-subjects", which is not a check in this version/],
@@ -118,7 +118,16 @@ test("install writes the same shims every time and unsets core.hooksPath", (t) =
   assert.match(first.stdout, /wrote .*hooks\/commit-msg\n.*wrote .*hooks\/pre-commit\n.*wrote .*hooks\/pre-push\n.*unset core\.hooksPath/);
   assert.equal(tryGit(cwd, "config", "--get", "core.hooksPath").stdout, "");
   const written = shims(cwd);
-  assert.match(written[0], /^100755 \d+ #!\/bin\/sh\nexec "\$\(git rev-parse --show-toplevel\)\/node_modules\/\.bin\/standard" hook commit-msg "\$@"\n$/);
+  assert.equal(
+    written[0].replace(/^100755 \d+ /, ""),
+    [
+      "#!/bin/sh",
+      'root="$(git rev-parse --show-toplevel)"',
+      '[ -e "$root/node_modules/.bin/standard" ] || [ -e "$root/.standard/config.json" ] || exit 0',
+      'exec "$root/node_modules/.bin/standard" hook commit-msg "$@"',
+      "",
+    ].join("\n"),
+  );
 
   const second = standard(cwd, ["install"]);
   assert.equal(second.stdout, "standard install: hooks already up to date\n");
@@ -160,9 +169,10 @@ test("install refuses when core.hooksPath is set outside the repo", (t) => {
 });
 
 test("the installed shim checks a real commit, in the main checkout and in a fresh worktree", (t) => {
-  const cwd = tempRepo(t);
+  const cwd = tempRepo(t, {});
   linkPackage(cwd);
   standard(cwd, ["install"]);
+  git(cwd, "add", ".standard");
 
   const bad = tryGit(cwd, "commit", "--allow-empty", "-m", "fix stuff");
   assert.match(bad.stderr, /commit-msg: Subject does not start with a capital letter\./);
@@ -256,11 +266,92 @@ test("hook pre-push does not look for merge commits in a push to develop or main
   assert.match(git(remote, "branch", "--list", "main"), /main/);
 });
 
-test("a push from a checkout without node_modules fails instead of skipping the hook", (t) => {
-  const { cwd } = cloneWithRemote(t);
+test("a push from an adopted checkout without node_modules fails instead of skipping the hook", (t) => {
+  const { cwd } = cloneWithRemote(t, {});
   commit(cwd, "Land another change");
   rmSync(join(cwd, "node_modules"), { recursive: true });
   const { stderr, status } = tryGit(cwd, "push", "origin", "develop");
   assert.match(stderr, /node_modules\/\.bin\/standard/);
   assert.notEqual(status, 0);
+});
+
+test("in one clone, a worktree that has not adopted skips the hooks and one that has fails without node_modules", (t) => {
+  const origin = tempRepo(t);
+  commit(origin, "Start the repository");
+  git(origin, "branch", "before-adoption");
+  write(origin, { ".standard/config.json": {} });
+  git(origin, "add", ".standard");
+  commit(origin, "Adopt the standard");
+
+  const clone = join(tempDir(t, "clone"), "app");
+  git(tempDir(t, "cwd"), "clone", "-q", origin, clone);
+  linkPackage(clone);
+  assert.equal(standard(clone, ["install"]).status, 0);
+  assert.match(tryGit(clone, "commit", "--allow-empty", "-m", "fix stuff").stderr, /commit-msg: Subject does not start/);
+
+  const old = join(tempDir(t, "worktree"), "old");
+  git(clone, "worktree", "add", "-q", "-b", "old-work", old, "origin/before-adoption");
+  const skipped = tryGit(old, "commit", "--allow-empty", "-m", "fix stuff");
+  assert.equal(skipped.stderr, "");
+  assert.equal(skipped.status, 0);
+  assert.equal(git(old, "log", "-1", "--format=%s"), "fix stuff");
+
+  const adopted = join(tempDir(t, "worktree"), "adopted");
+  git(clone, "worktree", "add", "-q", "-b", "new-work", adopted, "origin/develop");
+  const refused = tryGit(adopted, "commit", "--allow-empty", "-m", "Add the feature");
+  assert.match(refused.stderr, /node_modules\/\.bin\/standard/);
+  assert.notEqual(refused.status, 0);
+  assert.equal(git(adopted, "log", "-1", "--format=%s"), "Adopt the standard");
+});
+
+test("the config names the kebab-case key for a camelCase key and lists the known keys for an unknown one", (t) => {
+  const cases = [
+    [{ pr: { ticketPrefix: "ABC" } }, '"ticketPrefix" in .standard/config.json is camelCase; name it "ticket-prefix".\n'],
+    [{ hooks: { preCommit: [] } }, '"preCommit" in .standard/config.json is camelCase; name it "pre-commit".\n'],
+    [{ pr: { screenshots: { whenChanged: [] } } }, '"whenChanged" in .standard/config.json is camelCase; name it "when-changed". Known keys: pr.screenshots.when, pr.screenshots.uploader.\n'],
+    [{ boundaries: {} }, '.standard/config.json has an unknown key "boundaries". Known keys: hooks, pending, pr.\n'],
+    [{ pr: { ticket_prefix: "ABC" } }, '.standard/config.json has an unknown key "pr.ticket_prefix". Known keys: pr.ticket-prefix, pr.screenshots.\n'],
+  ];
+  for (const [config, message] of cases) {
+    const { stderr, status } = standard(tempRepo(t, config), ["check"]);
+    assert.equal(stderr, `standard: ${message}`);
+    assert.equal(status, 1);
+  }
+});
+
+test("the config fails on a repeated key, at the top level or nested, and names where", (t) => {
+  const cases = [
+    ['{"pr":{"ticket-prefix":"ABC","mystery":true},"pr":{}}', "line 1, column 46"],
+    ['{\n  "hooks": {\n    "pre-push": [],\n    "pre-push": ["x"]\n  }\n}\n', "line 4, column 5"],
+  ];
+  for (const [text, where] of cases) {
+    const cwd = tempRepo(t);
+    write(cwd, { ".standard/config.json": text });
+    const { stderr, status } = commitMsg(cwd, "Add the login page\n");
+    assert.equal(stderr, `standard: .standard/config.json repeats a key at ${where}. Keep one copy of each key.\n`);
+    assert.equal(status, 1);
+  }
+});
+
+test("a tracked root standard.json fails and says where the config moved", (t) => {
+  const cwd = tempRepo(t);
+  write(cwd, { "standard.json": { pending: ["commit-subject"] } });
+  assert.equal(commitMsg(cwd, "fix stuff\n").status, 1);
+
+  git(cwd, "add", "standard.json");
+  const { stderr, status } = commitMsg(cwd, "Add the login page\n");
+  assert.equal(stderr, "standard: standard.json is tracked at the repository root. Move it to .standard/config.json.\n");
+  assert.equal(status, 1);
+});
+
+test("a symlinked config or config folder fails", (t) => {
+  const file = tempRepo(t);
+  write(file, { "elsewhere.json": {}, ".standard/baselines/.keep": "" });
+  symlinkSync("../elsewhere.json", join(file, ".standard/config.json"));
+  assert.equal(commitMsg(file, "Add the login page\n").stderr, "standard: .standard/config.json is a symlink. Make it a regular file, so every check reads the same config.\n");
+
+  const folder = tempRepo(t);
+  write(folder, { "elsewhere/config.json": {} });
+  symlinkSync("elsewhere", join(folder, ".standard"));
+  assert.equal(commitMsg(folder, "Add the login page\n").stderr, "standard: .standard is a symlink. Make it a regular folder, so every check reads the same config.\n");
 });

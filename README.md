@@ -9,11 +9,11 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.4.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.0" }
 }
 ```
 
-`standard install` writes three hook shims into the `.git/hooks` folder that all worktrees share and unsets `core.hooksPath`. Each shim calls `node_modules/.bin/standard`, so a worktree without `node_modules` fails the hook.
+`standard install` writes three hook shims into the `.git/hooks` folder that all worktrees share and unsets `core.hooksPath`. Each shim calls `node_modules/.bin/standard`. A worktree whose checkout has `.standard/config.json` but no `node_modules` fails the hook. A worktree without `.standard/config.json` and without `node_modules` skips the hook, so installing in one worktree does not break another worktree of the same clone that is on a branch from before the repository adopted the standard. Commit `.standard/config.json`, even as `{}`, so the hooks know the repository has adopted; the `config-file` probe fails until you do.
 
 | Command | What it does |
 | --- | --- |
@@ -47,7 +47,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | Door | There is no `**Door:** one-way` or `**Door:** two-way`. |
 | Blast Radius | There is no `**Blast Radius:**`, or its value before the first period is more than one word. |
 | Placeholder | A template placeholder such as `<one-word description>` is left in. |
-| Ticket | With `pr.ticketPrefix`, a ticket line is optional, and when present it is the first line and reads `Ticket: ABC-123`. Without `pr.ticketPrefix`, any `Ticket:` line warns. |
+| Ticket | With `pr.ticket-prefix`, a ticket line is optional, and when present it is the first line and reads `Ticket: ABC-123`. Without `pr.ticket-prefix`, any `Ticket:` line warns. |
 
 `pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
 
@@ -64,7 +64,7 @@ Add the package at a tag and install its hooks when the repository installs:
 
 When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the label if the repository lacks it, removes any other `size:` label and sets its own. The token needs `issues: write`. A label it cannot set is a warning.
 
-`baseline-growth` fails a pull request that adds a check to `pending`, or creates or grows a file under `.standard/baselines/`. The one exception is the pull request that removes that check from `pending`: it turns the check on and may start its baseline.
+`baseline-growth` fails a pull request that adds a check to `pending`, or creates or grows a file under `.standard/baselines/`. The one exception is the pull request that removes that check from `pending`: it turns the check on and may start its baseline. It also fails when the head commit tracks a symlink under `.standard`, such as `.standard/config.json`. When the base commit has no `.standard/config.json`, it reads the base's `pending` from a root `standard.json`, so the pull request that moves the config adds nothing to `pending`.
 
 `wiring` checks that the repository runs the standard. It keeps no baseline, so every finding fails.
 
@@ -72,9 +72,10 @@ When `GH_TOKEN` and `GITHUB_REPOSITORY` are set, `pr-size` also creates the labe
 | --- | --- |
 | `retired` | Git tracks a script that a check or command replaces, such as `scripts/check-commit-msg.mjs`. A script that several checks replace fails only once none of them is pending. The scripts `standard merge` replaces always fail, because `pending` names only checks. |
 | `ci` | No workflow that runs on every `pull_request` to `develop` has a job whose check run is named `Check`, which `standard merge` waits for, with no `if`, `continue-on-error`, `strategy.matrix`, `defaults.run.shell` or `GITHUB_` variables in `env`, that uses `actions/checkout` with `fetch-depth: 0` and later has a step whose whole `run` is `standard check`, `pnpm exec standard check`, `pnpm standard check` or `npx standard check`, with no `shell`, `GITHUB_` variables, `if` or `continue-on-error`. On `pull_request`, `paths` and `paths-ignore` fail, `branches` or `branches-ignore` must let `develop` through under GitHub's glob rules, and `types` must include `opened`, `synchronize` and `reopened`. The fix names the first thing the closest workflow lacks. The probe catches wiring mistakes; whoever edits a workflow can still defeat it, and that edit shows in the pull request diff. |
-| `pin` | `package.json` does not pin `@mapringg/standard` to an exact version, such as `0.4.0`, or a tag, such as `github:mapringg/standard#v0.4.0`. |
+| `pin` | `package.json` does not pin `@mapringg/standard` to an exact version, such as `0.5.0`, or a tag, such as `github:mapringg/standard#v0.5.0`. |
 | `installed` | `node_modules/@mapringg/standard` is missing or holds a version other than the exact pin in `package.json`, so `pnpm install` has not run since the pin changed. |
 | `prepare` | `scripts.prepare` does not start with `standard install` or `pnpm exec standard install`, followed by nothing or by ` && `. |
+| `config-file` | Git does not track `.standard/config.json`. Commit it, even as `{}`, so the hook shims know the repository has adopted the standard. |
 | `claude-md` | `CLAUDE.md` exists and is not exactly `@AGENTS.md` and a newline. |
 
 Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which standard merge replaces.`
@@ -92,7 +93,7 @@ Then it runs `gh pr merge <number> --squash --match-head-commit <sha> --subject 
 
 ## Score
 
-`standard score` reports how far a repository follows the standard. With no path it scores the repository it runs in. With several paths it prints one column per repository, named by its folder. It runs no check; it reads the files git tracks, `standard.json` and the pin.
+`standard score` reports how far a repository follows the standard. With no path it scores the repository it runs in. With several paths it prints one column per repository, named by its folder. It runs no check; it reads the files git tracks, `.standard/config.json` and the pin.
 
 ```text
 $ standard score ../api ../web
@@ -109,28 +110,32 @@ checks
   ...
 
 retired in web: Delete scripts/merge-pr.mjs, which standard merge replaces.
-pr-screenshot in api: n/a, standard.json sets no pr.screenshots
+pr-screenshot in api: n/a, .standard/config.json sets no pr.screenshots
 
-api: 14 of 14 pass
-web: 14 of 15 pass
+api: 15 of 15 pass
+web: 15 of 16 pass
 ```
 
 | Row | Passes when |
 | --- | --- |
 | Each `wiring` probe | The probe finds nothing. |
 | `hooks` | The three shims that `standard install` writes are in the hooks folder of the repository's git common dir, and `core.hooksPath` is unset. |
-| `config` | `standard check` accepts `standard.json`: `pending` names only checks of this version and not `baseline-growth`. The note is the message `standard check` prints. |
-| Each check | It is `on`. It is `pending` when `standard.json` lists it, even where it would not apply, `debt N` when its baseline lists N findings, and `absent` when the repository does not install the package or pins a version older than the check. |
+| `config` | `standard check` accepts `.standard/config.json`: `pending` names only checks of this version and not `baseline-growth`. The note is the message `standard check` prints. |
+| Each check | It is `on`. It is `pending` when `.standard/config.json` lists it, even where it would not apply, `debt N` when its baseline lists N findings, and `absent` when the repository does not install the package or pins a version older than the check. |
 | Each GitHub setting, with `--remote` | The default branch is `develop`; pull requests merge by squash only; the squash title is the pull request title; the squash message is blank; merged branches are deleted. `gh api` reads each repository's settings once. |
 | `current`, with `--remote` | The pin is not older than the latest `v<major>.<minor>.<patch>` tag of `mapringg/standard`, which `gh api` reads once per run. It is score-only, so a release never fails a repository's CI. |
 
-`hooks`, `config` and `current` are score-only; `standard check` already refuses an invalid `standard.json`. No row checks yet that `AGENTS.md` points agents at `standard explain`, because that command does not exist yet.
+`hooks`, `config` and `current` are score-only; `standard check` already refuses an invalid `.standard/config.json`. No row checks yet that `AGENTS.md` points agents at `standard explain`, because that command does not exist yet.
 
 A check that does not apply, such as `pr-screenshot` without `pr.screenshots`, shows `n/a` with the reason and leaves the count, so a repository is not marked down for a check that cannot apply to it. `pending`, `debt N` and `absent` stay in the count and fail. `--json` prints the same rows. The command exits 1 when any row fails.
 
-## standard.json
+## .standard/config.json
 
-The file is optional. An unknown key fails every command.
+Commit the file, even as `{}`. The `config-file` probe fails without it, and the hook shims treat a checkout without it as one that has not adopted the standard. Every key is kebab-case. A key with a capital letter fails every command and the message names the kebab-case key, such as `"ticketPrefix" in .standard/config.json is camelCase; name it "ticket-prefix".` An unknown key fails every command and the message lists the known keys. A key that appears twice in one object fails every command and the message names its line and column. A root `standard.json` that git tracks also fails every command. A repository that upgrades from 0.4 moves the file and renames `ticketPrefix` in the same pull request:
+
+```sh
+mkdir -p .standard && git mv standard.json .standard/config.json
+```
 
 ```json
 {
@@ -140,10 +145,10 @@ The file is optional. An unknown key fails every command.
   },
   "pending": ["commit-subject"],
   "pr": {
-    "ticketPrefix": "ABC",
+    "ticket-prefix": "ABC",
     "screenshots": { "when": ["apps/web/**"], "uploader": "scripts/upload-evidence.mjs" }
   }
 }
 ```
 
-`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticketPrefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one.
+`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticket-prefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one.

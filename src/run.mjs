@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { pendingProblem } from "./config.mjs";
+import { FILE, pendingProblem } from "./config.mjs";
 import { ratchet } from "./ratchet.mjs";
 
 /**
@@ -136,7 +136,7 @@ function annotation(level, check, text) {
 export function report(results, annotate) {
   return results.flatMap((result) => {
     const { check } = result;
-    if (result.outcome === "pending") return [`${check}: pending in standard.json, so it did not run`];
+    if (result.outcome === "pending") return [`${check}: pending in ${FILE}, so it did not run`];
     if (result.outcome === "skipped") return [`${check}: skipped, ${result.because}`];
     const lines = result.findings.map(({ key, fix, advisory }) => {
       if (annotate) return annotation(advisory ? "warning" : "error", check, `${key}: ${fix}`);

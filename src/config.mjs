@@ -1,18 +1,33 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { parseDocument } from "yaml";
+
 /**
  * @typedef {object} Config
  * @property {{ "pre-commit": readonly string[], "pre-push": readonly string[] }} hooks Shell lines each hook runs after its built-in rule.
  * @property {readonly string[]} pending Checks this repo has not adopted yet. They do not run.
  * @property {PullRequestConfig} pr
  *
- * @typedef {object} PullRequestConfig
- * @property {string} [ticketPrefix] The tracker's key, such as "ABC" in `Ticket: ABC-12`. Absent means the repo has no tickets.
- * @property {{ when: readonly string[], uploader: string }} [screenshots] A pull request that changes a file matching a `when` glob needs a screenshot in Evidence; `uploader` is the repo script that uploads one.
+ * @typedef {{ "ticket-prefix"?: string, screenshots?: { when: readonly string[], uploader: string } }} PullRequestConfig
+ * `ticket-prefix` is the tracker's key, such as "ABC" in `Ticket: ABC-12`. Absent means the repo has no tickets.
+ * A pull request that changes a file matching a `screenshots.when` glob needs a screenshot in Evidence; `uploader` is the repo script that uploads one.
  */
 
-const FILE = "standard.json";
+export const FILE = ".standard/config.json";
+
+const LEGACY = "standard.json";
+
+/**
+ * @param {string} key
+ * @returns {string}
+ */
+function kebab(key) {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1-$2")
+    .toLowerCase();
+}
 
 /**
  * @param {unknown} value
@@ -25,10 +40,17 @@ function section(value, keyPath, known) {
     throw new Error(`${[FILE, keyPath].join(" ").trim()} must be an object.`);
   }
   const dotted = (/** @type {string} */ key) => (keyPath ? `${keyPath}.${key}` : key);
+  const knownKeys = `Known keys: ${known.map(dotted).join(", ")}.`;
   for (const key of Object.keys(value)) {
+    if (/[A-Z]/.test(key)) {
+      const name = kebab(key);
+      throw new Error(
+        `"${key}" in ${FILE} is camelCase; name it "${name}".${known.includes(name) ? "" : ` ${knownKeys}`}`,
+      );
+    }
     if (!known.includes(key)) {
       throw new Error(
-        `${FILE} has an unknown key "${dotted(key)}". Known keys: ${known.map(dotted).join(", ")}.`,
+        `${FILE} has an unknown key "${dotted(key)}". ${knownKeys}`,
       );
     }
   }
@@ -66,14 +88,15 @@ function repoPath(value, at) {
  * @returns {PullRequestConfig}
  */
 function pullRequest(value) {
-  const pr = section(value, "pr", ["ticketPrefix", "screenshots"]);
+  const pr = section(value, "pr", ["ticket-prefix", "screenshots"]);
   /** @type {PullRequestConfig} */
   const parsed = {};
-  if (pr.ticketPrefix !== undefined) {
-    if (typeof pr.ticketPrefix !== "string" || !TICKET_PREFIX.test(pr.ticketPrefix)) {
-      throw new Error(`${FILE} pr.ticketPrefix must be capital letters and digits, such as "ABC".`);
+  const prefix = pr["ticket-prefix"];
+  if (prefix !== undefined) {
+    if (typeof prefix !== "string" || !TICKET_PREFIX.test(prefix)) {
+      throw new Error(`${FILE} pr.ticket-prefix must be capital letters and digits, such as "ABC".`);
     }
-    parsed.ticketPrefix = pr.ticketPrefix;
+    parsed["ticket-prefix"] = prefix;
   }
   if (pr.screenshots !== undefined) {
     const screenshots = section(pr.screenshots, "pr.screenshots", ["when", "uploader"]);
@@ -97,6 +120,11 @@ export function parseConfig(text) {
     raw = JSON.parse(text);
   } catch (error) {
     throw new Error(`${FILE} is not valid JSON: ${/** @type {Error} */ (error).message}`);
+  }
+  const duplicate = parseDocument(text).errors.find((error) => error.code === "DUPLICATE_KEY");
+  if (duplicate) {
+    const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
+    throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
   const top = section(raw, "", ["hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
@@ -128,12 +156,19 @@ export function pendingProblem(config, checks) {
 
 /**
  * @param {string} root
+ * @param {(path: string) => boolean} tracks Whether git tracks a repo path.
  * @returns {Config}
  */
-export function loadConfig(root) {
-  const path = join(root, FILE);
-  if (existsSync(path) && lstatSync(path).isSymbolicLink()) {
-    throw new Error(`${FILE} is a symlink. Make it a regular file, so every check reads the same config.`);
+export function loadConfig(root, tracks) {
+  if (tracks(LEGACY)) {
+    throw new Error(`${LEGACY} is tracked at the repository root. Move it to ${FILE}.`);
   }
+  for (const part of [".standard", FILE]) {
+    const path = join(root, part);
+    if (existsSync(path) && lstatSync(path).isSymbolicLink()) {
+      throw new Error(`${part} is a symlink. Make it a regular ${part === FILE ? "file" : "folder"}, so every check reads the same config.`);
+    }
+  }
+  const path = join(root, FILE);
   return parseConfig(existsSync(path) ? readFileSync(path, "utf8") : "{}");
 }

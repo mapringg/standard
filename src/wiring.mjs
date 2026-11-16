@@ -1,5 +1,6 @@
 import { parse } from "yaml";
 
+import { FILE } from "./config.mjs";
 import { retired as mergeRetired } from "./merge.mjs";
 import { installedVersion, isExact, PACKAGE, pinOf, REPOSITORY, VERSION } from "./pin.mjs";
 import { tracked } from "./repo.mjs";
@@ -312,6 +313,13 @@ export const PROBES = [
       if (typeof prepare === "string" && /^(?:pnpm exec )?standard install(?:$| && )/.test(prepare.trim())) return [];
       const now = typeof prepare === "string" ? `, which now runs "${prepare}"` : "";
       return [{ key: "prepare", fix: `Make package.json scripts.prepare start with "standard install"${now}, chaining anything else after it with &&, so every install writes the hooks.` }];
+    },
+  },
+  {
+    name: "config-file",
+    run(repo) {
+      if (tracked(repo, FILE) !== null) return [];
+      return [{ key: FILE, fix: `Commit ${FILE}, even as {}, so the hooks know this repository uses the standard.` }];
     },
   },
   {

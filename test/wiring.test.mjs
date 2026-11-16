@@ -4,8 +4,9 @@ import { test } from "node:test";
 import { git, installPackage, standard, tempRepo, WIRED, write } from "./helpers.mjs";
 
 function wiredRepo(t, files = {}, config) {
-  const cwd = tempRepo(t, config);
-  write(cwd, Object.fromEntries(Object.entries({ ...WIRED, ...files }).filter(([, content]) => content !== null)));
+  const cwd = tempRepo(t);
+  const settings = config ? { ".standard/config.json": config } : {};
+  write(cwd, Object.fromEntries(Object.entries({ ...WIRED, ...settings, ...files }).filter(([, content]) => content !== null)));
   git(cwd, "add", "-A");
   installPackage(cwd);
   return cwd;
@@ -47,6 +48,17 @@ test("a wired repo passes", (t) => {
   assertPasses(wiredRepo(t));
 });
 
+test("config-file fails until git tracks .standard/config.json, which passes as {}", (t) => {
+  const cwd = wiredRepo(t, { ".standard/config.json": null });
+  assertFails(cwd, ".standard/config.json: Commit .standard/config.json, even as {}, so the hooks know this repository uses the standard.");
+
+  write(cwd, { ".standard/config.json": {} });
+  assertFails(cwd, ".standard/config.json: Commit .standard/config.json, even as {}, so the hooks know this repository uses the standard.");
+
+  git(cwd, "add", ".standard/config.json");
+  assertPasses(cwd);
+});
+
 test("a retired script that is still tracked fails once its check is on", (t) => {
   const cwd = wiredRepo(t, { "scripts/check-commit-msg.mjs": "old" });
   assertFails(
@@ -71,6 +83,17 @@ test("a script several checks retire passes while any of them is pending", (t) =
   assertFails(
     wiredRepo(t, files),
     "scripts/check-pr-convention.mjs: Delete scripts/check-pr-convention.mjs, which the pr-title check, the pr-body check and the pr-screenshot check replace.",
+  );
+});
+
+test("subject-convention.mjs passes while commit-subject or a pull request check that imports it is pending", (t) => {
+  const files = { "scripts/subject-convention.mjs": "old" };
+  for (const owner of ["commit-subject", "pr-title", "pr-body", "pr-screenshot"]) {
+    assertPasses(wiredRepo(t, files, { pending: [owner] }));
+  }
+  assertFails(
+    wiredRepo(t, files),
+    "scripts/subject-convention.mjs: Delete scripts/subject-convention.mjs, which the commit-subject check, the pr-title check, the pr-body check and the pr-screenshot check replace.",
   );
 });
 
@@ -167,20 +190,20 @@ test("pin passes an exact version or tag and fails anything else", (t) => {
   const manifest = (spec) => ({
     "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": spec } },
   });
-  for (const spec of ["0.4.0", "github:mapringg/standard#v0.4.0", "git+https://github.com/mapringg/standard.git#v0.4.0"]) {
+  for (const spec of ["0.5.0", "github:mapringg/standard#v0.5.0", "git+https://github.com/mapringg/standard.git#v0.5.0"]) {
     assertPasses(wiredRepo(t, manifest(spec)));
   }
   assertFails(
     wiredRepo(t, manifest("^0.4.0")),
-    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.4.0" in place of "^0.4.0", so every clone runs the same checks.',
+    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.5.0" in place of "^0.4.0", so every clone runs the same checks.',
   );
   assertFails(
     wiredRepo(t, manifest("github:mapringg/standard")),
-    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.4.0" in place of "github:mapringg/standard", so every clone runs the same checks.',
+    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.5.0" in place of "github:mapringg/standard", so every clone runs the same checks.',
   );
 
   const { stdout, status } = wiring(wiredRepo(t, { "package.json": { scripts: { prepare: "standard install" } } }));
-  assert.equal(stdout.trim(), 'wiring: pin: Add @mapringg/standard to devDependencies in package.json at "github:mapringg/standard#v0.4.0".');
+  assert.equal(stdout.trim(), 'wiring: pin: Add @mapringg/standard to devDependencies in package.json at "github:mapringg/standard#v0.5.0".');
   assert.equal(status, 1);
 });
 
@@ -188,7 +211,7 @@ test("prepare passes when it starts with standard install and names what it runs
   const manifest = (prepare) => ({
     "package.json": {
       ...(prepare ? { scripts: { prepare } } : {}),
-      devDependencies: { "@mapringg/standard": "0.4.0" },
+      devDependencies: { "@mapringg/standard": "0.5.0" },
     },
   });
   for (const prepare of ["standard install", "standard install && node scripts/link.mjs", "pnpm exec standard install"]) {
@@ -224,7 +247,7 @@ test("installed fails when package.json pins another version than the one instal
   for (const spec of ["9.9.9", "github:mapringg/standard#v9.9.9"]) {
     assertFails(
       wiredRepo(t, manifest(spec)),
-      "installed: Run pnpm install, so the installed 0.4.0 becomes the @mapringg/standard 9.9.9 that package.json pins.",
+      "installed: Run pnpm install, so the installed 0.5.0 becomes the @mapringg/standard 9.9.9 that package.json pins.",
     );
   }
 });
@@ -233,7 +256,7 @@ test("installed fails when node_modules does not hold the package, whatever vers
   const cwd = tempRepo(t);
   write(cwd, WIRED);
   git(cwd, "add", "-A");
-  assertFails(cwd, "installed: Run pnpm install, so node_modules becomes the @mapringg/standard 0.4.0 that package.json pins.");
+  assertFails(cwd, "installed: Run pnpm install, so node_modules becomes the @mapringg/standard 0.5.0 that package.json pins.");
 });
 
 test("a repo without package.json fails pin and prepare", (t) => {
@@ -241,7 +264,7 @@ test("a repo without package.json fails pin and prepare", (t) => {
   assert.equal(
     stdout.trim(),
     [
-      'wiring: pin: Add a package.json whose devDependencies pin @mapringg/standard to "github:mapringg/standard#v0.4.0".',
+      'wiring: pin: Add a package.json whose devDependencies pin @mapringg/standard to "github:mapringg/standard#v0.5.0".',
       'wiring: prepare: Make package.json scripts.prepare start with "standard install", chaining anything else after it with &&, so every install writes the hooks.',
     ].join("\n"),
   );

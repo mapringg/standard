@@ -1,3 +1,4 @@
+import { FILE } from "../config.mjs";
 import { evidenceLines, proseLines, rendered } from "./support/markdown.mjs";
 
 const MIN_BODY = 120;
@@ -31,7 +32,7 @@ function ticketNote(body, prefix) {
   if (at === -1) return null;
   const line = /** @type {string} */ (lines[at]).trim();
   if (!prefix) {
-    return `Description has a "${line}" line, but standard.json sets no pr.ticketPrefix, so this repo has no tickets. Delete the line.`;
+    return `Description has a "${line}" line, but ${FILE} sets no pr.ticket-prefix, so this repo has no tickets. Delete the line.`;
   }
   if (!new RegExp(`^Ticket: ${prefix}-[1-9]\\d*$`).test(line)) {
     return `"${line}" is not a ticket line. Write "Ticket: ${prefix}-123", or delete the line when there is no ticket.`;
@@ -93,9 +94,9 @@ export default {
   name: "pr-body",
   since: "0.2.0",
   subject: "pr",
-  retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs"],
+  retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   run(pr, repo) {
-    return bodyNotes(rendered(pr.body), repo.config.pr.ticketPrefix).map((note) => ({
+    return bodyNotes(rendered(pr.body), repo.config.pr["ticket-prefix"]).map((note) => ({
       ...note,
       advisory: /** @type {const} */ (true),
     }));

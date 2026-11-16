@@ -33,7 +33,7 @@ function body({ summary = "Accept a Before/After table as evidence.", evidence, 
 }
 
 function checkBody(t, prBody, { config } = {}) {
-  const repo = pullRequestRepo(t, { base: config ? { "standard.json": config } : {} });
+  const repo = pullRequestRepo(t, { base: config ? { ".standard/config.json": config } : {} });
   return checkPullRequest(t, repo, { body: prBody }, ["pr-body"]);
 }
 
@@ -105,14 +105,14 @@ test("pr-body warns when Blast Radius is more than one word, before its first pe
   assert.equal(checkBody(t, described).stdout.trim(), BODY_OK);
 });
 
-test("pr-body accepts a ticket line first when standard.json sets the prefix", (t) => {
-  const config = { pr: { ticketPrefix: "ABC" } };
+test("pr-body accepts a ticket line first when the config sets the prefix", (t) => {
+  const config = { pr: { "ticket-prefix": "ABC" } };
   assert.equal(checkBody(t, body({ evidence: PAIR, ticket: "Ticket: ABC-12" }), { config }).stdout.trim(), BODY_OK);
   assert.equal(checkBody(t, body({ evidence: PAIR }), { config }).stdout.trim(), BODY_OK);
 });
 
 test("pr-body warns on a malformed or misplaced ticket line", (t) => {
-  const config = { pr: { ticketPrefix: "ABC" } };
+  const config = { pr: { "ticket-prefix": "ABC" } };
   const cases = [
     ["Ticket: none", /"Ticket: none" is not a ticket line\. Write "Ticket: ABC-123", or delete the line/],
     ["Ticket: XYZ-12", /"Ticket: XYZ-12" is not a ticket line/],
@@ -131,7 +131,7 @@ test("pr-body ignores a ticket line inside a code block", (t) => {
 
 test("pr-body warns on a ticket line when the repo has no ticket prefix", (t) => {
   const { stdout, status } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: ABC-12" }));
-  assert.match(stdout, /::warning title=pr-body::Ticket: .*standard\.json sets no pr\.ticketPrefix.* Delete the line\./);
+  assert.match(stdout, /::warning title=pr-body::Ticket: .*\.standard\/config\.json sets no pr\.ticket-prefix.* Delete the line\./);
   assert.equal(status, 0);
 });
 
@@ -174,7 +174,7 @@ test("pr-title only warns on a Dependabot title", (t) => {
 const SCREENSHOTS = { pr: { screenshots: { when: ["apps/web/**", "packages/ui/**"], uploader: "scripts/upload-evidence.mjs" } } };
 
 function checkScreenshot(t, changed, evidence, config = SCREENSHOTS) {
-  const repo = pullRequestRepo(t, { base: { "standard.json": config }, head: { [changed]: "x" } });
+  const repo = pullRequestRepo(t, { base: { ".standard/config.json": config }, head: { [changed]: "x" } });
   return checkPullRequest(t, repo, { body: body({ evidence }) }, ["pr-screenshot"]);
 }
 
@@ -198,7 +198,7 @@ test("pr-screenshot does not ask for a screenshot when the PR leaves the UI alon
 
 test("pr-screenshot does not apply without pr.screenshots", (t) => {
   const { stdout } = checkScreenshot(t, "apps/web/src/page.tsx", PAIR, {});
-  assert.equal(stdout.trim(), "pr-screenshot: skipped, standard.json sets no pr.screenshots");
+  assert.equal(stdout.trim(), "pr-screenshot: skipped, .standard/config.json sets no pr.screenshots");
 });
 
 const BASELINE = ".standard/baselines/commit-subject.json";
@@ -218,7 +218,7 @@ test("baseline-growth fails a PR that grows a baseline", (t) => {
 
 test("baseline-growth fails a PR that creates a baseline for an adopted check", (t) => {
   const { stdout, status } = checkGrowth(t, { head: { [BASELINE]: { "a.mjs": ["one"] } } });
-  assert.match(stdout, /This PR creates \.standard\/baselines\/commit-subject\.json with 1 entries\. A baseline starts only in the PR that removes commit-subject from standard\.json pending\./);
+  assert.match(stdout, /This PR creates \.standard\/baselines\/commit-subject\.json with 1 entries\. A baseline starts only in the PR that removes commit-subject from \.standard\/config\.json pending\./);
   assert.equal(status, 1);
 });
 
@@ -227,32 +227,32 @@ const pinned = (version) => ({ "package.json": { devDependencies: { "@mapringg/s
 test("baseline-growth fails a PR that adds to pending", (t) => {
   const { stdout, status } = checkGrowth(t, {
     base: pinned("0.2.0"),
-    head: { ...pinned("0.2.0"), "standard.json": { pending: ["commit-subject"] } },
+    head: { ...pinned("0.2.0"), ".standard/config.json": { pending: ["commit-subject"] } },
   });
-  assert.match(stdout, /::error title=baseline-growth::pending commit-subject: standard\.json adds "commit-subject" to pending\. pending only shrinks/);
+  assert.match(stdout, /::error title=baseline-growth::pending commit-subject: \.standard\/config\.json adds "commit-subject" to pending\. pending only shrinks/);
   assert.equal(status, 1);
 });
 
 test("baseline-growth lets a version bump stage only the checks that version added", (t) => {
   const { stdout, status } = checkGrowth(t, {
     base: pinned("0.1.0"),
-    head: { ...pinned("0.2.0"), "standard.json": { pending: ["pr-body", "commit-subject"] } },
+    head: { ...pinned("0.2.0"), ".standard/config.json": { pending: ["pr-body", "commit-subject"] } },
   });
   assert.doesNotMatch(stdout, /pending pr-body/);
-  assert.match(stdout, /pending commit-subject: standard\.json adds "commit-subject" to pending/);
+  assert.match(stdout, /pending commit-subject: \.standard\/config\.json adds "commit-subject" to pending/);
   assert.equal(status, 1);
 });
 
 test("baseline-growth lets the PR that first installs the standard list anything as pending", (t) => {
   const { stdout, status } = checkGrowth(t, {
-    head: { ...pinned("0.2.0"), "standard.json": { pending: ["commit-subject", "pr-body"] } },
+    head: { ...pinned("0.2.0"), ".standard/config.json": { pending: ["commit-subject", "pr-body"] } },
   });
   assert.equal(stdout.trim(), "baseline-growth: OK (#123)");
   assert.equal(status, 0);
 });
 
 test("baseline-growth cannot be pending, since it guards pending", (t) => {
-  const { stderr, status } = checkGrowth(t, { head: { "standard.json": { pending: ["baseline-growth"] } } });
+  const { stderr, status } = checkGrowth(t, { head: { ".standard/config.json": { pending: ["baseline-growth"] } } });
   assert.match(stderr, /pending names baseline-growth, which guards pending itself/);
   assert.notEqual(status, 0);
 });
@@ -260,31 +260,68 @@ test("baseline-growth cannot be pending, since it guards pending", (t) => {
 test("baseline-growth refuses an upgrade exception when the base pin cannot be read", (t) => {
   const { stdout, status } = checkGrowth(t, {
     base: { "package.json": { devDependencies: { "@mapringg/standard": "github:mapringg/standard#develop" } } },
-    head: { ...pinned("0.2.0"), "standard.json": { pending: ["pr-body"] } },
+    head: { ...pinned("0.2.0"), ".standard/config.json": { pending: ["pr-body"] } },
   });
-  assert.match(stdout, /pending pr-body: standard\.json adds "pr-body" to pending/);
+  assert.match(stdout, /pending pr-body: \.standard\/config\.json adds "pr-body" to pending/);
   assert.equal(status, 1);
 });
 
 test("baseline-growth refuses an upgrade exception for a check newer than the head pin", (t) => {
   const { stdout, status } = checkGrowth(t, {
     base: pinned("0.1.0"),
-    head: { ...pinned("0.1.0"), "standard.json": { pending: ["pr-body"] } },
+    head: { ...pinned("0.1.0"), ".standard/config.json": { pending: ["pr-body"] } },
   });
   assert.match(stdout, /pending pr-body/);
   assert.equal(status, 1);
 });
 
-test("a symlinked standard.json fails instead of hiding pending from the guard", (t) => {
+function symlinkedHead(t, link, target, files) {
   const repo = pullRequestRepo(t, { base: pinned("0.2.0") });
-  write(repo.cwd, { "elsewhere.json": { pending: ["commit-subject"] } });
-  symlinkSync("elsewhere.json", join(repo.cwd, "standard.json"));
+  write(repo.cwd, files);
+  symlinkSync(target, join(repo.cwd, link));
   git(repo.cwd, "add", "-A");
   git(repo.cwd, "commit", "-q", "--no-verify", "-m", "Point the config somewhere else");
-  const head = git(repo.cwd, "rev-parse", "HEAD");
-  const { stderr, status } = checkPullRequest(t, { ...repo, head }, {}, ["baseline-growth"]);
-  assert.match(stderr, /standard\.json is a symlink/);
+  return { ...repo, head: git(repo.cwd, "rev-parse", "HEAD") };
+}
+
+test("a symlinked .standard/config.json fails instead of hiding pending from the guard", (t) => {
+  const repo = symlinkedHead(t, ".standard/config.json", "../elsewhere.json", {
+    "elsewhere.json": { pending: ["commit-subject"] },
+    ".standard/baselines/.keep": "",
+  });
+  const { stderr, status } = checkPullRequest(t, repo, {}, ["baseline-growth"]);
+  assert.match(stderr, /\.standard\/config\.json is a symlink/);
   assert.notEqual(status, 0);
+
+  git(repo.cwd, "switch", "-q", "--detach", repo.base);
+  const guarded = checkPullRequest(t, repo, {}, ["baseline-growth"]);
+  assert.match(guarded.stdout, /::error title=baseline-growth::\.standard\/config\.json: \.standard\/config\.json is a symlink\. Make it a regular file/);
+  assert.equal(guarded.status, 1);
+});
+
+test("baseline-growth fails a head whose .standard folder is a symlink", (t) => {
+  const repo = symlinkedHead(t, ".standard", "elsewhere", { "elsewhere/config.json": { pending: ["commit-subject"] } });
+  git(repo.cwd, "switch", "-q", "--detach", repo.base);
+  const { stdout, status } = checkPullRequest(t, repo, {}, ["baseline-growth"]);
+  assert.match(stdout, /::error title=baseline-growth::\.standard: \.standard is a symlink/);
+  assert.equal(status, 1);
+});
+
+test("baseline-growth reads pending from a base that still has standard.json, so moving the config adds nothing", (t) => {
+  const pending = { pending: ["commit-subject"] };
+  const moved = checkGrowth(t, {
+    base: { ...pinned("0.4.0"), "standard.json": pending },
+    head: { ...pinned("0.5.0"), "standard.json": null, ".standard/config.json": pending },
+  });
+  assert.equal(moved.stdout.trim(), "baseline-growth: OK (#123)");
+  assert.equal(moved.status, 0);
+
+  const grown = checkGrowth(t, {
+    base: { ...pinned("0.4.0"), "standard.json": pending },
+    head: { ...pinned("0.5.0"), "standard.json": null, ".standard/config.json": { pending: ["commit-subject", "pr-body"] } },
+  });
+  assert.match(grown.stdout, /pending pr-body: \.standard\/config\.json adds "pr-body" to pending/);
+  assert.equal(grown.status, 1);
 });
 
 test("baseline-growth fails a symlinked baseline", (t) => {
@@ -301,8 +338,8 @@ test("baseline-growth fails a symlinked baseline", (t) => {
 
 test("baseline-growth passes the PR that adopts a check and starts its baseline", (t) => {
   const { stdout, status } = checkGrowth(t, {
-    base: { "standard.json": { pending: ["commit-subject"] } },
-    head: { "standard.json": { pending: [] }, [BASELINE]: { "a.mjs": ["one"] } },
+    base: { ".standard/config.json": { pending: ["commit-subject"] } },
+    head: { ".standard/config.json": { pending: [] }, [BASELINE]: { "a.mjs": ["one"] } },
   });
   assert.equal(stdout.trim(), "baseline-growth: OK (#123)");
   assert.equal(status, 0);
@@ -326,7 +363,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "commit-subject: OK (1 commit(s))",
       "pr-title: OK (#123)",
       "pr-body: OK (#123)",
-      "pr-screenshot: skipped, standard.json sets no pr.screenshots",
+      "pr-screenshot: skipped, .standard/config.json sets no pr.screenshots",
       "pr-size: size:XS, 1 changed line(s) (#123)",
       "baseline-growth: OK (#123)",
       "wiring: OK",
@@ -395,10 +432,10 @@ test("check --pr says how to fetch a head the clone lacks, and needs a number", 
   }
 });
 
-test("standard.json fails on a bad pr key", (t) => {
+test("the config fails on a bad pr key", (t) => {
   const cases = [
-    [{ pr: { ticket: "ABC" } }, /unknown key "pr\.ticket"\. Known keys: pr\.ticketPrefix, pr\.screenshots\./],
-    [{ pr: { ticketPrefix: "abc-" } }, /pr\.ticketPrefix must be capital letters and digits/],
+    [{ pr: { ticket: "ABC" } }, /unknown key "pr\.ticket"\. Known keys: pr\.ticket-prefix, pr\.screenshots\./],
+    [{ pr: { "ticket-prefix": "abc-" } }, /pr\.ticket-prefix must be capital letters and digits/],
     [{ pr: { screenshots: { when: [], uploader: "x.mjs" } } }, /pr\.screenshots\.when must list at least one glob/],
     [{ pr: { screenshots: { when: ["apps/web/**"], uploader: "/tmp/x.mjs" } } }, /pr\.screenshots\.uploader must be a path relative to the repository root/],
     [{ pr: { screenshots: { when: ["apps/web/**"] } } }, /pr\.screenshots\.uploader must be a path/],
