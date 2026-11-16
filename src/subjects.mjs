@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { git } from "./repo.mjs";
@@ -225,7 +225,7 @@ export function subjectsFromGh(root, number) {
   }
   const pr = JSON.parse(raw);
   const login = text(pr.author?.login, "author.login", source);
-  const pullRequest = withHistory(root, {
+  const header = {
     number: count(pr.number, "number", source),
     title: text(pr.title, "title", source).trim(),
     body: text(pr.body, "body", source),
@@ -235,6 +235,11 @@ export function subjectsFromGh(root, number) {
     headSha: sha(pr.headRefOid, "headRefOid", source),
     additions: count(pr.additions, "additions", source),
     deletions: count(pr.deletions, "deletions", source),
-  }, `Fetch it: git fetch origin ${text(pr.baseRefName, "baseRefName", source)} ${text(pr.headRefName, "headRefName", source)}`);
+  };
+  const missing = [header.baseSha, header.headSha].filter(
+    (commit) => spawnSync("git", ["cat-file", "-e", `${commit}^{commit}`], { cwd: root }).status !== 0,
+  );
+  if (missing.length > 0) spawnSync("git", ["fetch", "--quiet", "--no-tags", "origin", ...missing], { cwd: root, stdio: "ignore" });
+  const pullRequest = withHistory(root, header, `Fetch it: git fetch origin ${header.base} ${text(pr.headRefName, "headRefName", source)}`);
   return { commits: pullRequest.commits, pr: pullRequest };
 }
