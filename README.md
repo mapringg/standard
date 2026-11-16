@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.3" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.5.4" }
 }
 ```
 
@@ -49,7 +49,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | Placeholder | A template placeholder such as `<one-word description>` is left in. |
 | Ticket | With `pr.ticket-prefix`, a ticket line is optional, and when present it is the first line and reads `Ticket: ABC-123`. Without `pr.ticket-prefix`, any `Ticket:` line warns. |
 
-`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob, which git matches as a `:(glob)` pathspec (so `**` crosses folders, `*` does not, and dotfiles count), and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
+`pr-screenshot` warns when the pull request changes a file that matches a `pr.screenshots.when` glob, which git matches as a `:(glob)` pathspec (so `**` crosses folders, `*` does not, and dotfiles count), and no `when` entry that starts with `!` excludes it, and the Evidence section has no image. The message names `pr.screenshots.uploader`. Without `pr.screenshots` the check does not apply.
 
 `pr-size` reports the pull request's size from its changed lines and never fails the run. It leaves out `pnpm-lock.yaml`, and leaves out test files unless the pull request changes only tests. A binary file and a pure rename count nothing.
 
@@ -100,9 +100,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 ```
+
+`github.run_id` gives each push its own group, so a push to `develop` or `main` never cancels another push's run or the deploy it carries.
 
 ## Score
 
