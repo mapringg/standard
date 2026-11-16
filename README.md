@@ -22,7 +22,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `standard hook commit-msg <file>` | Checks the commit message. |
 | `standard hook pre-commit` | Runs the `hooks.pre-commit` lines. |
 | `standard hook pre-push` | Refuses a merge commit that `origin/develop` lacks, then runs the `hooks.pre-push` lines. |
-| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its `Check` run is green. See [Merge](#merge). |
+| `standard merge <number> [--admin]` | Squash-merges a pull request into `develop` once its newest `Check` run is green. See [Merge](#merge). |
 | `standard score [<path>...] [--remote] [--json]` | Reports how far each repository follows the standard. See [Score](#score). |
 
 ## Checks
@@ -82,14 +82,26 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 
 ## Merge
 
-`standard merge <number>` is the one way to merge a pull request. It reads the pull request and its head commit's check runs live through `gh`, and refuses unless all of these hold:
+`standard merge <number>` is the one way to merge a pull request. It reads the pull request, its head commit's check runs and workflow runs, and the pull request's events live through `gh`, and refuses unless all of these hold:
 
 - The pull request is open and not a draft.
 - Its base is `develop`.
 - Its title passes the `pr-title` rules with ` (#<number>)` added.
-- A check run named `Check` from GitHub Actions on the exact head commit has concluded `success`. A missing run, a run on an older commit, or a run in any other state refuses, and the message names the runs it found.
+- The newest `Check` run on the exact head commit has concluded `success`. The gate counts only check runs named `Check` from GitHub Actions whose workflow run came from a `pull_request` event, so a `push` run on the same commit does not count. Among the `pull_request` runs of the workflow that holds `Check`, the newest is the one whose latest attempt started last (`run_started_at`, then the higher run id). A re-run moves that time forward, and a run that waits in a concurrency group has it before its `Check` run exists, so an older success cannot stand in for a newer run. A queued or running `Check`, or a newest run with no `Check` run yet, refuses with `wait:`. Any other conclusion refuses and names it. Older runs on the same commit, such as one that `cancel-in-progress` cancelled or one skipped on a `closed` event, do not block. A missing run or a run on an older commit refuses, and the message names the runs it found and the event of each.
+- That `Check` run started after the pull request last left draft, as its `ready_for_review` events show. The gate reads the start of the `Check` run itself, which a re-run of failed jobs copies from the earlier attempt, so a draft-time result cannot pass through a later attempt. A draft-time run refuses until `Check` runs again.
 
 Then it runs `gh pr merge <number> --squash --match-head-commit <sha> --subject "<title> (#<number>)" --body ""`, so a push after the check cannot be merged unseen. `--admin` passes GitHub's admin flag through for required reviews and still needs a green `Check`. Name the CI job `Check` so the gate can find it.
+
+Because only the newest run decides, the CI workflow can cancel a run that a newer one replaces. Add `ready_for_review` so leaving draft runs `Check` again, and `edited` so a title or description fix runs it again:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+```
 
 ## Score
 
