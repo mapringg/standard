@@ -71,7 +71,7 @@ test("use-promise fails a promise a client render creates, through any binding o
         "",
       ].join("\n"),
       "apps/web/src/branch.tsx": '"use client";\nimport { use } from "react";\nexport const View = (props) => use(props.ready ? props.data : fetch("/a"));\n',
-      "apps/web/src/shared.tsx": '"use client";\nimport { use } from "react";\nimport { shared } from "@/api/users";\nexport const View = () => use(shared);\n',
+      "apps/web/src/shared.tsx": '"use client";\nimport { use } from "react";\nimport { shared } from "@/api/missing";\nexport const View = () => use(shared);\n',
     },
     created("apps/web/src/branch.tsx", "line 3"),
     untraced("apps/web/src/shared.tsx", "line 4"),
@@ -189,4 +189,54 @@ test("use-promise passes a server prop that a client component forwards to an in
     ].join("\n"),
     "apps/web/src/page.tsx": '"use client";\nimport { use } from "react";\nexport default function ({ data }: { data: Promise<string> }) {\n  return use(data);\n}\n',
   });
+});
+
+test("use-promise passes a promise made once at module level, in the file, in a function that stores it there, or imported", (t) => {
+  passes(t, {}, {
+    "apps/web/src/view.tsx": [
+      '"use client";',
+      'import { use } from "react";',
+      'import { getUser, shared } from "@/api/users";',
+      "const me = getUser(\"me\");",
+      "let load: Promise<string> | undefined;",
+      "function preload() {",
+      "  if (load) return load;",
+      "  const next = getUser(\"you\");",
+      "  load = next;",
+      "  return next;",
+      "}",
+      "export function View() {",
+      "  return [use(me), use(shared), use(preload())];",
+      "}",
+      "",
+    ].join("\n"),
+  });
+});
+
+test("use-promise fails a function that returns a promise it does not keep at module level", (t) => {
+  fails(
+    t,
+    {},
+    {
+      "apps/web/src/view.tsx": [
+        '"use client";',
+        'import { use } from "react";',
+        'import { getUser } from "@/api/users";',
+        "let load: Promise<string> | undefined;",
+        "function fresh() {",
+        "  const next = getUser(\"me\");",
+        "  return next;",
+        "}",
+        "function chained() {",
+        "  load = getUser(\"me\");",
+        "  return load.then((user) => user);",
+        "}",
+        "export function View() {",
+        "  return [use(fresh()), use(chained())];",
+        "}",
+        "",
+      ].join("\n"),
+    },
+    created("apps/web/src/view.tsx", "line 14"),
+  );
 });
