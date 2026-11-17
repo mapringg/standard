@@ -246,3 +246,24 @@ test("client-data reads an app entry with a trailing slash as the app", (t) => {
     "apps/admin/src/save.tsx": '"use client";\nexport const save = () => fetch("/a");\n',
   });
 });
+
+test("client-data fails swr/immutable anywhere, and XMLHttpRequest, ky and axios in a use client file or a module it imports", (t) => {
+  fails(
+    t,
+    API,
+    {
+      "apps/web/src/immutable.tsx": '"use client";\nimport useSWRImmutable from "swr/immutable";\nexport const View = () => useSWRImmutable(["user"], load);\n',
+      "apps/web/src/xhr.tsx": '"use client";\nexport const load = () => new XMLHttpRequest();\n',
+      "apps/web/src/ky.tsx": '"use client";\nimport ky from "ky";\nexport const load = () => ky.get("/a");\n',
+      "apps/web/src/axios.tsx": '"use client";\nimport { get } from "axios";\nexport const load = () => get("/a");\n',
+      "apps/web/src/lib/http.ts": 'import axios from "axios";\nexport const load = () => axios.get("/a");\n',
+      "apps/web/src/wrapped.tsx": '"use client";\nimport { load } from "@/lib/http";\nexport const View = () => load();\n',
+      "apps/web/src/typed.tsx": '"use client";\nimport type { Options } from "ky";\nexport const options: Options = {};\n',
+    },
+    `apps/web/src/axios.tsx uses axios on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/immutable.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/ky.tsx uses ky on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/wrapped.tsx imports @/lib/http on line 2, which reaches axios in apps/web/src/lib/http.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/xhr.tsx uses XMLHttpRequest on line 2, and "use client" runs it in the browser. ${FETCH_FIX}`,
+  );
+});
