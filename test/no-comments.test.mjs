@@ -329,11 +329,56 @@ test("no-comments gives the license fix only to a notice marker or a license hea
       "src/b.ts": "export const b = 1;\n// The driving licence number must have eight digits.\n",
       "src/c.ts": "// Copyright 2026 Someone\n// Licensed under the Apache License, Version 2.0.\n// Reads the cache first.\nexport const c = 1;\n",
       "src/d.ts": "export const d = 1;\n/* \u00a9 2026 Someone */\n",
+      "src/e.ts": "// SPDX-License-Identifier: MIT\n// Validate the driving license field.\nexport const e = 1;\n",
+      "src/f.ts": "// @license MIT\n// Verify the driving licence.\nexport const f = 1;\n",
     },
     `src/a.ts comment: src/a.ts has a comment on line 1. ${COMMENT}`,
     `src/b.ts comment: src/b.ts has a comment on line 2. ${COMMENT}`,
     `src/c.ts license: src/c.ts has comments on lines 1, 2. ${LICENSE}`,
     `src/c.ts comment: src/c.ts has a comment on line 3. ${COMMENT}`,
     `src/d.ts license: src/d.ts has a comment on line 2. ${LICENSE}`,
+    `src/e.ts comment: src/e.ts has a comment on line 2. ${COMMENT}`,
+    `src/f.ts comment: src/f.ts has a comment on line 2. ${COMMENT}`,
+  );
+});
+
+test("no-comments finds an HTML comment that nested is:raw or braces hide in is:raw and set:html content", (t) => {
+  fails(
+    t,
+    {
+      "src/pages/raw.astro": [
+        "<div is:raw><pre is:raw><!-- prose --></pre></div>",
+        '<div is:raw>{"<!-- prose -->"}</div>',
+        '<div set:html="<div is:raw><!-- prose --></div>" />',
+        "<div set:html=\"{'<!-- prose -->'}\" />",
+        "<div is:raw>{<i><!-- prose --></i>}</div>",
+        '<div is:raw><p title="<!-- text -->">hello</p><script>"<!-- script text -->"</script>{"plain"}</div>',
+        "<div is:raw></astro-raw><!-- prose --></div>",
+        "",
+      ].join("\n"),
+      "src/pages/text.astro": 'Hello "<!-- prose -->"\n<p>"quoted" text</p>\n',
+    },
+    `src/pages/raw.astro html-comment: src/pages/raw.astro has comments on lines 1, 2, 3, 4, 5, 7. ${HTML}`,
+    `src/pages/text.astro html-comment: src/pages/text.astro has a comment on line 1. ${HTML}`,
+  );
+});
+
+test("no-comments passes CDATA in SVG and MathML, which is text there, and fails CDATA in HTML and a comment in SVG", (t) => {
+  fails(
+    t,
+    {
+      "src/pages/cdata.astro": [
+        "<svg><![CDATA[ plain text ]]></svg>",
+        "<svg><!-- in svg --></svg>",
+        "<p><![CDATA[ bogus ]]></p>",
+        "<div is:raw><svg><![CDATA[ text ]]></svg></div>",
+        "<svg><foreignObject><p><![CDATA[ html ]]></p></foreignObject></svg>",
+        "<math><![CDATA[ m ]]></math>",
+        "<svg is:raw><![CDATA[ raw ]]></svg>",
+        "<svg><foreignObject><![CDATA[ svg text ]]></foreignObject></svg>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/cdata.astro html-comment: src/pages/cdata.astro has comments on lines 2, 3, 5. ${HTML}`,
   );
 });
