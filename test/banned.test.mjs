@@ -337,3 +337,23 @@ test("banned reads Astro frontmatter past a fence line in a string, skips script
     "src/pages/vars.astro console: src/pages/vars.astro uses console on lines 1, 2. Use the logger.",
   );
 });
+
+test("banned reads a script's set:html value as its body, skips noscript, and refuses a set:html expression and an unclosed frontmatter", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/html.astro": [
+        "<script set:html=\"console.log('ran');\"></script>",
+        '<script set:html="globalThis.ran = 1;">not javascript</script>',
+        "<noscript><script>not javascript</script></noscript>",
+        "",
+      ].join("\n"),
+      "src/pages/expression.astro": ["<script set:html={\"console.log('ran');\"}></script>", ""].join("\n"),
+      "src/pages/open.astro": ["---", "const x = 1;", ""].join("\n"),
+    },
+    "src/pages/expression.astro parse: src/pages/expression.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:html expression, which no check can read. Write the code as the script's body. Fix the syntax.",
+    "src/pages/html.astro console: src/pages/html.astro uses console on line 1. Use the logger.",
+    "src/pages/open.astro parse: src/pages/open.astro does not parse, so banned cannot read it: the frontmatter has no closing --- fence. Fix the syntax.",
+  );
+});
