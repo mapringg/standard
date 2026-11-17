@@ -91,16 +91,17 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Nesting | A copy inside a larger reported copy is not reported again. |
 | Finding | Each copy is one finding, named by the file and the symbol path, such as `src/form.tsx#Form>submit`, with `@2` on the second copy that shares a path. Its fix names the other copies with their lines. |
 
-`typecheck` makes each TypeScript project build on the shared strict tsconfig and run its typecheck. A project is a tracked `tsconfig.json` or `tsconfig.*.json`, except a solution file, whose `files` is empty and which has no `include`. The check follows `extends` the way TypeScript does: a path names a file git tracks, and a package name resolves through `node_modules`, the package's `exports` and its `tsconfig` field. An entry that resolves to nothing fails. It does not apply when git tracks no tsconfig.
+`typecheck` makes each TypeScript project build on the shared strict tsconfig and run its typecheck. A project is a tracked `tsconfig.json` or `tsconfig.*.json`, except a solution file, which has no input files and no error. The check does not resolve `extends` itself. It asks the TypeScript that each project's folder resolves, so it reads a config exactly as `tsc` does: the native API for TypeScript 7 and the compiler API before it. It does not apply when git tracks no tsconfig.
 
 | Rule | Fails when |
 | --- | --- |
-| Base | A project's `extends` chain never names `@mapringg/standard/tsconfig`. |
-| Order | A package name comes after the base in the same `extends` list. |
-| Flags | A file applied after the base, local or from a package, sets one of the base's `compilerOptions` to another value. The finding names that file. |
+| Compiler | No `typescript` package resolves from the project's folder. |
+| Config | TypeScript reports an error for the config itself, such as an `extends` target it cannot find. The finding quotes it. |
+| Base | TypeScript never loads `config/tsconfig.json` of `@mapringg/standard` for the project. |
+| Flags | The project's effective value of a base `compilerOptions` flag differs from the base. A project that inherits the problem from another project is not reported again. |
 | Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a project has none, which `turbo run typecheck` would skip. |
-| Hooks | No `hooks.pre-push` line runs `pnpm typecheck` or `pnpm run typecheck` as a whole command, alone or joined to others with `&&`. Quotes, `;` and `\|\|` do not count, since they can hide a failure. |
-| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
+| Hooks | No `hooks.pre-push` line is exactly `pnpm typecheck` or `pnpm run typecheck`. Anything before or after it, even `&&`, could skip it or hide its failure, so a chain goes on its own lines. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
 
 Like `wiring`, `dead-code`, `duplicates` and `typecheck` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 

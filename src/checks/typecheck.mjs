@@ -1,7 +1,7 @@
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { posix } from "node:path";
-
-import { parseSync } from "oxc-parser";
+import { pathToFileURL } from "node:url";
 
 import base from "../../config/tsconfig.json" with { type: "json" };
 import { tracked } from "../repo.mjs";
@@ -10,269 +10,164 @@ import { checkJobScripts, runsTypecheck } from "../wiring.mjs";
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
  * @typedef {import("../repo.mjs").Repo} Repo
- * @typedef {Readonly<Record<string, unknown>>} Options
  *
- * @typedef {{ extends: unknown[], options: Options, solution: boolean }} Tsconfig
+ * What the repository's own TypeScript makes of one tsconfig.
+ * @typedef {object} Parsed
+ * @property {Readonly<Record<string, unknown>>} options The effective compilerOptions, after every extends.
+ * @property {number} files How many input files the project has.
+ * @property {readonly string[]} problems TypeScript's diagnostics for the config itself, such as a missing extends target.
+ * @property {readonly string[]} configs Absolute paths of the config files TypeScript loaded for it.
  *
- * Reads tsconfig files by absolute path. A file inside the repository counts only when git tracks it;
- * a file under node_modules is read from disk.
- * @typedef {object} Files
- * @property {(path: string) => boolean} exists
- * @property {(path: string) => Tsconfig | string} load A string says why the file is not a tsconfig.
- * @property {(path: string) => string} shown Repo-relative, or from the last node_modules on.
- *
- * What one project is built from, in the order tsc applies it. A later layer overrides an earlier one.
- * @typedef {{ kind: "base" }
- *   | { kind: "file", path: string, options: Options }
- *   | { kind: "late", key: string, fix: string }
- *   | { kind: "broken", key: string, fix: string }} Layer
+ * @typedef {(paths: readonly string[]) => Promise<Parsed[]>} Parser Parses absolute tsconfig paths with one TypeScript install.
  */
 
-const BASE = "@mapringg/standard/tsconfig";
+const PACKAGE = "@mapringg/standard";
+const BASE = `${PACKAGE}/tsconfig`;
 const FLAGS = Object.entries(base.compilerOptions);
 const TSCONFIG = /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/;
-const CONDITIONS = new Set(["types", "node", "import", "require", "default"]);
 
 /**
- * @param {any} node
- * @returns {unknown}
+ * @param {string} root The folder of a typescript package.
+ * @returns {Parser}
  */
-function value(node) {
-  switch (node?.type) {
-    case "ParenthesizedExpression":
-      return value(node.expression);
-    case "Literal":
-      if (node.regex === undefined && typeof node.value !== "bigint") return node.value;
-      break;
-    case "UnaryExpression":
-      if (node.operator === "-" && node.argument.type === "Literal" && typeof node.argument.value === "number") return -node.argument.value;
-      break;
-    case "ArrayExpression":
-      return node.elements.map(value);
-    case "ObjectExpression":
-      return Object.fromEntries(
-        node.properties.map((/** @type {any} */ property) => {
-          if (property.type !== "Property" || property.kind !== "init" || property.computed || property.method || typeof property.key.value !== "string") {
-            throw new Error("a key is not a quoted string");
-          }
-          return [property.key.value, value(property.value)];
-        }),
-      );
-  }
-  throw new Error(`it holds ${node?.type ?? "a hole"}, which is not JSON`);
-}
-
-/**
- * @param {string} text
- * @returns {unknown}
- */
-function parseJsonc(text) {
-  // The newline ends a line comment on the last line, which would otherwise swallow the closing parenthesis.
-  const { program, errors } = parseSync("tsconfig.js", `(${text}\n)`);
-  if (errors.length > 0) throw new Error(errors[0].message);
-  const [statement, ...rest] = program.body;
-  if (statement?.type !== "ExpressionStatement" || rest.length > 0) throw new Error("it is not one value");
-  return value(statement.expression);
-}
-
-/**
- * @param {unknown} it
- * @returns {Record<string, unknown> | null}
- */
-function record(it) {
-  return typeof it === "object" && it !== null && !Array.isArray(it) ? /** @type {Record<string, unknown>} */ (it) : null;
-}
-
-/**
- * @param {string} text
- * @returns {Tsconfig | string}
- */
-function read(text) {
-  let json;
-  try {
-    json = record(parseJsonc(text));
-  } catch (error) {
-    return /** @type {Error} */ (error).message;
-  }
-  if (json === null) return "it is not an object";
-  const options = json.compilerOptions === undefined ? {} : record(json.compilerOptions);
-  if (options === null) return "compilerOptions is not an object";
-  return {
-    extends: json.extends === undefined ? [] : [json.extends].flat(),
-    options,
-    solution: Array.isArray(json.files) && json.files.length === 0 && !("include" in json),
+function nativeParser(root) {
+  return async (paths) => {
+    const { API } = await import(pathToFileURL(posix.join(root, "dist/api/sync/api.js")).href);
+    /** @type {string[]} */
+    let reads = [];
+    // TypeScript reads a config's text only to load it, so the reads while it parses one tsconfig are that tsconfig's chain.
+    const api = new API({ fs: { readFile: (/** @type {string} */ path) => void reads.push(path) } });
+    try {
+      const parsed = paths.map((path) => {
+        reads = [];
+        const { options, fileNames } = api.parseConfigFile(path);
+        return { options, files: fileNames.length, configs: reads.filter((read) => posix.basename(read) !== "package.json") };
+      });
+      const snapshot = api.updateSnapshot({ openProjects: [...paths] });
+      try {
+        return parsed.map((one, index) => {
+          const project = snapshot.getProject(paths[index]);
+          /** @type {{ code: number, text: string }[]} */
+          const diagnostics = project?.program.getConfigFileParsingDiagnostics() ?? [{ code: 0, text: "TypeScript did not open it" }];
+          return { ...one, problems: diagnostics.map(({ code, text }) => `TS${code}: ${text}`) };
+        });
+      } finally {
+        snapshot.dispose();
+      }
+    } finally {
+      api.close();
+    }
   };
+}
+
+/**
+ * @param {string} root The folder of a typescript package.
+ * @returns {Parser}
+ */
+function classicParser(root) {
+  return async (paths) => {
+    const ts = createRequire(posix.join(root, "package.json"))("./lib/typescript.js");
+    const cache = new Map();
+    return paths.map((path) => {
+      /** @type {any[]} */
+      const fatal = [];
+      const parsed = ts.getParsedCommandLineOfConfigFile(path, undefined, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: (/** @type {any} */ diagnostic) => fatal.push(diagnostic) }, cache);
+      return {
+        options: parsed?.options ?? {},
+        files: parsed?.fileNames.length ?? 0,
+        problems: [...fatal, ...(parsed?.errors ?? [])].map((diagnostic) => `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`),
+        configs: [path, ...(parsed?.options.configFile?.extendedSourceFiles ?? [])],
+      };
+    });
+  };
+}
+
+/**
+ * @param {string} tsconfig Absolute path.
+ * @returns {string | null} The folder of the typescript package that tsconfig's folder resolves, or null when it has none.
+ */
+function typescriptFor(tsconfig) {
+  try {
+    return posix.dirname(realpathSync(createRequire(tsconfig).resolve("typescript/package.json")));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} path Absolute path of a config TypeScript loaded.
+ * @returns {boolean} Whether it is the config/tsconfig.json of an installed @mapringg/standard.
+ */
+function isBase(path) {
+  const real = realpathSync(path);
+  for (let folder = posix.dirname(real); folder !== posix.dirname(folder); folder = posix.dirname(folder)) {
+    const manifest = posix.join(folder, "package.json");
+    if (!existsSync(manifest)) continue;
+    try {
+      return JSON.parse(readFileSync(manifest, "utf8")).name === PACKAGE && posix.relative(folder, real) === "config/tsconfig.json";
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**
  * @param {Repo} repo
- * @returns {Files}
+ * @param {readonly string[]} paths Repo-relative tsconfig paths.
+ * @returns {Promise<{ parsed: Map<string, Parsed>, findings: Finding[] }>}
  */
-function files(repo) {
-  const trackedPaths = new Set(repo.files());
-  const inside = (/** @type {string} */ path) => {
-    const relative = posix.relative(repo.root, path);
-    return relative.startsWith("../") || relative.split("/").includes("node_modules") ? null : relative;
-  };
-  /** @type {Map<string, Tsconfig | string>} */
-  const memo = new Map();
-  return {
-    exists(path) {
-      const relative = inside(path);
-      return relative === null ? existsSync(path) && statSync(path).isFile() : trackedPaths.has(relative);
-    },
-    load(path) {
-      if (!memo.has(path)) {
-        const relative = inside(path);
-        memo.set(path, read(relative === null ? readFileSync(path, "utf8") : repo.read(relative)));
-      }
-      return /** @type {Tsconfig | string} */ (memo.get(path));
-    },
-    shown(path) {
-      const relative = inside(path);
-      return relative ?? `node_modules/${path.split("/node_modules/").at(-1)}`;
-    },
-  };
-}
-
-/**
- * @param {unknown} target
- * @returns {string | null} The first path a package exports entry gives under the conditions tsc reads.
- */
-function exported(target) {
-  if (typeof target === "string") return target;
-  if (Array.isArray(target)) return target.map(exported).find((path) => path !== null) ?? null;
-  for (const [condition, inner] of Object.entries(record(target) ?? {})) {
-    const path = CONDITIONS.has(condition) ? exported(inner) : null;
-    if (path !== null) return path;
-  }
-  return null;
-}
-
-/**
- * @param {unknown} exports
- * @param {string} subpath "." or "./<rest>"
- * @returns {string | null}
- */
-function subpathTarget(exports, subpath) {
-  const map = Object.keys(record(exports) ?? {}).some((key) => key.startsWith(".")) ? /** @type {Record<string, unknown>} */ (exports) : { ".": exports };
-  if (subpath in map) return exported(map[subpath]);
-  for (const [key, target] of Object.entries(map)) {
-    const [before, after, extra] = key.split("*");
-    if (after === undefined || extra !== undefined) continue;
-    if (subpath.length >= key.length - 1 && subpath.startsWith(before) && subpath.endsWith(after)) {
-      return exported(target)?.replaceAll("*", subpath.slice(before.length, subpath.length - after.length)) ?? null;
-    }
-  }
-  return null;
-}
-
-/**
- * tsc's lookup for a package name in extends: the nearest node_modules folder that holds the package,
- * then its exports, or without exports its tsconfig field, the subpath, the subpath with .json, or a tsconfig.json.
- * @param {string} specifier
- * @param {string} folder
- * @returns {string | null}
- */
-function packageConfig(specifier, folder) {
-  const match = /^((?:@[^/]+\/)?[^/@][^/]*)(?:\/(.+))?$/.exec(specifier);
-  if (match === null) return null;
-  const [, name, rest] = match;
-  for (let at = folder; ; at = posix.dirname(at)) {
-    const root = posix.join(at, "node_modules", name);
-    if (existsSync(root)) {
-      let manifest = {};
-      try {
-        manifest = record(JSON.parse(readFileSync(posix.join(root, "package.json"), "utf8"))) ?? {};
-      } catch {}
-      const exports = /** @type {Record<string, unknown>} */ (manifest).exports;
-      const tsconfigField = /** @type {Record<string, unknown>} */ (manifest).tsconfig;
-      const candidates =
-        exports !== undefined
-          ? [subpathTarget(exports, rest === undefined ? "." : `./${rest}`)]
-          : rest === undefined
-            ? [typeof tsconfigField === "string" ? tsconfigField : null, "tsconfig.json"]
-            : [rest, `${rest}.json`, `${rest}/tsconfig.json`];
-      const found = candidates.flatMap((path) => (path === null ? [] : [posix.join(root, path)])).find((path) => existsSync(path) && statSync(path).isFile());
-      return found === undefined ? null : realpathSync(found);
-    }
-    if (at === posix.dirname(at)) return null;
-  }
-}
-
-/**
- * @param {string} specifier
- * @param {string} from Absolute path of the file whose extends names it.
- * @param {Files} known
- * @returns {string | null}
- */
-function locate(specifier, from, known) {
-  if (!/^(?:\.\.?\/|\/)/.test(specifier)) return packageConfig(specifier, posix.dirname(from));
-  const target = posix.resolve(posix.dirname(from), specifier);
-  if (known.exists(target)) return target;
-  return !target.endsWith(".json") && known.exists(`${target}.json`) ? `${target}.json` : null;
-}
-
-/**
- * @param {string} path Absolute.
- * @param {Files} known
- * @param {readonly string[]} [seen] Files on the way from the root, to stop a cycle.
- * @returns {Layer[]}
- */
-function layers(path, known, seen = []) {
-  const shown = known.shown(path);
-  const file = known.load(path);
-  if (typeof file === "string") return [{ kind: "broken", key: shown, fix: `Make ${shown} a valid tsconfig. ${file}.` }];
-  /** @type {Layer[]} */
-  const chain = [];
-  for (const specifier of file.extends) {
-    const key = `${shown} extends ${specifier}`;
-    const reached = chain.some((layer) => layer.kind === "base");
-    if (typeof specifier !== "string") {
-      chain.push({ kind: "broken", key: `${shown} extends`, fix: `Make extends in ${shown} a string or a list of strings.` });
-      continue;
-    }
-    if (specifier === BASE) {
-      chain.push({ kind: "base" });
-      continue;
-    }
-    const target = locate(specifier, path, known);
-    if (target === null) {
-      chain.push({ kind: "broken", key, fix: `Make "${specifier}" in extends of ${shown} name a config TypeScript finds: a file git tracks, or an installed package's config.` });
-    } else if ([...seen, path].includes(target)) {
-      chain.push({ kind: "broken", key, fix: `Remove "${specifier}" from extends in ${shown}, which leads back to ${known.shown(target)} in a cycle.` });
+async function parseAll(repo, paths) {
+  /** @type {Map<string, string[]>} */
+  const byInstall = new Map();
+  /** @type {Finding[]} */
+  const findings = [];
+  for (const path of paths) {
+    const install = typescriptFor(posix.join(repo.root, path));
+    if (install === null) {
+      findings.push({ key: `${path} typescript`, fix: `Add typescript to the devDependencies of the package that holds ${path} and run pnpm install, so the check reads it with the repository's own compiler.` });
     } else {
-      if (reached && !specifier.startsWith(".") && !specifier.startsWith("/")) {
-        chain.push({ kind: "late", key, fix: `Move "${specifier}" before "${BASE}" in extends of ${shown}, since a later entry overrides an earlier one.` });
-      }
-      chain.push(...layers(target, known, [...seen, path]));
+      byInstall.set(install, [...(byInstall.get(install) ?? []), path]);
     }
   }
-  chain.push({ kind: "file", path: shown, options: file.options });
-  return chain;
+  /** @type {Map<string, Parsed>} */
+  const parsed = new Map();
+  for (const [install, group] of byInstall) {
+    const { version } = JSON.parse(readFileSync(posix.join(install, "package.json"), "utf8"));
+    const parse = Number.parseInt(version, 10) >= 7 ? nativeParser(install) : classicParser(install);
+    const results = await parse(group.map((path) => posix.join(repo.root, path)));
+    group.forEach((path, index) => parsed.set(path, results[index]));
+  }
+  return { parsed, findings };
 }
 
 /**
- * @param {string} root
- * @param {readonly Layer[]} chain
- * @param {ReadonlySet<string>} roots
+ * @param {Repo} repo
+ * @param {Map<string, Parsed>} parsed
  * @returns {Finding[]}
  */
-function judge(root, chain, roots) {
-  const broken = chain.flatMap((layer) => (layer.kind === "broken" ? [{ key: layer.key, fix: layer.fix }] : []));
-  if (broken.length > 0) return broken;
-  const at = chain.findLastIndex((layer) => layer.kind === "base");
-  if (at === -1) {
-    if (chain.some((layer) => layer.kind === "file" && layer.path !== root && roots.has(layer.path))) return [];
-    return [{ key: `${root} extends`, fix: `Add "${BASE}" as the last entry of extends in ${root}, so the project builds on the shared strict flags.` }];
-  }
-  return chain.slice(at + 1).flatMap((layer) => {
-    if (layer.kind === "late") return [{ key: layer.key, fix: layer.fix }];
-    if (layer.kind !== "file") return [];
-    return FLAGS.filter(([flag, want]) => flag in layer.options && layer.options[flag] !== want).map(([flag, want]) => ({
-      key: `${layer.path} compilerOptions.${flag}`,
-      fix: `Remove compilerOptions.${flag} from ${layer.path}, which sets ${JSON.stringify(layer.options[flag])} where the shared base sets ${want}.`,
-    }));
+function judge(repo, parsed) {
+  const relative = (/** @type {string} */ path) => posix.relative(repo.root, path);
+  /** @param {string} root */
+  const parents = (root) => (parsed.get(root)?.configs ?? []).map(relative).filter((path) => path !== root && parsed.has(path));
+  /** @param {string} root */
+  const offFlags = (root) => {
+    const { options } = /** @type {Parsed} */ (parsed.get(root));
+    return FLAGS.filter(([flag, want]) => options[flag] !== want);
+  };
+  return [...parsed].flatMap(([root, { problems, configs }]) => {
+    if (problems.length > 0) return [{ key: `${root} config`, fix: `Fix ${root} so TypeScript reads it without errors. ${problems.join(" ")}` }];
+    if (!configs.some(isBase)) {
+      if (parents(root).some((parent) => !(parsed.get(parent)?.configs ?? []).some(isBase))) return [];
+      return [{ key: `${root} extends`, fix: `Add "${BASE}" as the last entry of extends in ${root}, so the project builds on the shared strict flags.` }];
+    }
+    const inherited = new Set(parents(root).flatMap((parent) => offFlags(parent).map(([flag]) => flag)));
+    return offFlags(root)
+      .filter(([flag]) => !inherited.has(flag))
+      .map(([flag, want]) => ({
+        key: `${root} compilerOptions.${flag}`,
+        fix: `${root} ends up with ${flag} set to ${JSON.stringify(parsed.get(root)?.options[flag] ?? null)}, but the shared base sets ${want}. Remove the setting that overrides it, in ${root} or a config it extends after the base.`,
+      }));
   });
 }
 
@@ -316,7 +211,7 @@ function runs(repo, projects) {
     }
   }
   if (!repo.config.hooks["pre-push"].some(runsTypecheck)) {
-    findings.push({ key: "hooks.pre-push", fix: `Add "pnpm typecheck" to hooks.pre-push in .standard/config.json, so a push that fails typecheck stops before CI.` });
+    findings.push({ key: "hooks.pre-push", fix: `Add the line "pnpm typecheck" to hooks.pre-push in .standard/config.json, so a push that fails typecheck stops before CI.` });
   }
   const scripts = checkJobScripts(repo);
   if (scripts.length > 0 && !scripts.some(runsTypecheck)) {
@@ -333,15 +228,14 @@ export default {
   baseline: false,
   retired: [],
   applies: (repo) => (repo.files().some((path) => TSCONFIG.test(path)) ? { on: true } : { on: false, because: "git tracks no tsconfig.json" }),
-  run(repo) {
-    const known = files(repo);
-    const roots = repo.files().filter((path) => {
-      if (!TSCONFIG.test(path)) return false;
-      const file = known.load(posix.join(repo.root, path));
-      return typeof file === "string" || !file.solution;
-    });
-    const rootSet = new Set(roots);
-    const findings = [...roots.flatMap((root) => judge(root, layers(posix.join(repo.root, root), known), rootSet)), ...runs(repo, roots)];
-    return findings.filter((finding, index) => findings.findIndex((other) => other.key === finding.key) === index);
+  async run(repo) {
+    const { parsed, findings } = await parseAll(repo, repo.files().filter((path) => TSCONFIG.test(path)));
+    for (const [path, { files, problems }] of parsed) {
+      // A solution file lists no inputs on purpose; a project that finds none gets a TypeScript diagnostic instead.
+      if (files === 0 && problems.length === 0) parsed.delete(path);
+    }
+    const projects = [...parsed.keys(), ...findings.map(({ key }) => key.replace(/ typescript$/, ""))];
+    const all = [...findings, ...judge(repo, parsed), ...runs(repo, projects)];
+    return all.filter((finding, index) => all.findIndex((other) => other.key === finding.key) === index);
   },
 };
