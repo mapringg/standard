@@ -233,7 +233,7 @@ test("banned catches a banned export through a longer chain such as .call", (t) 
   );
 });
 
-const TEST_CACHE_FIX = "ServerDataTestCache gives each test its own SWR cache, so code that ships reads the global cache. Call useServerData as it is, or with visit: true when the data must be fresh on each visit, such as a session check.";
+const TEST_CACHE_FIX = "ServerDataTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useServerData on the global cache when the data must load in the client.";
 
 test("banned fails ServerDataTestCache and SwrScope outside test files, and passes them in tests", (t) => {
   fails(
