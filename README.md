@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.10.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.11.0" }
 }
 ```
 
@@ -125,7 +125,19 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 
 Neither check measures coverage; `pr-tests` asks only that a test changed beside the logic.
 
-Like `wiring`, `dead-code`, `duplicates`, `typecheck` and `tests` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+`boundaries` fails an import that crosses a package boundary or cannot be checked. It parses the `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` files git tracks and reads, from the syntax tree, the specifier of each import declaration, `export ... from`, `import x = require()`, and `import()` or `require()` of a string or a template without expressions. An `import()` or `require()` of a computed value is not read. A type-only import counts, because it ties the importer to the file the same way. Run `pnpm install` first, so workspace packages and the compiler resolve.
+
+Each file resolves as the TypeScript of its project does, the project being its nearest tracked `tsconfig.json`, read by the `typescript` that folder resolves. Before TypeScript 7 the check calls that compiler's `resolveModuleName` with the project's options. TypeScript 7 exposes no module resolution, so the check runs oxc-resolver 11.24.2 with the project's own options: its `paths`, the `types` condition, `node` under `node16` or `nodenext`, its `customConditions`, and TypeScript's substitution of `.ts`, `.tsx` and `.d.ts` for a `.js` specifier. The import site picks the `import` or `require` condition: `require()` and `import x = require()` are `require`, `import()` is `import`, and under `node16` or `nodenext` a declaration follows its file's format, from its extension or the nearest `package.json` `type`. A file outside any TypeScript project resolves as Node runs it. An asset such as `./globals.css`, which TypeScript does not resolve, is found as a file, through `paths` too.
+
+| Rule | Fails when |
+| --- | --- |
+| Packages | An import lands in another workspace package, the folder of the nearest tracked `package.json`, without naming that package, such as `../api/src/db.ts` from `apps/web`, or names it but reaches a file its `exports` do not resolve the specifier to, such as a tsconfig `paths` alias `api/hidden`. A package without `exports` allows only its bare name. Needs no config. |
+| Parse | A file does not parse. |
+| Unresolved | A relative, absolute or `#` import does not resolve, or a bare one does not resolve and the importer's `package.json` and the root `package.json` do not declare its package. A workspace package's subpath outside its `exports` fails here. A specifier with a scheme, such as `node:fs` or `cloudflare:test`, and a Node builtin are skipped. |
+
+Each finding is one import, named by the file and the specifier, such as `apps/web/src/a.ts imports ../api/src/db.ts`. Its fix names the change.
+
+Like `wiring`, `dead-code`, `duplicates`, `typecheck`, `tests` and `boundaries` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 
 To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bumps the pin to 0.10.0, fix what `pnpm exec standard check tests` prints, then remove `tests` from `pending`. Remove `pr-tests` once the team is ready for every pull request that adds logic to carry a test.
 

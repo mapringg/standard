@@ -85,7 +85,7 @@ test("the config fails on a key or a check this version does not know", (t) => {
 test("check refuses an unknown name, an unknown flag, and a ratchet flag on a commit check", (t) => {
   const cwd = tempRepo(t);
   const cases = [
-    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests\./],
+    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries\./],
     [["--nope"], /Unexpected argument --nope\. Use --pr <number> or one of --init, --write, --prune\./],
     [["commit-subject", "--write"], /--write changes one baseline, so name exactly one tree check/],
   ];

@@ -1,0 +1,170 @@
+import assert from "node:assert/strict";
+import { mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+
+import { git, standard, tempRepo, WIRED, write } from "./helpers.mjs";
+
+
+const WORKSPACE = {
+  "package.json": { name: "root", private: true, dependencies: { zod: "4.0.0" } },
+  "apps/api/package.json": { name: "api", exports: { ".": "./src/app.ts", "./auth": "./src/auth/index.ts" } },
+  "apps/api/tsconfig.json": { compilerOptions: { module: "nodenext" } },
+  "apps/api/src/app.ts": 'export { session } from "./auth/index.ts";\n',
+  "apps/api/src/auth/index.ts": 'export { session } from "./session.ts";\n',
+  "apps/api/src/auth/session.ts": "export const session = 1;\n",
+  "apps/api/src/db/client.ts": "export const db = 1;\n",
+  "apps/api/src/features/a/index.ts": "export const a = 1;\n",
+  "apps/api/src/features/a/store.ts": "export const store = 1;\n",
+  "apps/web/package.json": { name: "web", dependencies: { api: "workspace:*" } },
+  "apps/web/tsconfig.json": { compilerOptions: { module: "esnext", moduleResolution: "bundler", paths: { "@/*": ["./src/*"] } } },
+  "apps/web/src/app/page.tsx": "export const page = 1;\n",
+  "apps/web/src/lib/format.ts": "export const format = 1;\n",
+  "packages/tokens/package.json": { name: "tokens" },
+  "packages/tokens/index.ts": "export const color = 1;\n",
+  "packages/tokens/colors.ts": "export const red = 1;\n",
+};
+
+function repoWith(t, files) {
+  const cwd = tempRepo(t, {});
+  write(cwd, { ...WORKSPACE, ...files });
+  for (const [from, to] of [["apps/web/node_modules/api", "../../api"], ["apps/web/node_modules/tokens", "../../../packages/tokens"]]) {
+    mkdirSync(join(cwd, from, ".."), { recursive: true });
+    symlinkSync(to, join(cwd, from));
+  }
+  git(cwd, "add", "-A");
+  return cwd;
+}
+
+function findings(cwd) {
+  const { stdout, stderr, status } = standard(cwd, ["check", "boundaries"]);
+  assert.doesNotMatch(stderr, /^standard: /m);
+  return { lines: stdout.trimEnd().split("\n"), status };
+}
+
+test("boundaries passes imports inside a package, through a package's exports, of a declared package and of a builtin", (t) => {
+  const cwd = repoWith(t, {
+    "apps/api/src/features/b/index.ts": [
+      'import { a } from "../a/index.ts";',
+      'import { session } from "../../auth/index.ts";',
+      'import { db } from "../../db/client.ts";',
+      'import { store } from "./store.ts";',
+      "export const b = [a, session, db, store];",
+      "",
+    ].join("\n"),
+    "apps/api/src/features/b/store.ts": "export const store = 1;\n",
+    "apps/api/src/features/a/store.test.ts": 'import { session } from "../../auth/session.ts";\nexport const t = session;\n',
+    "apps/web/src/features/x.ts": 'import { session } from "api/auth";\nimport type { z } from "zod";\nimport { format } from "@/lib/format";\nimport { readFileSync } from "node:fs";\nexport const x = [session, format, readFileSync];\nexport type Z = z.ZodType;\n',
+    "apps/web/src/app/route.ts": 'import { color } from "tokens";\nexport const route = color;\n',
+  });
+  assert.deepEqual(findings(cwd), { lines: ["boundaries: OK"], status: 0 });
+});
+
+test("boundaries fails an import that reaches another workspace package by path, or past its exports", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/src/lib/a.ts": 'export { session } from "../../../api/src/auth/session.ts";\n',
+    "apps/web/src/lib/b.ts": 'export { session } from "api/src/auth/session.ts";\n',
+    "apps/web/src/lib/c.ts": 'export { red } from "tokens/colors.ts";\n',
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/src/lib/a.ts imports ../../../api/src/auth/session.ts: apps/api/src/auth/session.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+      'boundaries: apps/web/src/lib/b.ts imports api/src/auth/session.ts: "api/src/auth/session.ts" is not in the exports of the workspace package api. Import a subpath its exports list, or add this one there.',
+      'boundaries: apps/web/src/lib/c.ts imports tokens/colors.ts: tokens has no exports field, so "tokens/colors.ts" reaches into its files. Add the subpath to exports in packages/tokens/package.json, or import "tokens".',
+    ],
+    status: 1,
+  });
+});
+
+test("boundaries fails closed on a file that does not parse and an import that does not resolve, and reads a literal import()", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/src/lib/broken.ts": "export const = ;\n",
+    "apps/web/src/lib/missing.ts": 'export { gone } from "./gone";\nexport { other } from "@/lib/other";\nexport { left } from "left-pad";\n',
+    "apps/web/src/lib/dynamic.ts": "export const load = (name: string) => [import(`./locales/${name}.ts`), import(`./absent`)];\n",
+  });
+  const { lines, status } = findings(cwd);
+  assert.match(lines[0], /^boundaries: apps\/web\/src\/lib\/broken\.ts imports \(parse\): apps\/web\/src\/lib\/broken\.ts does not parse, so its imports cannot be checked: .+ Fix the syntax\.$/);
+  assert.deepEqual(lines.slice(1), [
+    'boundaries: apps/web/src/lib/dynamic.ts imports ./absent: "./absent" in apps/web/src/lib/dynamic.ts does not resolve. Fix the path so it names a file.',
+    'boundaries: apps/web/src/lib/missing.ts imports ./gone: "./gone" in apps/web/src/lib/missing.ts does not resolve. Fix the path so it names a file.',
+    'boundaries: apps/web/src/lib/missing.ts imports @/lib/other: "@/lib/other" in apps/web/src/lib/missing.ts does not resolve, and apps/web/package.json does not declare @/lib. Fix the tsconfig paths alias it uses, or add @/lib to apps/web/package.json and install it.',
+    'boundaries: apps/web/src/lib/missing.ts imports left-pad: "left-pad" in apps/web/src/lib/missing.ts does not resolve, and apps/web/package.json does not declare left-pad. Fix the tsconfig paths alias it uses, or add left-pad to apps/web/package.json and install it.',
+  ]);
+  assert.equal(status, 1);
+});
+
+test("boundaries keeps no baseline, and pending holds it off", (t) => {
+  const cwd = repoWith(t, { "apps/web/src/lib/a.ts": 'export { session } from "../../../api/src/auth/session.ts";\n' });
+  const init = standard(cwd, ["check", "boundaries", "--init"]);
+  assert.equal(init.stderr, "standard: boundaries allows no findings, so it has no baseline for --init. Fix what it finds.\n");
+  assert.equal(init.status, 1);
+
+  write(cwd, { ".standard/config.json": { pending: ["boundaries"] } });
+  const pending = standard(cwd, ["check", "boundaries"]);
+  assert.deepEqual([pending.stdout, pending.status], ["boundaries: pending in .standard/config.json, so it did not run\n", 0]);
+});
+
+test("boundaries reads every literal import form from the syntax tree, escapes and $ included", (t) => {
+  const cwd = repoWith(t, {
+    "apps/api/src/pri$vate.ts": "export const hidden = 1;\n",
+    "apps/web/src/lib/forms.ts": [
+      'void import("../../../api/src/auth/sessi\\u006fn.ts");',
+      'void import(`../../../api/src/pri$vate.ts`);',
+      'export {} from "../../../api/src/db/client.ts";',
+      'import legacy = require("../../../api/src/features/a/index.ts");',
+      'const required = require("./absent.cjs");',
+      "export const all = [legacy, required];",
+      "",
+    ].join("\n"),
+  });
+  const keys = findings(cwd).lines.map((line) => line.split(": ")[1]);
+  assert.deepEqual(keys, [
+    "apps/web/src/lib/forms.ts imports ../../../api/src/auth/session.ts",
+    "apps/web/src/lib/forms.ts imports ../../../api/src/pri$vate.ts",
+    "apps/web/src/lib/forms.ts imports ../../../api/src/db/client.ts",
+    "apps/web/src/lib/forms.ts imports ../../../api/src/features/a/index.ts",
+    "apps/web/src/lib/forms.ts imports ./absent.cjs",
+  ]);
+});
+
+test("boundaries checks a package-shaped tsconfig alias against the package's exports", (t) => {
+  const cwd = repoWith(t, {
+    "apps/api/src/private.ts": "export const hidden = 1;\n",
+    "apps/web/tsconfig.json": { compilerOptions: { module: "esnext", moduleResolution: "bundler", paths: { "api/hidden": ["../api/src/private.ts"], "@/*": ["./src/*"] } } },
+    "apps/web/src/lib/deep.ts": 'export { hidden } from "api/hidden";\n',
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/src/lib/deep.ts imports api/hidden: "api/hidden" reaches apps/api/src/private.ts through tsconfig paths, but the exports of api lists no such subpath. Import a subpath its exports list, or add this one there.',
+    ],
+    status: 1,
+  });
+});
+
+const COMPILERS = { "7": join(import.meta.dirname, "../node_modules/typescript"), "6": join(import.meta.dirname, "../node_modules/typescript-6") };
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries resolves as TypeScript ${major} does: the require condition in a .cts file, .d.ts behind a .js specifier, and an asset through exports`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": { name: "api", exports: { "./condition": { require: "./src/required.ts", import: "./src/imported.ts" }, "./logo.png": "./logo.png" } },
+      "apps/api/src/imported.ts": "export const value = 1;\n",
+      "apps/api/logo.png": "png",
+      "apps/node/package.json": { name: "node-app", dependencies: { api: "workspace:*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/condition.cts": 'import { value } from "api/condition";\nexport const a = value;\n',
+      "apps/node/src/condition.mts": 'import { value } from "api/condition";\nexport const a = value;\n',
+      "apps/node/src/declaration.d.ts": "export declare const value: number;\n",
+      "apps/node/src/uses-declaration.mts": 'import type { value } from "./declaration.js";\nexport type V = typeof value;\n',
+      "apps/node/src/logo.mts": 'import logo from "api/logo.png";\nexport const src = logo;\n',
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const missing = (file, specifier) => `boundaries: ${file} imports ${specifier}: "${specifier}" is not in the exports of the workspace package api. Import a subpath its exports list, or add this one there.`;
+    assert.deepEqual(findings(cwd), {
+      lines: [missing("apps/node/src/condition.cts", "api/condition")],
+      status: 1,
+    });
+  });
+}
+
