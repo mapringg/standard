@@ -267,6 +267,57 @@ test("docs resolves a pnpm script with no package flag against the doc's nearest
   );
 });
 
+const reference = (path, ...misses) => `${path} reference: ${path} names things that do not exist: ${misses.join(", ")}. Fix each name, or move facts about an outside system to docs/external/.`;
+
+const WEB = {
+  "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+  "package.json": JSON.stringify({ scripts: {} }),
+  "apps/web/package.json": JSON.stringify({ name: "@scope/web", scripts: { build: "echo build" } }),
+};
+
+for (const [name, command, miss] of [
+  ["a double-quoted filter", 'pnpm --filter "@scope/web" build', null],
+  ["a single-quoted filter", "pnpm --filter '@scope/web' build", null],
+  ["a quoted directory", 'pnpm --dir "apps/web" build', null],
+  ["quotes in the middle of a word", 'pnpm --filter "@scope/web" "bu"ild', null],
+  ["a comment that names pnpm build", 'pnpm --filter "@scope/web" build # runs pnpm build in the web package', null],
+  ["a comment that names a missing script", 'pnpm --filter "@scope/web" build # pnpm missing', null],
+  ["an unclosed quote in the filter", 'pnpm --filter "@scope/web build', null],
+  ["an unclosed double quote", 'pnpm --filter "@scope/web" "build', null],
+  ["an unclosed single quote", "pnpm --filter '@scope/web' 'build", null],
+  ["an unclosed quote inside a word", 'pnpm --filter "@scope/web" bu"ild', null],
+  ["an unclosed quote after a missing script", 'pnpm --filter "@scope/web" missing"', null],
+  ["an unclosed quote before a missing script", 'pnpm --filter "@scope/web" "missing', null],
+  ["a hash inside a word, which starts no comment", "echo a#b && pnpm missing", "package.json has no script missing"],
+  ["a command after an operator", "cd apps/web; pnpm --filter=@scope/web run missing", "@scope/web has no script missing"],
+]) {
+  test(`docs splits a pnpm command as a POSIX shell does: ${name}`, (t) => {
+    const files = { ...WEB, "docs/guide.md": `# Guide\n\n\`\`\`sh\n${command}\n\`\`\`\n` };
+    if (miss === null) passes(t, files);
+    else fails(t, files, reference("docs/guide.md", `line 4 \`${command}\` (${miss})`));
+  });
+}
+
+test("docs checks no reference inside an HTML comment", (t) => {
+  passes(t, { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Guide\n<!--\nUse `missingThing()` and [x](missing.md).\n-->\n" });
+});
+
+test("docs resolves a reference link, a folder link and a link to a Unicode heading", (t) => {
+  passes(t, {
+    "AGENTS.md": "[Guide][guide]\n\n[guide]: docs/guide.md\n",
+    "docs/guide.md": "# Guide\n\n[Parent](../src/) and [unicode](#café)\n\n## Café\n",
+    "src/file.ts": "export const x = 1;\n",
+  });
+});
+
+test("docs fails a symbol that only Markdown names", (t) => {
+  fails(
+    t,
+    { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Guide\n\nUse `parseThing()`.\n\nThe name parseThing lives here.\n" },
+    reference("docs/guide.md", "line 3 `parseThing()` (no tracked source has this word)"),
+  );
+});
+
 test("docs replaces the repository's check-docs script", (t) => {
   const { stdout } = standard(tempRepo(t), ["explain", "docs"]);
   assert.match(stdout, /^ {2}Replaces: scripts\/check-docs\.mjs, scripts\/check-docs\.test\.mjs$/m);

@@ -100,8 +100,7 @@ export function parseDoc(path, kind, text) {
       const seen = slugs.get(base) ?? 0;
       slugs.set(base, seen + 1);
       slugs.set(seen === 0 ? base : `${base}-${seen}`, 1);
-    }
-    else if (node.type === "text" && kind.name === "agents") {
+    } else if (node.type === "text" && kind.name === "agents") {
       node.value.split("\n").forEach((part, at) => {
         const line = lineOf(node) + at;
         const imported = IMPORT.exec(part.trim());

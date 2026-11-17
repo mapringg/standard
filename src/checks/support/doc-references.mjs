@@ -35,8 +35,7 @@ const NOT_PATH = /[\s<>$|=;'"\\]/;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SYMBOL = /^(?:[a-z][a-z0-9]*[A-Z]\w*|[A-Z][a-z0-9]+[A-Z]\w*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:\(\))?$/;
 const VALUE_FLAGS = new Set(["--filter", "-F", "-C", "--dir"]);
-const SHELL_WORD = /(?:[^\s'"\\]|\\.|'[^']*'|"(?:[^"\\]|\\.)*")+/g;
-const SHELL_QUOTE = /'([^']*)'|"((?:[^"\\]|\\.)*)"|\\(.)/g;
+const OPERATORS = ";&|()<>`";
 const PNPM_COMMANDS = new Set(
   "add approve-builds audit bin cache config create dedupe deploy dlx env exec fetch help i import init install install-test it licenses link list ln ls outdated pack patch patch-commit patch-remove prune publish rb rebuild remove rm root run self-update server setup start store t test un uninstall unlink up update upgrade why".split(" "),
 );
@@ -129,31 +128,63 @@ function pathMiss(path, doc, index) {
   return index.tails.has(bare) ? null : { reason: "no tracked file ends with this path", ignorable: [path, posix.join(posix.dirname(doc.path), path)] };
 }
 
-/** @type {(text: string) => string[]} The words a shell splits the text into, with their quotes taken off. */
-function shellWords(text) {
-  return (text.match(SHELL_WORD) ?? []).map((word) => word.replace(SHELL_QUOTE, (_, single, double, escaped) => single ?? double?.replace(/\\(.)/g, "$1") ?? escaped));
+/** @type {(text: string) => string[][]} Each command a POSIX shell reads in the text, as its words with quotes and escapes resolved. A `#` that starts a word comments out the rest, and an unclosed quote leaves no command, as the shell runs none. */
+function shellCommands(text) {
+  /** @type {string[][]} */
+  const commands = [[]];
+  /** @type {string | null} */
+  let word = null;
+  const end = () => {
+    if (word !== null) commands.at(-1)?.push(word);
+    word = null;
+  };
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at] ?? "";
+    if (char === "'") {
+      const close = text.indexOf("'", at + 1);
+      if (close === -1) return [];
+      word = (word ?? "") + text.slice(at + 1, close);
+      at = close;
+    } else if (char === '"') {
+      word ??= "";
+      for (at++; text[at] !== '"'; at++) {
+        if (at >= text.length) return [];
+        const escaped = text[at] === "\\" && '$`"\\\n'.includes(text[at + 1] ?? "-");
+        if (escaped) at++;
+        if (!escaped || text[at] !== "\n") word += text[at];
+      }
+    } else if (char === "\\") {
+      at++;
+      if (at < text.length && text[at] !== "\n") word = (word ?? "") + text[at];
+    } else if (char === "#" && word === null) break;
+    else if (/\s/.test(char)) end();
+    else if (OPERATORS.includes(char)) {
+      end();
+      commands.push([]);
+    } else word = (word ?? "") + char;
+  }
+  end();
+  return commands.filter((words) => words.length > 0);
 }
 
 /** @type {(text: string) => PnpmCall[]} Each `pnpm` command in code, with the package flags that pick where its script lives. */
 function pnpmCalls(text) {
-  const tokens = shellWords(text);
-  /** @type {PnpmCall[]} */
-  const calls = [];
-  tokens.forEach((token, at) => {
-    if (token !== "pnpm") return;
-    /** @type {PnpmCall} */
-    const call = { name: "", filter: null, dir: null, recursive: false };
-    let next = at + 1;
-    for (; tokens[next]?.startsWith("-"); next++) {
-      const [flag = "", value] = (tokens[next] ?? "").split("=", 2);
-      if (VALUE_FLAGS.has(flag)) call[flag === "-C" || flag === "--dir" ? "dir" : "filter"] = value ?? tokens[++next] ?? "";
-      call.recursive ||= flag === "-r" || flag === "--recursive";
-    }
-    if (tokens[next] === "run") next++;
-    call.name = (tokens[next] ?? "").replace(/[`;),&|]+$/, "");
-    if (/^[\w:.@/][\w:.@/-]*$/.test(call.name)) calls.push(call);
-  });
-  return calls;
+  return shellCommands(text).flatMap((words) =>
+    words.flatMap((word, at) => {
+      if (word !== "pnpm") return [];
+      /** @type {PnpmCall} */
+      const call = { name: "", filter: null, dir: null, recursive: false };
+      let next = at + 1;
+      for (; words[next]?.startsWith("-"); next++) {
+        const [flag = "", value] = (words[next] ?? "").split("=", 2);
+        if (VALUE_FLAGS.has(flag)) call[flag === "-C" || flag === "--dir" ? "dir" : "filter"] = value ?? words[++next] ?? "";
+        call.recursive ||= flag === "-r" || flag === "--recursive";
+      }
+      if (words[next] === "run") next++;
+      call.name = words[next] ?? "";
+      return /^[\w:.@/][\w:.@/-]*$/.test(call.name) ? [call] : [];
+    }),
+  );
 }
 
 /** @type {(call: PnpmCall, doc: Doc, index: RepoIndex) => string | null} A script with no package flag lives in the package nearest the doc or in the root. */
