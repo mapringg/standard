@@ -8,7 +8,6 @@ import { git, standard, tempRepo, write } from "./helpers.mjs";
 const NEXT_APP = { "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } } };
 const STATE_FIX = "Hold its state in one useReducer whose state is a union with a status field.";
 const FLAG_FIX = 'Model the request as a status in a useReducer state union, such as { status: "loading" } | { status: "done", data }.';
-const FETCH_FIX = "Fetch in a server component, or through useSWR or useSWRInfinite from src/lib/swr.ts when the data must load in the client.";
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
 const SWR_FIX = "Import useSWR or useSWRInfinite from src/lib/swr.ts of its app, copied from node_modules/@mapringg/standard/templates/swr.ts, which turns off focus and reconnect revalidation.";
@@ -102,17 +101,8 @@ test("react fails a useState that holds a loading or error flag", (t) => {
   );
 });
 
-test("react fails fetch in a file whose directive prologue holds use client, in any form", (t) => {
-  fails(
-    t,
-    {
-      "apps/web/src/client.tsx": '"use client";\nexport async function load() {\n  await fetch("/a");\n  await globalThis.fetch("/b");\n  return useSWR("/c", fetch);\n}\n',
-      "apps/web/src/server.tsx": 'export const load = () => fetch("/a");\n',
-      "apps/web/src/late.tsx": 'export const load = () => fetch("/a");\n"use client";\n',
-      "apps/web/src/param.tsx": '"use client";\nexport const load = (fetch: (url: string) => Promise<unknown>) => fetch("/a");\n',
-    },
-    `apps/web/src/client.tsx uses fetch on lines 3, 4, 5, and "use client" runs it in the browser. ${FETCH_FIX}`,
-  );
+test("react leaves fetch in a use client file to client-data", (t) => {
+  passes(t, { "apps/web/src/client.tsx": '"use client";\nexport async function load() {\n  await fetch("/a");\n  await globalThis.fetch("/b");\n}\n' });
 });
 
 test("react fails a value import of swr outside each React app's src/lib/swr.ts, Next or Vite, and passes type-only imports", (t) => {
