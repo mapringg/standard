@@ -87,6 +87,7 @@ test("docs-prose fails a sentence over 40 words, counting a code span or a link 
       `Then e.g. this ${words(36)} ends.`,
       "",
       `| ${words(50)} |`,
+      "| --- |",
       "",
       `> ${words(50)}`,
       "",
@@ -129,7 +130,36 @@ test("docs-prose leaves reference definitions and HTML markup out of prose", (t)
       "",
     ].join("\n"),
   });
-  fails(t, { "docs/a.md": '# Guide\n\n<p align="center">It is very fast.</p>\n' }, `docs/a.md uses filler on line 3 "very". ${FILLER}`);
+  fails(t, { "docs/a.md": "# Guide\n\nIt is <b>very</b> fast.\n" }, `docs/a.md uses filler on line 3 "very". ${FILLER}`);
+});
+
+const lowercase = Array(21).fill("word").join(" ");
+
+for (const [name, body, fixes] of [
+  ["a link target with balanced parentheses is no prose", "Read [the manual](https://example.com/part(one)/robust).", []],
+  ["an autolink is no prose", "Read <https://example.com/just/robust>.", []],
+  ["a quoted greater-than sign keeps HTML attributes out of prose", '<img alt="a > just robust" src="logo.svg">', []],
+  ["a double backtick code span over two lines is code", "Use ``a\njust — robust`` as an example.", []],
+  ["a reference definition is no prose", "[just]: https://example.com/", []],
+  ["an HTML comment is no prose", "<!--\nJust — very robust.\n-->", []],
+  ["abbreviations, versions, lists and headings split no sentence", "Use e.g. this file.ts with v1.2. Then use i.e. this command.\n\n- First item.\n- Second item.", []],
+  ["a sentence may start in lowercase", `${lowercase}. ${lowercase}.`, []],
+  ["a question mark that ends a label before a lowercase word ends no sentence", `Open the Cancel Comparison? modal ${lowercase} ${lowercase}.`, [`docs/guide.md has sentences over 40 words on line 3 (47 words). ${LENGTH}`]],
+  [
+    "a comment opener in a code span over two lines hides no prose",
+    "Use `a\nb <!--` as a delimiter.\n\nJust — robust.",
+    [`docs/guide.md has en or em dashes on lines 6. ${DASH}`, `docs/guide.md uses filler on line 6 "Just", line 6 "robust". ${FILLER}`],
+  ],
+]) {
+  test(`docs-prose reads prose as CommonMark renders it: ${name}`, (t) => {
+    const files = { "docs/guide.md": `# Guide\n\n${body}\n` };
+    if (fixes.length === 0) passes(t, files);
+    else fails(t, files, ...fixes);
+  });
+}
+
+test("docs-prose leaves front matter out of headings and prose", (t) => {
+  passes(t, { ".claude/skills/pr/SKILL.md": "---\nname: Pull Request\ndescription: Just — a very robust skill\n---\n\n# Pr\n" });
 });
 
 test("docs-prose leaves logs and files of no kind to docs", (t) => {
