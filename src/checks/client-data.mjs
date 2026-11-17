@@ -29,11 +29,9 @@ const moduleOf = (path) => (path.indexOf("#", 1) === -1 ? path : path.slice(0, p
 
 /**
  * @param {Repo} repo
- * @param {readonly Parsed[]} files
- * @returns {Promise<(seeds: ReadonlySet<string>) => (file: string, specifier: string) => string | null>} For a set of repo files, the one a
- * file reaches through a specifier: a seed, or a file that re-exports one at any depth. Null when the specifier reaches none.
+ * @returns {Promise<(file: string, specifier: string) => string | null>} The repo file a file's specifier names, or null.
  */
-async function reachers(repo, files) {
+async function targets(repo) {
   const root = realpathSync(repo.root);
   const resolvers = await projects(root, repo.files("**/tsconfig.json").filter((path) => !path.split("/").includes("node_modules")), sourceFiles(repo));
   /** @type {Map<string, string | null>} */
@@ -45,33 +43,38 @@ async function reachers(repo, files) {
     const relative = found === null || found === "builtin" ? null : posix.relative(root, found);
     return relative === null || relative.startsWith("../") || relative.split("/").includes("node_modules") ? null : relative;
   };
-  /** @type {(file: string, specifier: string) => string | null} */
-  const target = (file, specifier) => {
+  return (file, specifier) => {
     const at = `${file}\0${specifier}`;
     if (!resolved.has(at)) resolved.set(at, resolve(file, specifier));
     return resolved.get(at) ?? null;
   };
-  const barrels = files.map((file) => ({ path: file.path, from: [...new Set(file.exports.filter((item) => item.space === "module").map((item) => moduleOf(item.path)))].map((specifier) => target(file.path, specifier)) }));
-  return (seeds) => {
-    const reached = new Set(seeds);
-    for (let grew = true; grew;) {
-      const before = reached.size;
-      for (const { path, from } of barrels) if (from.some((source) => source !== null && reached.has(source))) reached.add(path);
-      grew = reached.size > before;
-    }
-    return (file, specifier) => {
-      const found = target(file, specifier);
-      return found !== null && reached.has(found) ? found : null;
-    };
-  };
 }
+
+/** @type {(edges: ReadonlyMap<string, readonly (string | null)[]>, seeds: ReadonlyMap<string, string>) => Map<string, string>} Each file that reaches a seed along the edges, at any depth, to what that seed holds. */
+function reach(edges, seeds) {
+  const reached = new Map(seeds);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [path, to] of edges) {
+      const hit = reached.has(path) ? undefined : to.find((next) => next !== null && reached.has(next));
+      if (hit) {
+        reached.set(path, /** @type {string} */ (reached.get(hit)));
+        grew = true;
+      }
+    }
+  }
+  return reached;
+}
+
+/** @type {(use: Parsed["uses"][number]) => string | null} What a use loads data through in the browser. */
+const transport = ({ space, path }) => (space === "global" && (path === "fetch" || path.startsWith("fetch.")) ? "fetch" : null);
 
 /** @type {import("../registry.mjs").Check} */
 export default {
   name: "client-data",
   since: "0.14.13",
   doc: {
-    enforces: "Only a file that `client-data` lists, with its reason, calls `useSWR`, from the app's `src/lib/swr.ts` under any of its names or from swr itself. A `\"use client\"` file that it does not list reads no `fetch` and imports no module that `api-modules` matches, directly or through a re-export. Tests, stories and fixtures are exempt.",
+    enforces: "Only a file that `client-data` lists, with its reason, calls `useSWR`, from the app's `src/lib/swr.ts` under any of its names or from swr itself. A `\"use client\"` file that it does not list reads no `fetch` and imports no module that `api-modules` matches, directly or through modules without a directive. Tests, stories and fixtures are exempt.",
     fix: "Read data in a Server Component and pass it as props, and write through a Server Action, or list the file in `client-data` with why the browser must load it.",
     config: ["client-data", "api-modules"],
   },
@@ -81,32 +84,36 @@ export default {
   async run(repo) {
     const listed = (/** @type {string} */ path) => repo.config.clientData.some((entry) => ("file" in entry ? entry.file === path : path.startsWith(`${entry.app}/`)));
     const files = sourceFacts(repo).flatMap((file) => ("error" in file ? [] : [file]));
-    const reach = await reachers(repo, files);
-    const paths = files.map((file) => file.path);
+    const target = await targets(repo);
     const templates = new Set(dependents(repo, "react").map((app) => posix.join(app, TEMPLATE)));
-    const reachesApi = reach(new Set(paths.filter((path) => repo.config.apiModules.some((glob) => posix.matchesGlob(path, glob)))));
-    const reachesTemplate = reach(templates);
+    const exported = reach(new Map(files.map((file) => [file.path, [...new Set(file.exports.filter((item) => item.space === "module").map((item) => moduleOf(item.path)))].map((specifier) => target(file.path, specifier))])), new Map([...templates].map((path) => [path, path])));
+    const plain = files.filter((file) => !file.client && !file.server && !listed(file.path));
+    const seeds = new Map(plain.flatMap((file) => file.uses.map(transport).filter((what) => what !== null).slice(0, 1).map((what) => [file.path, `${what} in ${file.path}`])));
+    for (const { path } of files) if (repo.config.apiModules.some((glob) => posix.matchesGlob(path, glob))) seeds.set(path, `the API module ${path}`);
+    const loads = reach(new Map(plain.map((file) => [file.path, file.uses.filter((use) => use.space === "module" && use.kind === "import").map((use) => target(file.path, moduleOf(use.path)))])), seeds);
     /** @type {(file: string, path: string) => string | undefined} The hook a module use names: the template's useSWR, by any of its names, or swr's own. */
     const hookOf = (file, path) => {
       if (SWR_HOOK.test(path)) return "useSWR";
       const [name] = path.slice(moduleOf(path).length + 1).split(".");
-      return HOOKS.has(name) && reachesTemplate(file, moduleOf(path)) !== null ? name : undefined;
+      const found = target(file, moduleOf(path));
+      return HOOKS.has(name) && found !== null && exported.has(found) ? name : undefined;
     };
     /** @type {Site[]} */
     const sites = [];
     for (const file of files.filter((item) => !NOT_PRODUCT.test(item.path) && !listed(item.path) && !templates.has(item.path))) {
-      for (const { space, path, kind, line } of file.uses) {
+      for (const use of file.uses) {
+        const { space, path, kind, line } = use;
         const hook = space === "module" && kind !== "type" ? hookOf(file.path, path) : undefined;
         if (hook) {
           sites.push({ file: file.path, key: `${file.path} useSWR`, group: LISTED, line, said: `uses ${hook}`, fix: `and client-data in ${FILE} does not list it. ${LISTED_FIX}` });
         }
         if (!file.client) continue;
-        if (space === "global" && (path === "fetch" || path.startsWith("fetch."))) {
-          sites.push({ file: file.path, key: `${file.path} fetch`, group: CLIENT_FETCH, line, said: "uses fetch", fix: `${BROWSER} ${FETCH_FIX}` });
-        }
+        const what = transport(use);
+        if (what !== null) sites.push({ file: file.path, key: `${file.path} ${what}`, group: CLIENT_FETCH, line, said: `uses ${what}`, fix: `${BROWSER} ${FETCH_FIX}` });
         const specifier = moduleOf(path);
-        const api = space === "module" && kind === "import" ? reachesApi(file.path, specifier) : null;
-        if (api !== null) sites.push({ file: file.path, key: `${file.path} imports ${specifier}`, group: CLIENT_FETCH, line, said: `imports ${specifier}`, fix: `which reaches the API module ${api}, ${BROWSER} ${FETCH_FIX}` });
+        const found = space === "module" && kind === "import" ? target(file.path, specifier) : null;
+        const reached = found === null ? undefined : loads.get(found);
+        if (reached) sites.push({ file: file.path, key: `${file.path} imports ${specifier}`, group: CLIENT_FETCH, line, said: `imports ${specifier}`, fix: `which reaches ${reached}, ${BROWSER} ${FETCH_FIX}` });
       }
     }
     return [...Map.groupBy(sites, (site) => site.key)].map(([key, [first, ...rest]]) => {
