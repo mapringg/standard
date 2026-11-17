@@ -67,7 +67,7 @@ const TEST_CACHE = /** @type {BannedRule} */ ({
   space: "module",
   paths: ["*#SWRTestCache", "*#ServerDataTestCache", "*#SwrScope"],
   files: [],
-  except: NOT_PRODUCT,
+  except: [],
   fix: "SWRTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useSWR from src/lib/swr.ts on the global cache when the data must load in the client.",
 });
 
@@ -186,11 +186,14 @@ export default {
   retired: ["no-process-env", "no-bare-json-parse", "no-module-mocking", "no-manual-memo"].flatMap((rule) => [`packages/oxlint-plugin-*/rules/${rule}.ts`, `packages/oxlint-plugin-*/rules/${rule}.test.ts`]),
   applies: () => ({ on: true }),
   run(repo) {
-    const rules = [...BUILT_IN, ...repo.config.banned];
     const wrappers = new Set([...repo.config.effectWrappers.map((wrapper) => wrapper.file), ...reactApps(repo).map((app) => posix.join(app, TIMER))]);
-    const product = [...BUILT_IN, EFFECTS, ...repo.config.banned];
-    const rules = [...BUILT_IN, TEST_CACHE, ...repo.config.banned];
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
-    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : (NOT_PRODUCT.test(file.path) || wrappers.has(file.path) ? findings(file, rules, true) : findings(file, product, false))))];
+    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => {
+      if ("error" in file) return [parseError(file)];
+      const test = NOT_PRODUCT.test(file.path);
+      const exempt = test || wrappers.has(file.path);
+      const rules = [...BUILT_IN, ...(test ? [] : [TEST_CACHE]), ...(exempt ? [] : [EFFECTS]), ...repo.config.banned];
+      return findings(file, rules, exempt);
+    })];
   },
 };

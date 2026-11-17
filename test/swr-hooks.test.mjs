@@ -91,3 +91,17 @@ test("useSWRInfinite returns swr's size and setSize", async (t) => {
   await settle(() => result.current.data?.length === 2);
   assert.deepEqual({ size: result.current.size, requests: api.requests }, { size: 2, requests: [["item", 0], ["item", 0], ["item", 1]] });
 });
+
+test("a client-only item seeded with fallbackData null loads until the mount request answers", async (t) => {
+  const requests = [];
+  let answer;
+  const load = (key) => {
+    requests.push(key);
+    return new Promise((resolve) => (answer = resolve));
+  };
+  const result = await mount(t, () => useSWR(["item", "a"], load, { fallbackData: null }));
+  await settle(() => requests.length > 0);
+  assert.deepEqual({ requests, data: result.current.data, validating: result.current.isValidating }, { requests: [["item", "a"]], data: null, validating: true });
+  await act(async () => answer({ id: "a", name: "fetched a" }));
+  assert.deepEqual({ data: result.current.data, validating: result.current.isValidating }, { data: { id: "a", name: "fetched a" }, validating: false });
+});
