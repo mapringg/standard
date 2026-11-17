@@ -8,7 +8,9 @@ import { git, standard, tempRepo, write } from "./helpers.mjs";
 const APPS = {
   "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } },
   "apps/web/tsconfig.json": { compilerOptions: { module: "esnext", moduleResolution: "bundler", paths: { "@/*": ["./src/*"] } } },
-  "apps/web/src/lib/swr.ts": '"use client";\nexport function useServerData() {}\nexport function useServerDataPages() {}\n',
+  "apps/web/src/lib/swr.ts": '"use client";\nimport useSWRBase from "swr";\nexport function useSWR() {\n  return useSWRBase();\n}\nexport function useSWRInfinite() {}\nexport const useServerSeeded = useSWR;\n',
+  "apps/web/src/lib/index.ts": 'export * from "./swr";\n',
+  "apps/web/src/hooks/local.ts": "export function useSWR() {}\n",
   "apps/web/src/api/users.ts": 'export const getUser = () => fetch("/users/1");\nexport type User = { id: string };\n',
   "apps/web/src/data/index.ts": 'export * from "../api/users";\n',
   "apps/web/src/data/named.ts": 'export { getUser as loadUser } from "@/api/users";\n',
@@ -45,28 +47,33 @@ function passes(t, config, files) {
   assert.deepEqual({ stdout, stderr, status }, { stdout: "client-data: OK\n", stderr: "", status: 0 });
 }
 
-const useData = (from = "@/lib/swr") => `"use client";\nimport { useServerData } from "${from}";\nexport const View = () => useServerData(["user"], load, { fallbackData: null });\n`;
+const useData = (from = "@/lib/swr") => `"use client";\nimport { useSWR } from "${from}";\nexport const View = () => useSWR(["user"], load, { fallbackData: null });\n`;
 
-test("client-data fails useServerData, or its former name useServerSeeded, in a file client-data does not list, and passes useServerDataPages and tests", (t) => {
+test("client-data fails the template's useSWR, or its former name, through any import or a re-export, and swr's own useSWR, in a file client-data does not list", (t) => {
   fails(
     t,
     API,
     {
       "apps/web/src/feed.tsx": useData(),
-      "apps/web/src/bound.tsx": '"use client";\nimport * as Data from "../lib/swr";\nconst read = Data.useServerData;\nexport const View = () => read(["user"], load);\n',
-      "apps/web/src/seeded.tsx": '"use client";\nimport { useServerSeeded, useServerSeededInfinite } from "@/lib/swr";\nexport const View = () => [useServerSeeded(["user"], load), useServerSeededInfinite(["feed"], load)];\n',
-      "apps/web/src/pages.tsx": '"use client";\nimport { useServerDataPages } from "@/lib/swr";\nexport const View = () => useServerDataPages(["feed"], load);\n',
+      "apps/web/src/bound.tsx": '"use client";\nimport * as Data from "./lib/swr";\nconst read = Data.useSWR;\nexport const View = () => read(["user"], load);\n',
+      "apps/web/src/seeded.tsx": '"use client";\nimport { useServerSeeded } from "@/lib/swr";\nexport const View = () => useServerSeeded(["user"], load);\n',
+      "apps/web/src/barrel.tsx": useData("@/lib"),
+      "apps/web/src/direct.tsx": '"use client";\nimport useSWR from "swr";\nexport const View = () => useSWR(["user"], load);\n',
+      "apps/web/src/pages.tsx": '"use client";\nimport { useSWRInfinite } from "@/lib/swr";\nexport const View = () => useSWRInfinite(["feed"], load);\n',
+      "apps/web/src/local.tsx": '"use client";\nimport { useSWR } from "@/hooks/local";\nexport const View = () => useSWR();\n',
       "apps/web/src/feed.test.tsx": useData(),
       "apps/web/src/feed.stories.tsx": useData(),
       "apps/web/src/__fixtures__/feed.tsx": useData(),
     },
-    `apps/web/src/bound.tsx uses useServerData on lines 3, 4, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
-    `apps/web/src/feed.tsx uses useServerData on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/barrel.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/bound.tsx uses useSWR on lines 3, 4, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/direct.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/feed.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
     `apps/web/src/seeded.tsx uses useServerSeeded on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
   );
 });
 
-test("client-data passes useServerData in a file listed with each reason", (t) => {
+test("client-data passes useSWR in a file listed with each reason", (t) => {
   const reasons = ["pages", "live", "client-state", "unreachable"];
   passes(
     t,
@@ -138,7 +145,7 @@ test("client-data passes a listed file that fetches, and a whole app listed as u
     t,
     { ...API, "client-data": [{ file: "apps/web/src/save.tsx", reason: "live" }, { app: "apps/admin", reason: "unreachable" }] },
     {
-      "apps/web/src/save.tsx": `${CLIENT_FETCH}import { useServerData } from "@/lib/swr";\nexport const View = () => useServerData(["user"], getUser);\n`,
+      "apps/web/src/save.tsx": `${CLIENT_FETCH}import { useSWR } from "@/lib/swr";\nexport const View = () => useSWR(["user"], getUser);\n`,
       "apps/admin/package.json": { dependencies: { vite: "8.0.0", react: "19.0.0" } },
       "apps/admin/src/session.tsx": useData("./lib/swr"),
       "apps/admin/src/save.tsx": '"use client";\nexport const save = () => fetch("/a");\n',
@@ -155,12 +162,12 @@ test("client-data passes a listed file that fetches, and a whole app listed as u
 test("client-data keeps a baseline that records today's sites and fails a new one", (t) => {
   const cwd = repoWith(t, API, { "apps/web/src/feed.tsx": useData() });
   assert.equal(standard(cwd, ["check", "client-data", "--init"]).status, 0);
-  assert.deepEqual(JSON.parse(readFileSync(join(cwd, ".standard/baselines/client-data.json"), "utf8")), { "client-data/listed": ["apps/web/src/feed.tsx useServerData"] });
+  assert.deepEqual(JSON.parse(readFileSync(join(cwd, ".standard/baselines/client-data.json"), "utf8")), { "client-data/listed": ["apps/web/src/feed.tsx useSWR"] });
   assert.equal(standard(cwd, ["check", "client-data"]).stdout, "client-data: OK\n");
   write(cwd, { "apps/web/src/other.tsx": useData() });
   git(cwd, "add", "-A");
   const { stdout, status } = standard(cwd, ["check", "client-data"]);
-  assert.match(stdout, /^client-data: 1 new findings\.\n {2}apps\/web\/src\/other\.tsx uses useServerData on lines 2, 3,/);
+  assert.match(stdout, /^client-data: 1 new findings\.\n {2}apps\/web\/src\/other\.tsx uses useSWR on lines 2, 3,/);
   assert.equal(status, 1);
   const grown = standard(cwd, ["check", "client-data", "--write"]);
   assert.match(grown.stdout, /--write only re-keys findings that moved, and 2 findings would grow \.standard\/baselines\/client-data\.json past its 1 entries\./);
