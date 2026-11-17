@@ -240,10 +240,32 @@ function normalizeUnit(unit) {
 }
 
 /**
+ * @param {Node | null | undefined} node
+ * @returns {boolean} Whether a parameter only binds names, so it runs no code before the body: no computed keys and no defaults other than literals.
+ */
+function isPlainPattern(node) {
+  while (node && TYPE_WRAPPERS.has(node.type)) node = node.expression;
+  if (!node) return true;
+  if (node.type === "TSParameterProperty") return isPlainPattern(node.parameter);
+  if (node.type === "Identifier") return true;
+  if (node.type === "RestElement") return isPlainPattern(node.argument);
+  if (node.type === "AssignmentPattern") return node.right?.type === "Literal" && isPlainPattern(node.left);
+  if (node.type === "ArrayPattern") return node.elements.every(isPlainPattern);
+  if (node.type === "ObjectPattern") {
+    return node.properties.every(
+      (/** @type {Node} */ property) =>
+        property.type === "RestElement" ? isPlainPattern(property) : !property.computed && isPlainPattern(property.value),
+    );
+  }
+  return false;
+}
+
+/**
  * @param {Node} fn
  * @returns {boolean} Whether the body is one call that only passes parameters, member reads on them and literals, such as an event-to-action adapter.
  */
 function isForwarder(fn) {
+  if (!fn.params.every(isPlainPattern)) return false;
   /** @type {string[]} */
   const params = [];
   for (const param of fn.params) patternNames(param, params);
@@ -252,14 +274,20 @@ function isForwarder(fn) {
     while (node && TYPE_WRAPPERS.has(node.type)) node = node.expression;
     return node;
   };
-  const isCallee = (/** @type {Node | undefined} */ node) =>
+  /** @type {(node: Node | null | undefined) => boolean} */
+  const isCallee = (node) =>
     node?.type === "Identifier" ||
     (node?.type === "MemberExpression" && !node.computed && isCallee(unwrap(node.object)));
   /** @type {(node: Node | null | undefined) => boolean} */
-  const isForwarded = (node) => {
+  const isParamRead = (node) => {
     node = unwrap(node);
     if (node?.type === "Identifier") return names.has(node.name);
-    if (node?.type === "MemberExpression") return !node.computed && !node.optional && isForwarded(node.object);
+    return node?.type === "MemberExpression" && !node.computed && !node.optional && isParamRead(node.object);
+  };
+  /** @type {(node: Node | null | undefined) => boolean} */
+  const isForwarded = (node) => {
+    node = unwrap(node);
+    if (node?.type === "Identifier" || node?.type === "MemberExpression") return isParamRead(node);
     if (node?.type === "Literal") return true;
     if (node?.type === "ArrayExpression") return node.elements.every(isForwarded);
     if (node?.type === "ObjectExpression") {

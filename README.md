@@ -112,7 +112,7 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | --- | --- |
 | Unit | A function body or a conditional expression with 8 or more AST nodes. |
 | Same | Two units match once types are dropped and the names each unit declares are renamed in order. Literals, property names and names from outside the unit must be equal. |
-| Adapter | A function whose body is one call that passes only its parameters, non-computed member reads on them such as `event.target.value`, literals, and arrays or objects of those, such as `(event) => dispatch({ type: "search", query: event.target.value })`, is never a unit. A computed callee or member such as `pick(open).dispatch(...)` or `event.target[field]`, a call in an argument, or a name from outside the function keeps it a unit. |
+| Adapter | A function whose body is one call that passes only its parameters, non-computed member reads on them such as `event.target.value`, literals, and arrays or objects of those, such as `(event) => dispatch({ type: "search", query: event.target.value })`, is never a unit. A computed callee or member such as `pick(open).dispatch(...)` or `event.target[field]`, a call in an argument, a name from outside the function in an argument, or a parameter with a computed key or a non-literal default keeps it a unit. |
 | Nesting | A copy inside a larger reported copy is not reported again. |
 | Finding | Each copy is one finding, named by the file and the symbol path, such as `src/form.tsx#Form>submit`, with `@2` on the second copy that shares a path. Its fix names the other copies with their lines. |
 
