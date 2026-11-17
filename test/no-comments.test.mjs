@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { git, standard, tempRepo, write } from "./helpers.mjs";
 
 const COMMENT = "Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in docs/*.md or apps/*/docs/*.md and point at it alone on a line with // See: <path>.md#<heading>.";
+const LICENSE = "Keep only a leading `SPDX-License-Identifier: <expression>` line, whose expression names SPDX license ids such as `MIT` or `Apache-2.0 OR MIT`. If this is third-party code that must keep its copyright or notice, mark its path `linguist-vendored` in `.gitattributes`.";
 
 function check(t, files) {
   const cwd = tempRepo(t, {});
@@ -143,6 +144,7 @@ test("no-comments passes a leading license tag that names a license expression a
     "src/spdx.ts": "// SPDX-License-Identifier: MIT\nexport const a = 1;\n",
     "src/spdx-block.ts": "/* SPDX-License-Identifier: Apache-2.0 OR MIT */\nexport const a = 1;\n",
     "src/tag.js": "/**\n * @license MIT\n */\nexport const a = 1;\n",
+    "src/expression.ts": "// SPDX-License-Identifier: (MIT AND BSD-3-Clause) OR GPL-2.0-only WITH Classpath-exception-2.0\nexport const a = 1;\n",
     "vendor/mit.ts": `${block(MIT)}\nexport const a = 1;\n`,
     "vendor/util.js": "// Reads the cache before the network.\nexport const a = 1;\n",
     "src/third-party.js": `// SPDX-License-Identifier: Apache-2.0\n${slashes(APACHE)}\nexport const a = 1;\n`,
@@ -161,17 +163,25 @@ test("no-comments fails a copyright line or license notice in the repository's o
       "src/f.ts": "// SPDX-License-Identifier: MIT -- reads the cache first\nexport const f = 1;\n",
       "src/g.ts": "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Someone: Explain the implementation.\nexport const g = 1;\n",
       "src/h.ts": "// SPDX-License-Identifier: MIT\n// SPDX-FileCopyrightText: 2024-2026 The Regents of the University of California\nexport const h = 1;\n",
-      "src/i.ts": "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Someone (Explain the implementation.)\nexport const i = 1;\n",
+      "src/i.ts": "// SPDX-License-Identifier: Cache OR clear OR parsed OR trees.\nexport const i = 1;\n",
+      "src/j.ts": "// SPDX-License-Identifier: MIT WITH (Explain-the-implementation.)\nexport const j = 1;\n",
+      "src/k.ts": "/** @license Explain-the-implementation. */\nexport const k = 1;\n",
+      "src/l.ts": "// SPDX-License-Identifier: LicenseRef-Cache-the-parsed-tree-per-file\nexport const l = 1;\n",
+      "src/m.ts": "// SPDX-License-Identifier: MIT WITH Apache-2.0\nexport const m = 1;\n",
     },
-    `src/a.ts comment: src/a.ts has a comment on line 2. ${COMMENT}`,
+    `src/a.ts license: src/a.ts has a comment on line 2. ${LICENSE}`,
     `src/b.ts comment: src/b.ts has a comment on line 3. ${COMMENT}`,
     `src/c.ts comment: src/c.ts has a comment on line 2. ${COMMENT}`,
-    `src/d.ts comment: src/d.ts has a comment on line 1. ${COMMENT}`,
-    `src/e.ts comment: src/e.ts has a comment on line 1. ${COMMENT}`,
-    `src/f.ts comment: src/f.ts has a comment on line 1. ${COMMENT}`,
-    `src/g.ts comment: src/g.ts has a comment on line 2. ${COMMENT}`,
-    `src/h.ts comment: src/h.ts has a comment on line 2. ${COMMENT}`,
-    `src/i.ts comment: src/i.ts has a comment on line 2. ${COMMENT}`,
+    `src/d.ts license: src/d.ts has a comment on line 1. ${LICENSE}`,
+    `src/e.ts license: src/e.ts has a comment on line 1. ${LICENSE}`,
+    `src/f.ts license: src/f.ts has a comment on line 1. ${LICENSE}`,
+    `src/g.ts license: src/g.ts has a comment on line 2. ${LICENSE}`,
+    `src/h.ts license: src/h.ts has a comment on line 2. ${LICENSE}`,
+    `src/i.ts license: src/i.ts has a comment on line 1. ${LICENSE}`,
+    `src/j.ts license: src/j.ts has a comment on line 1. ${LICENSE}`,
+    `src/k.ts license: src/k.ts has a comment on line 1. ${LICENSE}`,
+    `src/l.ts license: src/l.ts has a comment on line 1. ${LICENSE}`,
+    `src/m.ts license: src/m.ts has a comment on line 1. ${LICENSE}`,
   );
 });
 
