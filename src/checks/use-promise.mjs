@@ -95,10 +95,19 @@ function holds(test, name) {
   return sides.some((side) => side.type === "Identifier" && side.name === name) && sides.some((side) => (side.type === "Literal" && side.value === null) || (side.type === "Identifier" && side.name === "undefined"));
 }
 
+/** @type {(test: Node, a: string, b: string) => boolean} Whether a test is `a === b` or `b === a`. */
+function same(test, a, b) {
+  const value = unwrap(test);
+  if (value.type !== "BinaryExpression" || value.operator !== "===") return false;
+  const sides = [unwrap(value.left), unwrap(value.right)].map((side) => (side.type === "Identifier" ? side.name : null));
+  return (sides[0] === a && sides[1] === b) || (sides[0] === b && sides[1] === a);
+}
+
 /**
  * @type {(fn: Node, top: Map<string, Binding>, writes: Map<string, Set<Node>>) => boolean} Whether a function returns only a promise it keeps
  *   in a module-level binding and reuses: the binding its first statement returns when set, one it only sets with `??=` or `||=`, or one it
- *   never sets. No other assignment in the module, nested callbacks included, may set that binding.
+ *   never sets. No other assignment in the module, nested callbacks included, may set that binding, except a rejection handler of the
+ *   stored promise that clears it only while it still holds that promise, so a failed load can retry.
  */
 function keeps(fn, top, writes) {
   /** @type {Set<string>} */
@@ -111,12 +120,22 @@ function keeps(fn, top, writes) {
   const assigned = new Map();
   /** @type {Set<Node>} */
   const mine = new Set();
+  /** @type {Set<string>} */
+  const constants = new Set();
+  /** @type {[string, Node][]} Each rejection handler the function attaches to a local, as [local, handler]. */
+  const handlers = [];
   /** @type {(node: unknown) => void} */
   const walk = (node) => {
     if (Array.isArray(node)) return node.forEach(walk);
     const value = /** @type {Node | null} */ (node);
     if (typeof value?.type !== "string" || FUNCTIONS.has(value.type) || value.type === "ClassDeclaration") return;
     if (value.type === "VariableDeclarator") namesOf(value.id).forEach((name) => own.add(name));
+    if (value.type === "VariableDeclaration" && value.kind === "const") value.declarations.forEach((/** @type {Node} */ item) => item.id.type === "Identifier" && constants.add(item.id.name));
+    const callee = value.type === "CallExpression" ? unwrap(value.callee) : null;
+    if (callee?.type === "MemberExpression" && !callee.computed && unwrap(callee.object).type === "Identifier") {
+      const handler = callee.property.name === "catch" ? value.arguments[0] : callee.property.name === "then" ? value.arguments[1] : null;
+      if (handler && FUNCTIONS.has(unwrap(handler).type)) handlers.push([unwrap(callee.object).name, unwrap(handler)]);
+    }
     if (value.type === "ReturnStatement") returned.push(value.argument);
     if (value.type === "AssignmentExpression" && value.left.type === "Identifier") {
       mine.add(value);
@@ -132,9 +151,22 @@ function keeps(fn, top, writes) {
   const guarded = back?.type === "Identifier" && holds(first.test, back.name) ? back.name : null;
   /** @type {(name: string) => boolean} */
   const module = (name) => !own.has(name) && top.get(name)?.kind === "local";
+  /** @type {Set<Node>} Each `if (load === next) load = undefined;` in a rejection handler of the constant `next` stored in the guarded `load`. */
+  const clears = new Set(handlers.flatMap(([local, handler]) => {
+    const names = new Set(handler.params.flatMap(namesOf));
+    if (!guarded || !constants.has(local) || !stored.some(([name, held]) => name === guarded && held === local) || names.has(guarded) || names.has(local) || handler.body.type !== "BlockStatement") return [];
+    return handler.body.body.flatMap((/** @type {Node} */ statement) => {
+      if (statement.type !== "IfStatement" || statement.alternate || !same(statement.test, guarded, local)) return [];
+      const only = statement.consequent.type === "BlockStatement" && statement.consequent.body.length === 1 ? statement.consequent.body[0] : statement.consequent;
+      const clear = only.type === "ExpressionStatement" ? unwrap(only.expression) : null;
+      if (clear?.type !== "AssignmentExpression" || clear.operator !== "=" || clear.left.type !== "Identifier" || clear.left.name !== guarded) return [];
+      const empty = unwrap(clear.right);
+      return (empty.type === "Literal" && empty.value === null) || (empty.type === "Identifier" && empty.name === "undefined") ? [clear] : [];
+    });
+  }));
   /** @type {(name: string) => boolean} */
   const kept = (name) => {
-    const all = [...(writes.get(name) ?? [])];
+    const all = [...(writes.get(name) ?? [])].filter((node) => !clears.has(node));
     if (!module(name) || !all.every((node) => mine.has(node))) return false;
     return name === guarded ? all.length <= 1 : (assigned.get(name) ?? []).every((operator) => operator === "??=" || operator === "||=");
   };
