@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -120,6 +120,28 @@ test("duplicates still finds a one-call function that computes its arguments or 
   assert.deepEqual(
     keys,
     Object.keys(logic).flatMap((name) => [`src/a.ts#a${name}`]).concat(Object.keys(logic).map((name) => `src/b.ts#b${name}`)),
+  );
+  assert.equal(status, 1);
+});
+
+test("duplicates skips each React app's copies of the package templates, and still scans the same code elsewhere", (t) => {
+  const template = readFileSync(new URL("../templates/swr.ts", import.meta.url), "utf8");
+  const timer = readFileSync(new URL("../templates/timer.ts", import.meta.url), "utf8");
+  const { stdout, status } = duplicates(
+    repoWith(t, {
+      "apps/web/package.json": JSON.stringify({ dependencies: { next: "16.0.0", react: "19.0.0" } }),
+      "apps/web/src/lib/swr.ts": template,
+      "apps/web/src/lib/timer.ts": timer,
+      "apps/liff/package.json": JSON.stringify({ dependencies: { react: "19.0.0" }, devDependencies: { vite: "8.0.0" } }),
+      "apps/liff/src/lib/swr.ts": template,
+      "apps/liff/src/lib/timer.ts": timer,
+      "src/a.ts": TOTAL,
+      "src/b.ts": TOTAL,
+    }),
+  );
+  assert.deepEqual(
+    stdout.split("\n").filter(Boolean).map((line) => line.split(": ")[1]),
+    ["src/a.ts#total", "src/b.ts#total"],
   );
   assert.equal(status, 1);
 });
