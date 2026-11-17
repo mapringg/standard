@@ -350,6 +350,11 @@ A module that imports an API module counts as one, so a client file that imports
 
 The check follows locals back to the expression that set them. A call or `new` that is not one of those is a promise the render creates, and it fails. A value that the check cannot trace also fails, such as an import from a module the check cannot resolve or a value that a barrel re-exports. It fails closed because a promise made during render suspends forever, and the fix says how to make the origin readable. Server files, tests, stories and fixtures pass.
 
+Known limits:
+
+- The check reads only files with `"use client"`. A file without the directive that only client files import still runs on the client, but the check does not read it, so `use(fetchUser(id))` there passes.
+- The check trusts an exported component's props. A client parent in another file that creates the promise and passes it as a prop is not caught.
+
 ```json
 { "cached-modules": ["apps/web/src/lib/cached/**"] }
 ```
