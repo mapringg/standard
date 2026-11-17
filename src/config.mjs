@@ -13,6 +13,7 @@ import { parseDocument } from "yaml";
  * @property {readonly EffectWrapper[]} effectWrappers The `effect-wrappers` list: files that may call React's effect hooks, each with why.
  * @property {readonly ClientData[]} clientData The `client-data` list: files, or whole apps, that may load data in the browser, each with why.
  * @property {readonly string[]} apiModules Globs of the app's API modules, which a `"use client"` file may not import.
+ * @property {readonly string[]} cachedModules Globs of the modules whose functions return a cached promise, which React's `use` may read.
  *
  * @typedef {object} Boundaries
  * @property {readonly ModuleRule[]} modules
@@ -309,7 +310,7 @@ export function parseConfig(text) {
     const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
     throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
-  const top = section(raw, "", ["api-modules", "banned", "boundaries", "client-data", "effect-wrappers", "hooks", "pending", "pr"]);
+  const top = section(raw, "", ["api-modules", "banned", "boundaries", "cached-modules", "client-data", "effect-wrappers", "hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
   return Object.freeze({
     hooks: Object.freeze({
@@ -323,6 +324,7 @@ export function parseConfig(text) {
     effectWrappers: effectWrappers(top["effect-wrappers"] ?? []),
     clientData: clientData(top["client-data"] ?? []),
     apiModules: strings(top["api-modules"] ?? [], `${FILE} api-modules`),
+    cachedModules: strings(top["cached-modules"] ?? [], `${FILE} cached-modules`),
   });
 }
 
