@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.9.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.10.0" }
 }
 ```
 
@@ -99,11 +99,35 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Config | TypeScript reports an error for the config itself, such as an `extends` target it cannot find. The finding quotes it. |
 | Base | TypeScript never loads `config/tsconfig.json` of `@mapringg/standard` for the project. |
 | Flags | The project's effective value of a base `compilerOptions` flag differs from the base. A project that inherits the problem from another project is not reported again. |
-| Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a project has none, which `turbo run typecheck` would skip. |
+| Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a project has none, which `turbo run typecheck` would skip. A script that is empty, `true`, `:`, `exit 0` or an `echo` counts as none, since it checks nothing. |
 | Hooks | No `hooks.pre-push` line is exactly `pnpm typecheck` or `pnpm run typecheck`. Anything before or after it, even `&&`, could skip it or hide its failure, so a chain goes on its own lines. |
-| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft, but not a constant false such as `false`, `0`, `''` or `${{ false }}`, which GitHub never runs. When the `ci` probe finds no Check job, this rule stays quiet. |
 
-Like `wiring`, `dead-code`, `duplicates` and `typecheck` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+`tests` checks that the repository's test command runs before a push and in CI. A test file is a tracked `*.test.*` or `*.spec.*` file with a `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.mjs` or `.cjs` extension. It does not apply when git tracks no `package.json`.
+
+| Rule | Fails when |
+| --- | --- |
+| Script | The root `package.json` has no `test` script. A script that is empty, `true`, `:`, `exit 0` or an `echo` counts as none, since it runs no test. |
+| Packages | The `package.json` nearest a test file has no `test` script, so `turbo run test` skips that package. The fix names one test file it would never run. |
+| Hooks | No `hooks.pre-push` line is exactly `pnpm test` or `pnpm run test`, so nothing in the line can swallow a failure. `pnpm test:visual`, `pnpm turbo run test` and `pnpm lint && pnpm test` do not count. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`, but not a constant false. When the `ci` probe finds no Check job, this rule stays quiet. |
+
+`pr-tests` fails a pull request that adds logic to a package's source and adds no test to that same package. It diffs the head against the merge base of the base and head, reads both sides from git, and parses each changed file.
+
+| Rule | What it means |
+| --- | --- |
+| Source | A `.ts`, `.tsx`, `.mts` or `.cts` file under a `src/` folder, except `.d.ts`, test files, `*.stories.*`, `*.gen.*`, and anything under a `test/`, `tests/`, `__tests__/` or `generated/` folder. |
+| Test | A test file, as `tests` defines it, anywhere. Each `it` or `test` call whose callback has a body is one test, at the top level or inside a `describe` or `suite` callback. `.each(...)`, `.concurrent` and `.sequential` may follow the name. A call marked `.skip`, `.todo`, `.only`, `.fails`, `.skipIf` or `.runIf`, an `xit`, `xtest`, `xdescribe`, `fit` or `fdescribe`, and a call with a `skip`, `todo` or `only` option are not tests, and neither is anything inside them. |
+| Package | The folder of the nearest `package.json` that git tracks at the head, `.` for the root. |
+| Logic | A top-level statement, with `export` unwrapped, as the JavaScript it emits. Positions, comments, types, casts and the modifiers TypeScript erases, such as an optional parameter's `?`, `abstract`, `readonly`, `override` and `private`, are dropped. Decorators, enums, parameter properties and namespaces that hold code stay. Imports, re-exports, type-only statements, `declare` statements and fields, overloads, abstract members and inert data are not logic. Inert data is a variable or `export default` built only from literals, names, templates, arrays, objects with plain or literal keys, and `as const`, such as a table of reviews that names an imported photo. A property read, a spread, a call or a `delete` can run code, so it is logic. |
+| Adds | Each package sums its changed files, deleted and renamed ones included. The head's statements count up and the merge base's count down, and a statement with a positive total is added, so each extra copy of a statement counts. Deleting code, dropping an `export` keyword, changing imports, types, comments or formatting, renaming a file and moving code between files of one package add nothing. Moving code into another package adds it there. Tests count the same way, so a moved or renamed test adds none, and editing a test's name or body adds one. A source that does not parse adds logic; a test that does not parse adds none. |
+| Finding | Each package that adds logic and no test is one finding, named by the package folder. Its fix names the sources that hold the added logic and a co-located test name, such as `apps/api/src/a.test.ts`. |
+
+Neither check measures coverage; `pr-tests` asks only that a test changed beside the logic.
+
+Like `wiring`, `dead-code`, `duplicates`, `typecheck` and `tests` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+
+To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bumps the pin to 0.10.0, fix what `pnpm exec standard check tests` prints, then remove `tests` from `pending`. Remove `pr-tests` once the team is ready for every pull request that adds logic to carry a test.
 
 ## Shared configs
 

@@ -47,6 +47,7 @@ function failsToRead(t, files, path, diagnostic) {
   assert.equal(status, 1);
 }
 
+const ROOT_SCRIPT = 'package.json scripts.typecheck: Add a typecheck script that runs the typecheck, such as "turbo run typecheck", to package.json, so CI and pre-push have one command to run.';
 const PRESET = { extends: BASE };
 
 for (const compiler of [7, 6]) {
@@ -161,16 +162,32 @@ test("typecheck wants a typecheck script at the root and in each project's packa
       "apps/web/src/tsconfig.json": { extends: "../tsconfig.json" },
       "apps/web/src/index.ts": "export const value = 1;\n",
     },
-    'package.json scripts.typecheck: Add a typecheck script such as "turbo run typecheck" to package.json, so CI and pre-push have one command to run.',
-    'apps/web/package.json scripts.typecheck: Add a typecheck script such as "tsc --noEmit" to apps/web/package.json, so the root typecheck covers apps/web/src/tsconfig.json.',
+    ROOT_SCRIPT,
+    'apps/web/package.json scripts.typecheck: Add a typecheck script that runs the typecheck, such as "tsc --noEmit", to apps/web/package.json, so the root typecheck covers apps/web/src/tsconfig.json.',
   );
+});
+
+test("typecheck does not count a typecheck script that exits at once", (t) => {
+  for (const script of ["true", " exit 0 ", "echo hi", ":", ""]) {
+    fails(
+      t,
+      {
+        "package.json": { ...CLEAN["package.json"], scripts: { ...CLEAN["package.json"].scripts, typecheck: script } },
+        "apps/web/tsconfig.json": { extends: BASE },
+        "apps/web/package.json": { name: "web", scripts: { typecheck: script } },
+        "apps/web/src/index.ts": "export const value = 1;\n",
+      },
+      ROOT_SCRIPT,
+      'apps/web/package.json scripts.typecheck: Add a typecheck script that runs the typecheck, such as "tsc --noEmit", to apps/web/package.json, so the root typecheck covers apps/web/tsconfig.json.',
+    );
+  }
 });
 
 test("typecheck wants a typecheck script for a package whose only project is a named tsconfig", (t) => {
   fails(
     t,
     { "packages/tools/package.json": { name: "tools" }, "packages/tools/tsconfig.editor.json": { extends: BASE, include: ["../../src"] } },
-    'packages/tools/package.json scripts.typecheck: Add a typecheck script such as "tsc --noEmit -p tsconfig.editor.json" to packages/tools/package.json, so the root typecheck covers packages/tools/tsconfig.editor.json.',
+    'packages/tools/package.json scripts.typecheck: Add a typecheck script that runs the typecheck, such as "tsc --noEmit -p tsconfig.editor.json", to packages/tools/package.json, so the root typecheck covers packages/tools/tsconfig.editor.json.',
   );
 });
 
@@ -197,6 +214,13 @@ test("typecheck wants a Check job step whose run is exactly the typecheck comman
     "      - run: pnpm typecheck\n        continue-on-error: true\n",
   ]) {
     fails(t, ci(step), miss);
+  }
+});
+
+test("typecheck does not count a Check job step whose if is constant false", (t) => {
+  const miss = 'ci: Add a step to the Check job whose run is "pnpm typecheck", with no continue-on-error, so a pull request that fails typecheck cannot merge.';
+  for (const condition of ["false", "${{ false }}", "''"]) {
+    fails(t, { ".github/workflows/ci.yml": `${WIRED[".github/workflows/ci.yml"]}      - if: ${condition}\n        run: pnpm typecheck\n` }, miss);
   }
 });
 

@@ -390,6 +390,8 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "dead-code: OK",
       "duplicates: skipped, git tracks no TypeScript source to scan",
       "typecheck: skipped, git tracks no tsconfig.json",
+      "tests: OK",
+      "pr-tests: OK (#123)",
     ].join("\n"),
   );
   assert.equal(status, 0);

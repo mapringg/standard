@@ -245,17 +245,38 @@ function workflowMiss(path, text) {
 
 /**
  * Like the standard check step, the whole text must be the command, so nothing before it can exit or swallow its failure.
- * @param {string} text
- * @returns {boolean}
+ * @param {"typecheck" | "test"} script
+ * @returns {(text: string) => boolean} Whether a line is exactly pnpm <script> or pnpm run <script>.
  */
-export function runsTypecheck(text) {
-  return /^pnpm (?:run )?typecheck$/.test(text.trim());
+export function runsScript(script) {
+  return (text) => new RegExp(`^pnpm (?:run )?${script}$`).test(text.trim());
+}
+
+/**
+ * @param {unknown} value A package.json script.
+ * @returns {boolean} Whether it is a string that does more than exit 0 at once.
+ */
+export function isRealScript(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return !["", "true", ":", "exit 0"].includes(text) && !/^echo(?:\s|$)/.test(text);
+}
+
+/**
+ * @param {unknown} condition A step's if.
+ * @returns {boolean} Whether the condition is a constant that GitHub reads as false.
+ */
+function neverRuns(condition) {
+  if (condition === false || condition === 0) return true;
+  if (typeof condition !== "string") return false;
+  const bare = condition.trim().replace(/^\$\{\{([\s\S]*)\}\}$/, "$1").trim();
+  return ["", "false", "0", "''", '""'].includes(bare);
 }
 
 /**
  * @param {Repo} repo
- * @returns {string[]} The run scripts of the steps without continue-on-error or shell in every Check job the ci probe accepts.
- * An if may skip a step on a draft or an already green commit, so only continue-on-error hides a failure.
+ * @returns {string[]} The run scripts of the steps without continue-on-error, shell or a constant false if in every Check job the ci probe accepts.
+ * Any other if may skip a step on a draft or an already green commit, so it stays allowed.
  */
 export function checkJobScripts(repo) {
   const workflows = repo.files(".github/workflows/*").filter((path) => /\.ya?ml$/.test(path));
@@ -266,7 +287,9 @@ export function checkJobScripts(repo) {
       const job = record(value) ?? {};
       if ((job.name ?? id) !== "Check" || checkJobMiss(path, id, job) !== null) return [];
       const steps = Array.isArray(job.steps) ? job.steps.map(record) : [];
-      return steps.flatMap((step) => (step !== null && !("continue-on-error" in step) && !("shell" in step) && typeof step.run === "string" ? [step.run] : []));
+      return steps.flatMap((step) =>
+        step !== null && !("continue-on-error" in step) && !("shell" in step) && !neverRuns(step.if) && typeof step.run === "string" ? [step.run] : [],
+      );
     });
   });
 }
