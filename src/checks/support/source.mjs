@@ -9,8 +9,10 @@ import { parseSource, sourceFiles } from "./sources.mjs";
  * A "global" path is a dotted chain from an unshadowed global, such as `process.env.API_URL`. Kind "type" is a type-only import, which no rule counts.
  * A call adds `call`: the name and start offset of the nearest named function around it, the first name its result's
  * array pattern binds, and the UTF-16 offset where the call ends.
+ * Kind "bind" is a read whose value a local, a destructuring pattern or an export takes, so the walk follows it there. A "read" goes where
+ * the walk cannot follow, such as an argument or an object.
  * @typedef {{ owner: { name: string, at: number } | null, first: string | null, end: number }} Call
- * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read", line: number } | { space: "module" | "global", path: string, kind: "call", line: number, call: Call }} Use
+ * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read" | "bind", line: number } | { space: "module" | "global", path: string, kind: "call", line: number, call: Call }} Use
  *
  * `members` holds the lines of each static property name read on any object, by member access or destructuring.
  * `client` is true when the directive prologue holds "use client".
@@ -58,8 +60,14 @@ function later(read) {
 /** @type {(ref: Ref) => Later} */
 const now = (ref) => () => ref;
 
-/** @type {(ref: Later | null, key: string | null) => Later | null} */
-const at = (ref, key) => (ref && key !== null ? later(() => { const base = ref(); return base && extend(base, key); }) : null);
+/** @typedef {() => string | null} Key A property name, read once the whole file is walked. */
+
+/** @type {(ref: Later | null, key: Key) => Later | null} */
+const at = (ref, key) => ref && later(() => {
+  const base = ref();
+  const name = key();
+  return base && name !== null ? extend(base, name) : null;
+});
 
 /** @type {(statements: Node[]) => string[]} The names the statements declare in their own block. */
 function declared(statements) {
@@ -107,21 +115,22 @@ function keyOf(key, computed) {
   return null;
 }
 
-/** @type {(ref: Ref, key: string) => Ref} */
+/** @type {(ref: Ref, key: string) => Ref | null} A module namespace's default reads as the default binding, as interop makes it. */
 function extend(ref, key) {
   if (ref.space === "global") {
     const path = ref.path ? `${ref.path}.${key}` : key;
     const module = GLOBAL_MODULES.get(path);
     return module ? importRef({ module, imported: "*" }) : { space: "global", path };
   }
-  return moduleRef(ref.namespace === null ? `${ref.path}.${key}` : `${ref.namespace}#${key}`);
+  if (ref.namespace === null) return moduleRef(`${ref.path}.${key}`);
+  return key === "default" ? { space: "module", path: `${ref.namespace}#default`, namespace: ref.namespace } : moduleRef(`${ref.namespace}#${key}`);
 }
 
 /** @type {(binding: { module: string, imported: string }) => Ref} */
 function importRef({ module, imported }) {
   const global = MODULE_GLOBALS.get(module);
   const whole = imported === "*" || imported === "default";
-  if (global) return whole ? { space: "global", path: global } : extend({ space: "global", path: global }, imported);
+  if (global) return whole ? { space: "global", path: global } : { space: "global", path: `${global}.${imported}` };
   return whole ? { space: "module", path: imported === "*" ? module : `${module}#default`, namespace: module } : moduleRef(`${module}#${imported}`);
 }
 
@@ -206,16 +215,23 @@ function factsOf(path, text) {
       root = WRAPPERS.has(root.type) ? root.expression : root.object;
     }
     let ref = /** @type {Later | null} */ (null);
-    if (root.type === "Identifier" || root.type === "JSXIdentifier") ref = resolve(root.name);
+    const module = loaded(root);
+    if (module !== null) {
+      emit(now(moduleRef(module)), "import", root);
+      if (root.type === "CallExpression") refer(root.callee, "call", { owner: owners.at(-1) ?? null, first: firsts.get(root) ?? null, end: root.end });
+      ref = now(importRef({ module, imported: "*" }));
+    } else if (root.type === "Identifier" || root.type === "JSXIdentifier") ref = resolve(root.name);
     else if (root.type === "MetaProperty") ref = root.meta.name === "import" ? now({ space: "global", path: "import.meta" }) : null;
     else walk(root);
-    const module = loaded(root);
-    if (module !== null) ref = now(importRef({ module, imported: "*" }));
     for (const link of chain) {
-      const key = keyOf(link.property, link.computed ?? false);
-      if (key === null) walk(link.property);
-      else note(key, link.property);
-      ref = at(ref, key);
+      const name = keyOf(link.property, link.computed ?? false);
+      if (name !== null) {
+        note(name, link.property);
+        ref = at(ref, () => name);
+        continue;
+      }
+      walk(link.property);
+      ref = null;
     }
     emit(ref, kind, root, call);
     return ref;
@@ -227,13 +243,14 @@ function factsOf(path, text) {
       case "ObjectPattern":
         for (const prop of node.properties) {
           if (prop.type === "RestElement") {
+            emit(base, "read", prop);
             pattern(prop.argument, null);
             continue;
           }
-          const key = keyOf(prop.key, prop.computed);
-          if (key === null) walk(prop.key);
-          else note(key, prop.key);
-          const ref = at(base, key);
+          const name = keyOf(prop.key, prop.computed);
+          if (name !== null) note(name, prop.key);
+          else walk(prop.key);
+          const ref = name === null ? null : at(base, () => name);
           if ((prop.value.type === "AssignmentPattern" ? prop.value.left : prop.value).type !== "ObjectPattern") emit(ref, "read", prop.key);
           pattern(prop.value, ref);
         }
@@ -241,7 +258,7 @@ function factsOf(path, text) {
       case "AssignmentPattern":
         walk(node.right);
         return pattern(node.left, base);
-      case "ArrayPattern": return node.elements.forEach((/** @type {Node | null} */ element, /** @type {number} */ index) => pattern(element, element?.type !== "RestElement" ? at(base, String(index)) : null));
+      case "ArrayPattern": return node.elements.forEach((/** @type {Node | null} */ element, /** @type {number} */ index) => pattern(element, element?.type !== "RestElement" ? at(base, () => String(index)) : null));
       case "RestElement": return pattern(node.argument, null);
       case "TSParameterProperty": return pattern(node.parameter, null);
       case "Identifier":
@@ -266,32 +283,30 @@ function factsOf(path, text) {
       case "Identifier":
       case "MemberExpression":
       case "MetaProperty": return void refer(node, "read");
+      case "AwaitExpression": return loaded(node) === null ? walk(node.argument) : void refer(node, "read");
       case "CallExpression": {
-        const module = loaded(node);
-        if (module !== null) emit(now(moduleRef(module)), "import", node);
+        if (loaded(node) !== null) return void refer(node, "read");
         refer(node.callee, "call", { owner: owners.at(-1) ?? null, first: firsts.get(node) ?? null, end: node.end });
         return walk(node.arguments);
       }
       case "ImportExpression":
-        if (typeof node.source.value === "string") emit(now(moduleRef(node.source.value)), "import", node);
+        if (typeof node.source.value === "string") {
+          emit(now(moduleRef(node.source.value)), "import", node);
+          emit(now(importRef({ module: node.source.value, imported: "*" })), "read", node);
+        }
         return walk([node.source, node.options]);
       case "ExportNamedDeclaration":
         if (node.source || node.exportKind === "type") return;
         walk(node.declaration);
         for (const name of node.declaration ? declared([node.declaration]) : []) exportOf(resolve(name), node);
-        for (const specifier of node.specifiers) if (specifier.exportKind !== "type") exportOf(refer(specifier.local, "read"), specifier);
+        for (const specifier of node.specifiers) if (specifier.exportKind !== "type") exportOf(refer(specifier.local, "bind"), specifier);
         return;
-      case "VariableDeclarator": {
-        if (node.id.type === "Identifier") label(node.init, node.id.name);
-        const first = node.id.type === "ArrayPattern" ? node.id.elements[0] : null;
-        if (first?.type === "Identifier" && node.init) firsts.set(node.init, first.name);
-        return pattern(node.id, node.init ? refer(node.init, "read") : null);
-      }
+      case "VariableDeclaration": return node.declarations.forEach(declare);
       case "ExportDefaultDeclaration":
         label(node.declaration, "default");
-        return exportOf(refer(node.declaration, "read"), node);
+        return exportOf(refer(node.declaration, "bind"), node);
       case "AssignmentExpression": {
-        const base = refer(node.right, "read");
+        const base = refer(node.right, node.left.type.endsWith("Pattern") ? "bind" : "read");
         return node.left.type.endsWith("Pattern") ? pattern(node.left, base) : walk(node.left);
       }
       case "ClassDeclaration":
@@ -312,6 +327,14 @@ function factsOf(path, text) {
       case "TSModuleDeclaration": return walk(node.body?.body);
       default: return walk(Object.values(node));
     }
+  };
+
+  /** @type {(node: Node) => void} */
+  const declare = (node) => {
+    if (node.id.type === "Identifier") label(node.init, node.id.name);
+    const first = node.id.type === "ArrayPattern" ? node.id.elements[0] : null;
+    if (first?.type === "Identifier" && node.init) firsts.set(node.init, first.name);
+    pattern(node.id, node.init ? refer(node.init, "bind") : null);
   };
 
   /** @type {(node: unknown) => void} */
