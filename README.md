@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.4" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.7" }
 }
 ```
 
@@ -216,7 +216,7 @@ To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bum
 | `react/no-flag-state` | A `useState` call's first binding is `loading`, `isLoading`, `error` or `isError`. | Model the status in a `useReducer` state union, such as `{ status: "loading" } \| { status: "done", data }`. |
 | `react/reducer-status-union` | A `useReducer` state is not a union of two or more members that each have a different string literal `status`, such as `{ status: "idle" \| "done"; data?: Item[] }` or two members with `status: "ready"`. The check reads the state type with the TypeScript the file resolves, through the call's return type, so any binding of the state works. | Make the state a union with one member per status, such as `{ status: "idle" } \| { status: "done", items: Item[] }`. |
 | `react/no-client-fetch` | A file whose directive prologue holds `"use client"` reads the global `fetch`, also through `window` or `globalThis` or passed as a value. A local named `fetch` passes. | Fetch in a server component, or through `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts` when the data needs pagination or revalidation. |
-| `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a folder whose tracked `package.json` declares `next`. A type-only import passes. | Use `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`. |
+| `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a folder whose tracked `package.json` declares `next`. A type-only import passes. | Use `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`, copied from the package with the exports the app does not use deleted. |
 | Parse | A tracked source does not parse. | Fix the syntax. |
 
 `react/reducer-status-union` fails closed: a state it cannot read fails under the same key as a wrong one, and the fix names the cause.
@@ -237,7 +237,9 @@ Each finding names the file, the owner and the API, such as `src/form.tsx Form u
 cp node_modules/@mapringg/standard/templates/swr.ts apps/web/src/lib/swr.ts
 ```
 
-`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. Each hook refetches on mount, so a seed cached with the page does not go stale. Pass `fresh: true` when a server component fetched the seed for this request, and the hook skips that first request. A list whose key the client picks, or whose key starts as `null`, passes `fallbackData: []` and loads on mount or when the key arrives.
+Then delete the exports the app does not use, so knip needs no ignore for the file. Delete a hook or `SwrScope` that the app never calls, with the code only it uses, and remove `export` from a type that the app never names. The file passes oxfmt with the shared config and oxlint with the shared config and the `react` plugin, `react/immutability` included, so it needs no format ignore or lint override.
+
+`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. Each hook refetches on mount, so a seed cached with the page does not go stale. Pass `fresh: true` when a server component fetched the seed for this request, and the hook skips that first request. Pass `reuseCache: true` for an expensive query. The first mount with nothing cached fetches, and a later mount that finds a cached result shows it and does not refetch. Focus, reconnect and interval refreshes, `revalidate` and a new key with nothing cached still fetch. A list whose key the client picks, or whose key starts as `null`, passes `fallbackData: []` and loads on mount or when the key arrives.
 
 `useServerSeededInfinite` keeps the pages of a list in one cache entry, so it has no per-page cache to keep in step. The refetch on mount and each focus, reconnect or interval refresh refetch every loaded page in order. `loadMore` fetches only the next page and appends it to the pages as they are when it arrives, after any refresh that is running. An edit made in the meantime stays, and so does the result of the refresh. Components that show the same list share one refresh and one `loadMore` request. After a page fails, `loadMore` or `revalidate` fetches only that page. With no failed page, `revalidate` refetches the loaded pages. `replace` edits the loaded pages at once, and the edit stays when more pages load. `revalidate` and `replace` act on the key of the render they came from, so an edit never reaches a list the user picks afterwards. `restart` drops to the first page and refetches it, and a page that `loadMore` was fetching is dropped. `SwrScope` gives a test an empty cache in place of `SWRConfig`.
 
