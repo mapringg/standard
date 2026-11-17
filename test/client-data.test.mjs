@@ -222,3 +222,27 @@ test("client-data follows a use client file's imports through plain modules to a
     `apps/web/src/wrapped.tsx imports @/features/users.browser on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
   );
 });
+
+test("client-data passes a type-only use of useSWR, and fails it through a two-level barrel and fetch.call or fetch.bind", (t) => {
+  fails(
+    t,
+    API,
+    {
+      "apps/web/src/a/index.ts": 'export * from "../b";\n',
+      "apps/web/src/b/index.ts": 'export * from "../lib/swr";\n',
+      "apps/web/src/chain.tsx": useData("@/a"),
+      "apps/web/src/typed.tsx": '"use client";\nimport type { useSWR } from "@/lib/swr";\nexport type Hook = typeof useSWR;\n',
+      "apps/web/src/types.ts": 'export type { useSWR } from "@/lib/swr";\n',
+      "apps/web/src/members.tsx": '"use client";\nexport const load = () => fetch.call(globalThis, "/a");\nexport const bound = fetch.bind(globalThis);\n',
+    },
+    `apps/web/src/chain.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/members.tsx uses fetch on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
+  );
+});
+
+test("client-data reads an app entry with a trailing slash as the app", (t) => {
+  passes(t, { "api-modules": ["apps/admin/src/api/**"], "client-data": [{ app: "apps/admin/", reason: "unreachable" }] }, {
+    "apps/admin/package.json": { dependencies: { vite: "8.0.0", react: "19.0.0" } },
+    "apps/admin/src/save.tsx": '"use client";\nexport const save = () => fetch("/a");\n',
+  });
+});
