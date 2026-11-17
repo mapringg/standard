@@ -265,3 +265,50 @@ test("wiring fails a repo plugin rule that banned replaces, in any plugin packag
   assert.match(stdout, /^wiring: packages\/oxlint-plugin-app\/rules\/no-process-env\.ts: Delete packages\/oxlint-plugin-app\/rules\/no-process-env\.ts, which the banned check replaces\.$/m);
   assert.doesNotMatch(stdout, /no-naive-time/);
 });
+
+const CONSOLE = { global: "console", fix: "Use the logger." };
+
+test("banned reads an Astro component's frontmatter and scripts on their own lines, and a frontmatter return", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/index.astro": [
+        "---",
+        'import Layout from "../layouts/Layout.astro";',
+        "if (!Astro.locals.user) return Astro.redirect(\"/login\");",
+        'console.log("frontmatter");',
+        "---",
+        "<Layout>",
+        '  <script>',
+        '    console.warn("module");',
+        "  </script>",
+        "</Layout>",
+        '<SCRIPT TYPE="module">console.error("upper")</SCRIPT >',
+        "",
+      ].join("\n"),
+    },
+    "src/pages/index.astro console: src/pages/index.astro uses console on lines 4, 8, 11. Use the logger.",
+  );
+});
+
+test("banned skips Astro markup, comments, styles and data scripts, and reads an is:inline script after a self-closing one", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/components/Card.astro": [
+        "<p>console.log()</p>",
+        "<!-- <script>console.log(\"commented\")</script> -->",
+        '<script type="application/ld+json">{"@context": "https://schema.org", "name": "console.log"}</script>',
+        "<style>p::after { content: \"<script>console.log()</script>\"; }</style>",
+        '<script src="/analytics.js" />',
+        '<script is:inline data-label="a > b">',
+        '  console.info("inline");',
+        "</script>",
+        "",
+      ].join("\n"),
+    },
+    "src/components/Card.astro console: src/components/Card.astro uses console on line 7. Use the logger.",
+  );
+});

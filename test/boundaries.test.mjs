@@ -508,3 +508,16 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
     });
   });
 }
+
+test("boundaries reads the imports in an Astro component's frontmatter and scripts", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/src/pages/index.astro": '---\nimport { session } from "../../../api/src/auth/session.ts";\n---\n<p>{session}</p>\n<script>\n  import { red } from "tokens/colors.ts";\n</script>\n',
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/src/pages/index.astro imports ../../../api/src/auth/session.ts: apps/api/src/auth/session.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+      'boundaries: apps/web/src/pages/index.astro imports tokens/colors.ts: tokens has no exports field, so "tokens/colors.ts" reaches into its files. Add the subpath to exports in packages/tokens/package.json, or import "tokens".',
+    ],
+    status: 1,
+  });
+});

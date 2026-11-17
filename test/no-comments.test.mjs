@@ -161,3 +161,25 @@ test("wiring fails a repo plugin's no-comments rule and its test, which no-comme
   assert.match(stdout, /^wiring: packages\/oxlint-plugin-app\/rules\/no-comments\.test\.ts: Delete .+, which the no-comments check replaces\.$/m);
   assert.doesNotMatch(stdout, /safety-comment/);
 });
+
+test("no-comments fails comments in an Astro component's frontmatter and scripts, and passes its markup and HTML comments", (t) => {
+  fails(
+    t,
+    {
+      "src/pages/index.astro": [
+        "---",
+        "// loads the page",
+        "const title = 1;",
+        "---",
+        "<!-- markup note -->",
+        "<p>// not a comment {title}</p>",
+        "<script>",
+        "  /* runs in the browser */",
+        "  document.title = \"x\";",
+        "</script>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/index.astro comment: src/pages/index.astro has comments on lines 2, 8. ${COMMENT}`,
+  );
+});
