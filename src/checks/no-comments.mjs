@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { posix } from "node:path";
 
 import { parseSource, sourceFiles } from "./support/sources.mjs";
@@ -21,7 +22,27 @@ const DOCS = ["docs/*.md", "apps/*/docs/*.md"];
 const GENERATED_NAMES = new Set(["next-env.d.ts"]);
 
 /** The only license text a source may hold: one SPDX tag, or an `@license` tag, naming a license expression and nothing else. */
-const LICENSE_TAG = /^(?:SPDX-License-Identifier:|@license)\s+[\w.+()-]+(?:\s+(?:AND|OR|WITH)\s+[\w.+()-]+)*$/;
+/** @type {(expression: string) => any} The SPDX expression parser, which throws on anything that is not a valid expression. */
+const parseSpdx = createRequire(import.meta.url)("spdx-expression-parse");
+const LICENSE_TAG = /^(?:SPDX-License-Identifier:|@license)\s+(\S.*)$/;
+const LICENSE_WORDS = /\b(?:copyright|licen[cs]e|spdx)\b|©/i;
+const LICENSE_FIX = "Keep only a leading `SPDX-License-Identifier: <expression>` line, whose expression names SPDX license ids such as `MIT` or `Apache-2.0 OR MIT`. If this is third-party code that must keep its copyright or notice, mark its path `linguist-vendored` in `.gitattributes`.";
+
+/** @type {(line: string) => boolean} Whether a line is a license tag whose expression parses as SPDX and names only SPDX-listed licenses and exceptions, not a `LicenseRef-` or `DocumentRef-` that could say anything. */
+function isLicenseTag(line) {
+  const tag = LICENSE_TAG.exec(line);
+  if (!tag) return false;
+  /** @type {any} */
+  let tree;
+  try {
+    tree = parseSpdx(tag[1] ?? "");
+  } catch {
+    return false;
+  }
+  /** @type {(node: any) => boolean} */
+  const listed = (node) => (node.license ? !/^(?:LicenseRef|DocumentRef)-/.test(node.license) : listed(node.left) && listed(node.right));
+  return listed(tree);
+}
 
 const LINT_DISABLE = /^(?:eslint|oxlint)-disable(?:-next-line|-line)?(?=\s|$)/;
 const LINT_ENABLE = /^(?:eslint|oxlint)-enable(?=\s|$)/;
@@ -80,7 +101,7 @@ const KINDS = [
       return anchor === undefined || headings().has(anchor) ? null : `Point at a heading ${path} has, as GitHub slugs it, or drop the anchor; it has no #${anchor}.`;
     },
   },
-  { key: "license", judge: ({ header }) => (header ? null : undefined) },
+  { key: "license", judge: ({ header, body }) => (header ? null : LICENSE_WORDS.test(body) ? LICENSE_FIX : undefined) },
 ];
 
 /** @type {(comment: Comment) => string} */
@@ -147,7 +168,7 @@ function licenseHeader(header) {
   let end = 0;
   for (const comment of header) {
     const lines = comment.value.split("\n").map((line) => line.replace(/^[\s*!]+|[\s*]+$/g, "")).filter((line) => line !== "");
-    if (lines.length === 0 || !lines.every((line) => LICENSE_TAG.test(line))) break;
+    if (lines.length === 0 || !lines.every(isLicenseTag)) break;
     end += 1;
   }
   return header.slice(0, end);
