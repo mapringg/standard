@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import { parseSync } from "oxc-parser";
 
+import { NOT_PRODUCT } from "./support/packages.mjs";
+
 /**
  * @typedef {{ type: string, [key: string]: any }} Node
  * @typedef {{ names: Set<string> }} Scope
@@ -10,7 +12,7 @@ import { parseSync } from "oxc-parser";
 
 const MIN_NODES = 8;
 const SCANNED = /\.tsx?$/;
-const SKIPPED = /\.d\.ts$|\.(test|spec|stories)\.[^/]+$|(^|\/)(__tests__|tests?)\//;
+const SKIPPED = /\.d\.ts$/;
 const SKIPPED_KEYS = new Set([
   "start",
   "end",
@@ -430,7 +432,7 @@ function findingsFrom(candidates) {
  * @returns {string[]}
  */
 function sources(repo) {
-  return repo.files().filter((path) => SCANNED.test(path) && !SKIPPED.test(path));
+  return repo.files().filter((path) => SCANNED.test(path) && !SKIPPED.test(path) && !NOT_PRODUCT.test(path));
 }
 
 /** @type {import("../registry.mjs").Check} */
@@ -438,7 +440,7 @@ export default {
   name: "duplicates",
   since: "0.8.0",
   doc: {
-    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. A function whose body is one call passing only its parameters, plain member reads on them, literals, and arrays or objects of those is a forwarding adapter and never counts. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders.",
+    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. A function whose body is one call passing only its parameters, plain member reads on them, literals, and arrays or objects of those is a forwarding adapter and never counts. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests`, `__tests__`, `fixtures`, `fixture` and `__fixtures__` folders.",
     fix: "Move the shared logic to the module that owns it and import it everywhere.",
     config: [],
   },

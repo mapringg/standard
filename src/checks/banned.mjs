@@ -3,7 +3,7 @@ import { posix } from "node:path";
 import { parseSync } from "oxc-parser";
 
 import { FILE } from "../config.mjs";
-import { reactApps, TEST_FILE } from "./support/packages.mjs";
+import { NOT_PRODUCT, reactApps } from "./support/packages.mjs";
 import { sourceFacts } from "./support/source.mjs";
 
 /**
@@ -156,6 +156,6 @@ export default {
     const wrappers = new Set([...repo.config.effectWrappers.map((wrapper) => wrapper.file), ...reactApps(repo).map((app) => posix.join(app, TIMER))]);
     const product = [...BUILT_IN, EFFECTS, ...repo.config.banned];
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
-    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, TEST_FILE.test(file.path) || wrappers.has(file.path) ? rules : product)))];
+    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, NOT_PRODUCT.test(file.path) || wrappers.has(file.path) ? rules : product)))];
   },
 };
