@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.1" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.2" }
 }
 ```
 
@@ -178,13 +178,15 @@ Globs are repository paths matched against the resolved file, extension included
 
 `banned` fails a file that uses an API its repository bans. Each entry in the `banned` list of `.standard/config.json` names the API with exactly one of `import`, `global` or `property`, as a string or a list, and says what to use instead in `fix`. `files` lists the globs it covers, every tracked source when absent, and `except` lists the globs inside them where the API is allowed. A use counts once, for the first entry that covers its file.
 
+Every repository also bans module mocking, which no entry, `except` or config turns off: `vitest#vi` and `@jest/globals#jest` with `.mock`, `.doMock`, `.unmock` or `.unstable_mockModule`, and the same calls on the unbound globals `vi` and `jest` that vitest globals mode provides. Its fix says to pass the dependency in as an argument or prop, or run a fake of the service it calls.
+
 | Rule | Fails when |
 | --- | --- |
-| `import` | A file imports, re-exports, `import()`s or `require()`s the module by a literal name. With `#name`, a file imports that export or reads it through a named, default or namespace binding, an `import()` or `require()` result or a JSX tag, so `@base-ui/react#Dialog` matches `<BaseUI.Dialog>`. `zod` does not match `zod/mini`, and a type-only import never matches. |
+| `import` | A file imports, re-exports, `import()`s or `require()`s the module by a literal name. With `#name`, a file imports that export or reads it through a named, default or namespace binding, an `import()` or `require()` result or a JSX tag, so `@base-ui/react#Dialog` matches `<BaseUI.Dialog>`. Static members after the export extend the path, and a path matches every longer one, so `vitest#vi.mock` matches `v.mock()` after `import { vi as v } from "vitest"` and `const { mock } = vi`, and `react#useMemo` matches `React.useMemo.call()`. `zod` does not match `zod/mini`, and a type-only import never matches. |
 | `global` | A file reads the dotted path, or a path below it, from the global a local name does not shadow. The read may go through `globalThis`, `window`, `self` or `global`, a destructuring, a literal computed key or, for `process`, an import of `node:process`. `import.meta.env` counts as a root. A `const` or `let` that a static path initializes carries it, even above its declaration, so `const p = process; p.env` and `const { parse } = JSON` match. |
 | `property` | A file reads the property on any object by a static key or a destructuring, such as `toLocaleDateString`. |
 | oxlint | A tracked `.oxlintrc.json`, `*.oxlintrc.json` or `oxlint.config.*` sets `no-restricted-imports`, `no-restricted-properties` or `no-restricted-globals` anywhere, `"off"` included. |
-| Parse | A source that an entry covers does not parse. |
+| Parse | A tracked source does not parse. |
 
 Each file and API is one finding, such as `src/a.ts process.env`, with every line in its fix. `banned` replaces the plugin rules `no-process-env`, `no-bare-json-parse`, `no-module-mocking` and `no-manual-memo` under `packages/oxlint-plugin-*/rules/`, with their tests. To migrate, turn each oxlint `no-restricted-*` entry and each plugin rule's allowlist into one entry, then delete the rule from every oxlint config:
 
@@ -199,7 +201,7 @@ Each file and API is one finding, such as `src/a.ts process.env`, with every lin
 }
 ```
 
-The bans every repository shares, `Reflect.apply`, `Reflect.get` and module mocking through `vi` or `jest`, live in the shared oxlint config, so the editor shows them. oxlint does not merge rule options: a config that sets `no-restricted-properties` replaces the shared list for its files, and an override that turns it `"off"` drops it. So each repository's own bans live in `banned`, and `banned` fails any oxlint config that sets one of these rules.
+The bans on `Reflect.apply` and `Reflect.get` live in the shared oxlint config, so the editor shows them. oxlint does not merge rule options: a config that sets `no-restricted-properties` replaces the shared list for its files, and an override that turns it `"off"` drops it. So each repository's own bans live in `banned`, and `banned` fails any oxlint config that sets one of these rules.
 
 A tree check that the table marks baseline-free keeps no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 
@@ -256,7 +258,7 @@ The package ships one oxlint config, one oxfmt config and one tsconfig. The lint
 
 | Export | File | Holds |
 | --- | --- | --- |
-| `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names, no `any`, and bans on `Reflect.apply`, `Reflect.get` and module mocking. |
+| `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names, no `any`, and bans on `Reflect.apply` and `Reflect.get`. |
 | `@mapringg/standard/oxfmt` | `config/oxfmt.json` | Type imports first, then grouped value imports; sorted `package.json` scripts; `.claude/**` ignored. |
 | `@mapringg/standard/tsconfig` | `config/tsconfig.json` | `strict` and each flag in its family, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` and `isolatedModules`; unreachable code and unused labels as errors. |
 

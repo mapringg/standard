@@ -14,10 +14,22 @@ const SECOND_WAY = "bans APIs a second way beside banned";
 
 /** oxlint rule options do not merge, so a config that sets one of these replaces the shared one for its files. */
 const OXLINT_RULES = new Map([
-  ["no-restricted-properties", "replaces the bans on Reflect and module mocking from @mapringg/standard/oxlint for the files it covers"],
+  ["no-restricted-properties", "replaces the bans on Reflect from @mapringg/standard/oxlint for the files it covers"],
   ["no-restricted-imports", SECOND_WAY],
   ["no-restricted-globals", SECOND_WAY],
 ]);
+
+/** Module mocking through vitest or jest, imported or as a global, banned in every source file before the repository's own entries. */
+const BUILT_IN = /** @type {readonly BannedRule[]} */ ([
+  { space: "module", objects: ["vitest#vi", "@jest/globals#jest"] },
+  { space: "global", objects: ["vi", "jest"] },
+].map(({ space, objects }) => ({
+  space,
+  paths: objects.flatMap((object) => ["mock", "doMock", "unmock", "unstable_mockModule"].map((name) => `${object}.${name}`)),
+  files: [],
+  except: [],
+  fix: "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module.",
+})));
 
 const OXLINT_CONFIG = /(?:^|\/)(?:[^/]*\.)?oxlintrc\.json$|(?:^|\/)oxlint\.config\.[cm]?[jt]s$/;
 
@@ -27,9 +39,12 @@ function covers(rule, path) {
   return (rule.files.length === 0 || rule.files.some(matches)) && !rule.except.some(matches);
 }
 
+/** @type {(rule: BannedRule, path: string, use: string) => boolean} A path covers itself and every longer use: `react` covers `react#useMemo`, which covers `react#useMemo.call`. */
+const under = (rule, path, use) => use === path || use.startsWith(path + (rule.space === "module" && !path.includes("#") ? "#" : "."));
+
 /**
  * @param {import("./support/source.mjs").Parsed} file
- * @param {readonly BannedRule[]} rules In config order. Each use counts once, for the first rule that covers the file and the use.
+ * @param {readonly BannedRule[]} rules The built-in bans, then config order. Each use counts once, for the first rule that covers the file and the use.
  * @returns {Finding[]} One per banned API the file uses, with every line in the fix.
  */
 function findings(file, rules) {
@@ -50,9 +65,8 @@ function findings(file, rules) {
       }
       continue;
     }
-    const separator = rule.space === "module" ? "#" : ".";
     for (const use of file.uses.filter((use) => use.kind !== "type" && use.space === rule.space && !claimed.has(use))) {
-      const api = rule.paths.find((path) => use.path === path || use.path.startsWith(path + separator));
+      const api = rule.paths.find((path) => under(rule, path, use.path));
       if (api === undefined) continue;
       claimed.add(use);
       add(api, use.line, rule.fix);
@@ -102,8 +116,8 @@ export default {
   retired: ["no-process-env", "no-bare-json-parse", "no-module-mocking", "no-manual-memo"].flatMap((rule) => [`packages/oxlint-plugin-*/rules/${rule}.ts`, `packages/oxlint-plugin-*/rules/${rule}.test.ts`]),
   applies: () => ({ on: true }),
   run(repo) {
-    const files = sourceFacts(repo).filter((file) => repo.config.banned.some((rule) => covers(rule, file.path)));
+    const rules = [...BUILT_IN, ...repo.config.banned];
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
-    return [...oxlintConflicts(repo), ...files.flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, repo.config.banned)))];
+    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, rules)))];
   },
 };

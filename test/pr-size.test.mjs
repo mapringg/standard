@@ -50,7 +50,7 @@ test("labels each threshold's first line with the next size", () => {
   assert.deepEqual(labels, ["size:XS", "size:S", "size:M", "size:L", "size:XL", "size:XXL"]);
 });
 
-const lines = (count, word) => Array.from({ length: count }, (_, at) => `${word} ${at}`).join("\n") + "\n";
+const lines = (count, word) => Array.from({ length: count }, (_, at) => `${word}_${at};`).join("\n") + "\n";
 
 function fixture(t) {
   return pullRequestRepo(t, {

@@ -131,7 +131,7 @@ test("banned fails a tracked oxlint config that sets a restricted rule anywhere,
       "apps/web/oxlint.config.ts": 'export default { rules: { "eslint/no-restricted-properties": ["error", { object: "Date", property: "now" }] } };\n',
     },
     "apps/api/.oxlintrc.json no-restricted-imports: apps/api/.oxlintrc.json sets no-restricted-imports, which bans APIs a second way beside banned. Move its entries to banned in .standard/config.json, and delete the rule from rules and every overrides entry.",
-    "apps/web/oxlint.config.ts no-restricted-properties: apps/web/oxlint.config.ts sets no-restricted-properties, which replaces the bans on Reflect and module mocking from @mapringg/standard/oxlint for the files it covers. Move its entries to banned in .standard/config.json, and delete the rule from rules and every overrides entry.",
+    "apps/web/oxlint.config.ts no-restricted-properties: apps/web/oxlint.config.ts sets no-restricted-properties, which replaces the bans on Reflect from @mapringg/standard/oxlint for the files it covers. Move its entries to banned in .standard/config.json, and delete the rule from rules and every overrides entry.",
   );
 });
 

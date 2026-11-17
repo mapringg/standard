@@ -6,7 +6,7 @@ import { namesOf as names } from "../boundaries.mjs";
 /**
  * @typedef {{ type: string, [key: string]: any }} Node
  *
- * One use of an API from outside the file. A "module" path is a specifier, or `specifier#export`, such as `react#useMemo`.
+ * One use of an API from outside the file. A "module" path is a specifier, or `specifier#export` and any static members read after it, such as `react#useMemo` or `vitest#vi.mock`.
  * A "global" path is a dotted chain from an unshadowed global, such as `process.env.API_URL`. Kind "type" is a type-only import, which no rule counts.
  * A call adds `call`: the name and start offset of the nearest named function around it, the first name its result's
  * array pattern binds, and the UTF-16 offset where the call ends.
@@ -108,7 +108,7 @@ function keyOf(key, computed) {
 /** @type {(ref: Ref, key: string) => Ref} */
 function extend(ref, key) {
   if (ref.space === "global") return { space: "global", path: ref.path ? `${ref.path}.${key}` : key };
-  return ref.namespace === null ? ref : moduleRef(`${ref.namespace}#${key}`);
+  return moduleRef(ref.namespace === null ? `${ref.path}.${key}` : `${ref.namespace}#${key}`);
 }
 
 /** @type {(binding: { module: string, imported: string }) => Ref} */

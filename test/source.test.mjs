@@ -40,7 +40,7 @@ const CASES = [
   ['import React from "react"; React.memo(C);', ["import module react", "import module react#default", "call module react#memo", "read global C"]],
   ['import { useMemo as m } from "react"; m(f);', ["import module react", "import module react#useMemo", "call module react#useMemo", "read global f"]],
   ['import * as BaseUI from "@base-ui/react"; <BaseUI.Dialog />;', ["import module @base-ui/react", "import module @base-ui/react", "read module @base-ui/react#Dialog"]],
-  ['import { Dialog } from "@base-ui/react"; <Dialog.Root><div /></Dialog.Root>;', ["import module @base-ui/react", "import module @base-ui/react#Dialog", "read module @base-ui/react#Dialog"]],
+  ['import { Dialog } from "@base-ui/react"; <Dialog.Root><div /></Dialog.Root>;', ["import module @base-ui/react", "import module @base-ui/react#Dialog", "read module @base-ui/react#Dialog.Root"]],
   ["<motion.div />; <Local />;", ["read global motion.div", "read global Local"]],
   ['import type { Z } from "zod"; import { type Y } from "zod";', ["type module zod", "type module zod#Z", "type module zod", "type module zod#Y"]],
   ['import { type Y, z } from "zod";', ["import module zod", "type module zod#Y", "import module zod#z"]],
