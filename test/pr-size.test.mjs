@@ -54,7 +54,7 @@ const lines = (count, word) => Array.from({ length: count }, (_, at) => `${word}
 
 function fixture(t) {
   return pullRequestRepo(t, {
-    base: { ...WIRED, ".standard/config.json": { ...WIRED[".standard/config.json"], pending: ["dead-code", "boundaries"] }, "src/app.mjs": lines(5, "old"), "src/old-name.mjs": lines(20, "same") },
+    base: { ...WIRED, ".standard/config.json": { ...WIRED[".standard/config.json"], pending: ["dead-code", "boundaries", "no-comments"] }, "src/app.mjs": lines(5, "old"), "src/old-name.mjs": lines(20, "same") },
     head: {
       "src/app.mjs": lines(5, "new"),
       "src/app.test.mjs": lines(300, "test"),
