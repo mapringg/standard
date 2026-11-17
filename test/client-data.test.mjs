@@ -18,7 +18,7 @@ const APPS = {
 };
 const API = { "api-modules": ["apps/web/src/api/**"] };
 const LISTED_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in .standard/config.json with its reason: pages, live, client-state or unreachable.";
-const FETCH_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in .standard/config.json with its reason.";
+const FETCH_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in .standard/config.json with its reason: pages, live, client-state or unreachable.";
 /** TypeScript 7's API server prints this when the check closes it, after the run has finished. */
 const TSGO_SHUTDOWN = /^context canceled\n/m;
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
@@ -156,8 +156,8 @@ test("client-data passes a listed file that fetches, and a whole app listed as u
   );
   fails(
     t,
-    { "client-data": [{ app: "apps/admin", reason: "unreachable" }] },
-    { "apps/administration/src/save.tsx": '"use client";\nexport const save = () => fetch("/a");\n' },
+    { ...API, "client-data": [{ app: "apps/admin", reason: "unreachable" }] },
+    { "apps/admin/src/index.ts": "export {};\n", "apps/administration/src/save.tsx": '"use client";\nexport const save = () => fetch("/a");\n' },
     `apps/administration/src/save.tsx uses fetch on line 2, and "use client" runs it in the browser. ${FETCH_FIX}`,
   );
 });
@@ -265,5 +265,16 @@ test("client-data fails swr/immutable anywhere, and XMLHttpRequest, ky and axios
     `apps/web/src/ky.tsx uses ky on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
     `apps/web/src/wrapped.tsx imports @/lib/http on line 2, which reaches axios in apps/web/src/lib/http.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
     `apps/web/src/xhr.tsx uses XMLHttpRequest on line 2, and "use client" runs it in the browser. ${FETCH_FIX}`,
+  );
+});
+
+test("client-data fails a listed file or app that git does not track, and an empty api-modules in a repo with a Next app", (t) => {
+  fails(
+    t,
+    { "client-data": [{ file: "apps/web/src/gone.tsx", reason: "live" }, { app: "apps/gone", reason: "unreachable" }] },
+    {},
+    'api-modules in .standard/config.json is empty, and apps/web is a Next app. List the globs of its API modules, so that a "use client" file that imports one fails.',
+    "client-data in .standard/config.json lists apps/gone, which holds no tracked file. Remove the entry, or fix its path.",
+    "client-data in .standard/config.json lists apps/web/src/gone.tsx, which git does not track. Remove the entry, or fix its path.",
   );
 });

@@ -203,3 +203,13 @@ test("react fails a useReducer state whose members share a status", (t) => {
   assert.equal(stdout, `react: 1 new findings.\n  src/twins.tsx: A's useReducer on line 5 holds ${members}, whose members share status "ready". ${UNION_FIX}\n${NO_BASELINE}\n`);
   assert.equal(status, 1);
 });
+
+test("react reports a baseline entry whose rule moved to another check as moved, not fixed", (t) => {
+  const { stdout, status } = react(t, {
+    ".standard/config.json": { pending: ["client-data"] },
+    "apps/web/src/a.tsx": '"use client";\nexport const a = () => fetch("/x");\n',
+    ".standard/baselines/react.json": { "react/no-client-fetch": ["apps/web/src/a.tsx fetch"] },
+  });
+  assert.equal(stdout, "react: every finding in .standard/baselines/react.json is fixed or moved to another check, so this run deleted it. Commit the deletion with this change; the check now allows none:\n  react/no-client-fetch apps/web/src/a.tsx fetch: moved to client-data\n");
+  assert.equal(status, 1);
+});
