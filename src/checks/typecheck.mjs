@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import base from "../../config/tsconfig.json" with { type: "json" };
 import { tracked } from "../repo.mjs";
-import { checkJobScripts, runsScript } from "../wiring.mjs";
+import { checkJobScripts, isRealScript, runsScript } from "../wiring.mjs";
 
 const RUNS_TYPECHECK = runsScript("typecheck");
 
@@ -180,7 +180,7 @@ function judge(repo, parsed) {
  */
 function hasScript(repo, path) {
   try {
-    return typeof JSON.parse(tracked(repo, path) ?? "{}").scripts?.typecheck === "string";
+    return isRealScript(JSON.parse(tracked(repo, path) ?? "{}").scripts?.typecheck);
   } catch {
     return false;
   }
@@ -196,7 +196,7 @@ function runs(repo, projects) {
   /** @type {Finding[]} */
   const findings = [];
   if (!hasScript(repo, "package.json")) {
-    findings.push({ key: "package.json scripts.typecheck", fix: `Add a typecheck script such as "turbo run typecheck" to package.json, so CI and pre-push have one command to run.` });
+    findings.push({ key: "package.json scripts.typecheck", fix: `Add a typecheck script that runs the typecheck, such as "turbo run typecheck", to package.json, so CI and pre-push have one command to run.` });
   }
   for (const project of projects) {
     for (let folder = posix.dirname(project); ; folder = posix.dirname(folder)) {
@@ -205,7 +205,7 @@ function runs(repo, projects) {
         if (!hasScript(repo, manifest)) {
           const name = posix.basename(project);
           const command = name === "tsconfig.json" ? "tsc --noEmit" : `tsc --noEmit -p ${name}`;
-          findings.push({ key: `${manifest} scripts.typecheck`, fix: `Add a typecheck script such as "${command}" to ${manifest}, so the root typecheck covers ${project}.` });
+          findings.push({ key: `${manifest} scripts.typecheck`, fix: `Add a typecheck script that runs the typecheck, such as "${command}", to ${manifest}, so the root typecheck covers ${project}.` });
         }
         break;
       }

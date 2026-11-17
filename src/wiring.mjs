@@ -253,6 +253,16 @@ export function runsScript(script) {
 }
 
 /**
+ * @param {unknown} value A package.json script.
+ * @returns {boolean} Whether it is a string that does more than exit 0 at once.
+ */
+export function isRealScript(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return !["", "true", ":", "exit 0"].includes(text) && !/^echo(?:\s|$)/.test(text);
+}
+
+/**
  * @param {unknown} condition A step's if.
  * @returns {boolean} Whether the condition is a constant that GitHub reads as false.
  */

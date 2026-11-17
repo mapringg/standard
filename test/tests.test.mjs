@@ -5,6 +5,7 @@ import { git, standard, tempRepo, WIRED, write } from "./helpers.mjs";
 
 const CI = WIRED[".github/workflows/ci.yml"];
 const HOOKS = 'hooks.pre-push: Add "pnpm test" to hooks.pre-push in .standard/config.json, so a push that fails a test stops before CI.';
+const ROOT_SCRIPT = 'package.json scripts.test: Add a test script that runs the tests, such as "turbo run test", to package.json, so CI and pre-push have one command to run.';
 const STEP = 'ci: Run "pnpm test" in a step of the Check job that has no continue-on-error, so a pull request that fails a test cannot merge.';
 
 function tests(t, files) {
@@ -35,8 +36,21 @@ test("tests wants a test script at the root", (t) => {
   fails(
     t,
     { "package.json": { ...WIRED["package.json"], scripts: { prepare: "standard install" } } },
-    'package.json scripts.test: Add a test script such as "turbo run test" to package.json, so CI and pre-push have one command to run.',
+    ROOT_SCRIPT,
   );
+});
+
+test("tests does not count a test script that exits at once", (t) => {
+  const scripts = (test) => ({ ...WIRED["package.json"].scripts, test });
+  for (const script of ["true", " exit 0 ", "echo hi", ":", ""]) {
+    fails(
+      t,
+      { "package.json": { ...WIRED["package.json"], scripts: scripts(script) }, "apps/api/package.json": manifest({ test: script }), "apps/api/a.test.ts": "" },
+      ROOT_SCRIPT,
+      "apps/api/package.json scripts.test: Add a test script that runs the tests to apps/api/package.json, since turbo run test skips a package without one and so never runs apps/api/a.test.ts.",
+    );
+  }
+  passes(t, { "package.json": { ...WIRED["package.json"], scripts: scripts("echoes-the-tests") } });
 });
 
 test("tests wants a test script in each package that holds a test file, and names a file it would skip", (t) => {
@@ -55,8 +69,8 @@ test("tests wants a test script in each package that holds a test file, and name
       "packages/db/package.json": manifest({ build: "tsc" }),
       "packages/db/test/schema.test.cjs": "",
     },
-    "apps/api/package.json scripts.test: Add a test script to apps/api/package.json, since turbo run test skips a package without one and so never runs apps/api/src/a.spec.ts.",
-    "packages/db/package.json scripts.test: Add a test script to packages/db/package.json, since turbo run test skips a package without one and so never runs packages/db/test/schema.test.cjs.",
+    "apps/api/package.json scripts.test: Add a test script that runs the tests to apps/api/package.json, since turbo run test skips a package without one and so never runs apps/api/src/a.spec.ts.",
+    "packages/db/package.json scripts.test: Add a test script that runs the tests to packages/db/package.json, since turbo run test skips a package without one and so never runs packages/db/test/schema.test.cjs.",
   );
 });
 

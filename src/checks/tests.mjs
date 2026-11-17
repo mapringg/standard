@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 
 import { tracked } from "../repo.mjs";
-import { checkJobScripts, runsScript } from "../wiring.mjs";
+import { checkJobScripts, isRealScript, runsScript } from "../wiring.mjs";
 import { packageOf, TEST_FILE } from "./support/packages.mjs";
 
 const RUNS_TEST = runsScript("test");
@@ -13,7 +13,7 @@ const RUNS_TEST = runsScript("test");
  */
 function hasScript(repo, path) {
   try {
-    return typeof JSON.parse(tracked(repo, path) ?? "{}").scripts?.test === "string";
+    return isRealScript(JSON.parse(tracked(repo, path) ?? "{}").scripts?.test);
   } catch {
     return false;
   }
@@ -31,7 +31,7 @@ export default {
     /** @type {import("../registry.mjs").Finding[]} */
     const findings = [];
     if (!hasScript(repo, "package.json")) {
-      findings.push({ key: "package.json scripts.test", fix: `Add a test script such as "turbo run test" to package.json, so CI and pre-push have one command to run.` });
+      findings.push({ key: "package.json scripts.test", fix: `Add a test script that runs the tests, such as "turbo run test", to package.json, so CI and pre-push have one command to run.` });
     }
     const files = repo.files();
     const manifests = new Set(files.filter((path) => posix.basename(path) === "package.json"));
@@ -40,7 +40,7 @@ export default {
       if (folder === null || folder === "." || hasScript(repo, `${folder}/package.json`)) continue;
       findings.push({
         key: `${folder}/package.json scripts.test`,
-        fix: `Add a test script to ${folder}/package.json, since turbo run test skips a package without one and so never runs ${example}.`,
+        fix: `Add a test script that runs the tests to ${folder}/package.json, since turbo run test skips a package without one and so never runs ${example}.`,
       });
     }
     if (!repo.config.hooks["pre-push"].some(RUNS_TEST)) {
