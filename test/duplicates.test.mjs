@@ -106,6 +106,10 @@ test("duplicates still finds a one-call function that computes its arguments or 
     computedMember: '(event: { target: Record<string, string> }) => dispatch({ type: "search", query: event.target[field] })',
     memberCall: '(event: { target: { value: string } }) => dispatch({ type: "search", query: event.target.value.trim() })',
     outsideMember: '(event: { target: { value: string } }) => dispatch({ type: "search", query: form.target.value })',
+    computedDefault: '(value = normalize(source.trim())) => dispatch({ type: "search", query: value })',
+    destructuredDefault: '({ value = normalize(source.trim()) }) => dispatch({ type: "search", query: value })',
+    computedKey: '({ [chooseKey()]: value }) => dispatch({ type: "search", query: value })',
+    literalMember: '(value: string) => dispatch({ type: "search", query: "fixed".length, value })',
   };
   const file = (prefix) =>
     Object.entries(logic)
