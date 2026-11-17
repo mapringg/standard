@@ -21,8 +21,24 @@ const DOCS = ["docs/*.md", "apps/*/docs/*.md"];
 const GENERATED_NAMES = new Set(["next-env.d.ts"]);
 const LICENSE = /@license\b|\bSPDX-License-Identifier:/;
 
-/** A line of a license header that stands alone: an SPDX tag, an `@license` tag, or a copyright line. */
-const LICENSE_LINE = /^(?:SPDX-License-Identifier:\s+[\w.+()-]+(?:\s+(?:AND|OR|WITH)\s+[\w.+()-]+)*|SPDX-FileCopyrightText:\s+\S.*|@license(?:\s+[\w.+()-]+)?|(?:Copyright|\(c\)|©)\s.*|All rights reserved\.?)$/;
+/** A line of a license header that stands alone, other than a copyright line: an SPDX tag, an `@license` tag, or the rights reservation. */
+const LICENSE_TAG = /^(?:SPDX-License-Identifier:\s+[\w.+()-]+(?:\s+(?:AND|OR|WITH)\s+[\w.+()-]+)*|@license(?:\s+[\w.+()-]+)?|All rights reserved\.?)$/;
+const COPYRIGHT = /^(?:SPDX-FileCopyrightText:(?:\s+(?:Copyright(?:\s+(?:\(c\)|©))?|\(c\)|©))?|Copyright(?:\s+(?:\(c\)|©))?|\(c\)|©)(?:\s+(.*))?$/;
+const COPYRIGHT_YEARS = /^\d{4}(?:\s*[-–,]\s*\d{4})*,?(?:\s+|$)/;
+const COPYRIGHT_LICENSE = /\.\s+(?:MIT|ISC|Apache-2\.0|BSD-[23]-Clause|MPL-2\.0)\.?$/;
+const OWNER_ABBREVIATIONS = new Set(["Inc.", "Ltd.", "Co.", "Corp.", "LLC.", "GmbH.", "Jr."]);
+const OWNER_WORDS = 6;
+
+/** @type {(line: string) => boolean} Whether a line is license text alone: a tag, or a copyright line naming years and an owner of a few words with no sentence after it. */
+function isLicenseLine(line) {
+  if (LICENSE_TAG.test(line)) return true;
+  const copyright = COPYRIGHT.exec(line);
+  if (!copyright) return false;
+  const owner = (copyright[1] ?? "").replace(/\.?\s*All rights reserved\.?$/, "").replace(COPYRIGHT_LICENSE, "").replace(COPYRIGHT_YEARS, "");
+  const words = owner.split(/\s+/).filter(Boolean);
+  if (words.length > OWNER_WORDS) return false;
+  return words.every((word, index) => !/[?!]$/.test(word) && (!word.endsWith(".") || index === words.length - 1 || OWNER_ABBREVIATIONS.has(word)));
+}
 
 /** The notices a license header may hold after its tag lines, each word for word with its spacing collapsed. */
 const NOTICES = new Set([
@@ -156,7 +172,7 @@ function licenseHeader(header) {
   let end = 0;
   for (const [index, comment] of header.entries()) {
     const lines = comment.value.split("\n").map((line) => line.replace(/^[\s*!]+|[\s*]+$/g, ""));
-    notice = [notice, ...lines.filter((line) => line !== "" && !LICENSE_LINE.test(line))].join(" ").replace(/\s+/g, " ").trim();
+    notice = [notice, ...lines.filter((line) => line !== "" && !isLicenseLine(line))].join(" ").replace(/\s+/g, " ").trim();
     if (notice === "" || NOTICES.has(notice)) end = index + 1;
   }
   return header.slice(0, end);
