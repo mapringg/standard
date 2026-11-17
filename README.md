@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.1" }
 }
 ```
 
@@ -234,7 +234,9 @@ Each finding names the file, the owner and the API, such as `src/form.tsx Form u
 cp node_modules/@mapringg/standard/templates/swr.ts apps/web/src/lib/swr.ts
 ```
 
-`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. `SwrScope` gives a test an empty cache in place of `SWRConfig`.
+`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. Each hook refetches on mount, so a seed cached with the page does not go stale. Pass `fresh: true` when a server component fetched the seed for this request, and the hook skips that first request. A list whose key the client picks, or whose key starts as `null`, passes `fallbackData: []` and loads on mount or when the key arrives.
+
+`useServerSeededInfinite` keeps the pages of a list in one cache entry, so it has no per-page cache to keep in step. The refetch on mount and each focus, reconnect or interval refresh refetch every loaded page in order. `loadMore` fetches only the next page and appends it to the pages as they are when it arrives, after any refresh that is running. An edit made in the meantime stays, and so does the result of the refresh. Components that show the same list share one refresh and one `loadMore` request. After a page fails, `loadMore` or `revalidate` fetches only that page. With no failed page, `revalidate` refetches the loaded pages. `replace` edits the loaded pages at once, and the edit stays when more pages load. `revalidate` and `replace` act on the key of the render they came from, so an edit never reaches a list the user picks afterwards. `restart` drops to the first page and refetches it, and a page that `loadMore` was fetching is dropped. `SwrScope` gives a test an empty cache in place of `SWRConfig`.
 
 `no-comments` fails a comment in source. A name, a test name or a type carries the why. A decision that an agent would otherwise undo goes under a heading in a doc, and a comment points at the doc. The check reads every `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` file that git tracks outside `node_modules`, `.d.ts` files included. It has no settings. These comments pass:
 

@@ -38,6 +38,7 @@ export function useItem(id: string | null, seed: Item) {
 export function useItems(seed: readonly Page[]) {
   const list = useServerSeededInfinite((index, previous: Page | null) => (index > 0 && previous?.next == null ? null : (["items", previous?.next ?? null] as const)), loadPage, {
     fallbackData: seed,
+    fresh: true,
     refreshInterval: 30_000,
     revalidateOnFocus: true,
   });
