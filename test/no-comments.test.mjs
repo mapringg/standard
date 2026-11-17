@@ -421,3 +421,27 @@ test("no-comments names markup code it cannot place, with a rewrite in place of 
   assert.equal(stdout, "no-comments: src/pages/a.astro parse: src/pages/a.astro does not parse, so no-comments cannot read it: the markup on line 4 holds code the compiler places where the text does not have it, which no check can read. Move that code into the frontmatter, and use its result in the markup.\n");
   assert.equal(status, 1);
 });
+
+test("no-comments fails CDATA in a font with color inside SVG, which leaves foreign content", (t) => {
+  fails(t, { "src/pages/a.astro": '<p>a</p>\n<svg><font color="red"><![CDATA[ text ]]></font></svg>\n' }, `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`);
+});
+
+test("no-comments fails CDATA in a font with face inside MathML, which leaves foreign content", (t) => {
+  fails(t, { "src/pages/a.astro": '<p>a</p>\n<math><font face="serif"><![CDATA[ text ]]></font></math>\n' }, `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`);
+});
+
+test("no-comments passes comment-like text in a title under a font with color in SVG, which is an HTML title", (t) => {
+  passes(t, { "src/pages/a.astro": '<svg><font color="red"><title><!-- text --></title></font></svg>\n' });
+});
+
+test("no-comments passes comment-like text after a constant set:html that opens a textarea", (t) => {
+  passes(t, { "src/pages/a.astro": '<div set:html="&lt;textarea&gt;"/><!-- prose -->\n' });
+});
+
+test("no-comments passes comment-like text after is:raw content that opens plaintext", (t) => {
+  passes(t, { "src/pages/a.astro": "<div is:raw><plaintext></div><!-- prose -->\n" });
+});
+
+test("no-comments reports a set:html comment on the line its entities put it", (t) => {
+  fails(t, { "src/pages/a.astro": '<div set:html="\n&copy;\n&lt;!-- comment --&gt;"/>\n' }, `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 3. ${HTML}`);
+});
