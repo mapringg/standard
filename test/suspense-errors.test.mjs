@@ -129,8 +129,10 @@ test("suspense-errors fails a Suspense in a route segment that no error.tsx cove
     BOUNDARY,
     {
       "apps/web/app/orders/page.tsx": 'import { Suspense } from "react";\nimport { ErrorBoundary } from "@/components/error-boundary";\nexport default function Page() {\n  return [<Suspense />, <ErrorBoundary><Suspense /></ErrorBoundary>];\n}\n',
+      "apps/web/app/stock/page.tsx": 'import { Suspense } from "react";\nimport { catchError } from "./catch";\nconst Catch = catchError(() => null);\nexport default function Page() {\n  return <Catch><Suspense /></Catch>;\n}\n',
     },
     bare("apps/web/app/orders/page.tsx", "line 4", "apps/web/app/orders"),
+    bare("apps/web/app/stock/page.tsx", "line 5", "apps/web/app/stock"),
   );
 });
 
