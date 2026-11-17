@@ -212,6 +212,11 @@ function runs(repo, projects) {
 export default {
   name: "typecheck",
   since: "0.9.0",
+  doc: {
+    enforces: "Each TypeScript project loads the shared strict tsconfig and keeps its flags. The root and each project's `package.json` have a real `typecheck` script, `hooks.pre-push` runs `pnpm typecheck`, and the CI Check job runs it. The check reads configs and wiring; it does not type-check source, which the script does.",
+    fix: "Add the shared base to `extends`, remove the overriding flag, or add the script, pre-push line or CI step the finding names.",
+    config: ["hooks.pre-push"],
+  },
   subject: "tree",
   baseline: false,
   retired: [],

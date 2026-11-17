@@ -149,6 +149,11 @@ const linesText = (lines) => {
 export default {
   name: "react",
   since: "0.12.0",
+  doc: {
+    enforces: "A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `\"use client\"` file does not read `fetch`, and only each Next app's `src/lib/swr.ts` imports swr.",
+    fix: "Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr.",
+    config: [],
+  },
   subject: "tree",
   retired: [],
   applies: (repo) => (dependents(repo, "react").length > 0 ? { on: true } : { on: false, because: "no tracked package.json declares react" }),

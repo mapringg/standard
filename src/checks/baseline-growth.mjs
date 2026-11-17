@@ -34,6 +34,11 @@ function isSymlinkAt(repo, commit, path) {
 export default {
   name: "baseline-growth",
   since: "0.2.0",
+  doc: {
+    enforces: "A pull request does not add a check to `pending` or create or grow a baseline, and `.standard` tracks no symlink. The pull request that removes a check from `pending` may start its baseline. A pin bump may add the checks its new version introduced, and the pull request that first installs the standard may add any.",
+    fix: "Fix the new findings instead of recording them.",
+    config: ["pending"],
+  },
   subject: "pr",
   retired: [],
   run(pr, repo, checks) {

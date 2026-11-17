@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.13.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.0" }
 }
 ```
 
@@ -19,6 +19,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | --- | --- |
 | `standard check [<name>...]` | Runs every check. In GitHub Actions it reads the pull request or push from `GITHUB_EVENT_PATH`, so check out with `fetch-depth: 0`. A `pull_request` event runs the commit, pull request and tree checks in one process. |
 | `standard check --pr <number>` | Runs the same checks locally on a pull request that `gh pr view` reads. It fetches the pull request's base and head commits from `origin` when the clone lacks them. |
+| `standard explain [<check> \| --markdown]` | Prints what each check enforces, the fix it names, its config keys, the version that added it and whether it keeps a baseline. See [Checks](#checks). |
 | `standard hook commit-msg <file>` | Checks the commit message. |
 | `standard hook pre-commit` | Runs the `hooks.pre-commit` lines. |
 | `standard hook pre-push` | Refuses a merge commit that `origin/develop` lacks, then runs the `hooks.pre-push` lines. |
@@ -26,6 +27,29 @@ Add the package at a tag and install its hooks when the repository installs:
 | `standard score [<path>...] [--remote] [--json]` | Reports how far each repository follows the standard. See [Score](#score). |
 
 ## Checks
+
+`standard explain --markdown` writes this table from the check registry, and a test fails when it drifts. `standard explain <check>` prints one check in full.
+
+<!-- explain:start -->
+| Check | Enforces | Fix | Config | Since | Baseline-free |
+| --- | --- | --- | --- | --- | --- |
+| `commit-subject` | Each commit message is one subject line: a capital imperative verb, three or more words and at most 80 characters, with no prefix, trailing period, body or trailers. The commit-msg hook and a push to develop or main fail a broken subject, and a push also needs its pull request number. On a pull request a broken subject only warns, and a merge commit fails. | Reword the subject the finding names, drop the body and trailers, and rebase away merge commits. | none | 0.1.0 | yes |
+| `pr-title` | The pull request title follows the commit subject rules, counting the ` (#<number>)` the squash adds. | Retitle the pull request, since the title becomes the squash commit's subject. | none | 0.2.0 | yes |
+| `pr-body` | The description follows the template: Summary, Evidence with a Before and After, and Merge Danger with Door and a one-word Blast Radius. It warns and never fails; `standard merge` enforces it. | Fill in the section or line the warning names. | `pr.ticket-prefix` | 0.2.0 | yes |
+| `pr-screenshot` | A pull request that changes a file matching `pr.screenshots.when` has an image in Evidence. Files no page renders never ask for one: `.oxlintrc*`, `.oxfmtrc*`, `tsconfig*.json`, `*.test.*` and anything in `__tests__`. It warns; `standard merge` enforces it. | Upload a screenshot with the `pr.screenshots.uploader` script and add it to Evidence, or exclude a tooling folder with a `!` entry in `when`. | `pr.screenshots` | 0.2.0 | yes |
+| `pr-size` | Reports the pull request's size from its changed lines, leaving out the lockfile, renames and binaries, and tests unless only tests changed. With `GH_TOKEN` and `GITHUB_REPOSITORY` set it labels the pull request `size:XS` to `size:XXL`. It never fails. | Split a large pull request into a stack. | none | 0.3.0 | yes |
+| `baseline-growth` | A pull request does not add a check to `pending` or create or grow a baseline, and `.standard` tracks no symlink. The pull request that removes a check from `pending` may start its baseline. A pin bump may add the checks its new version introduced, and the pull request that first installs the standard may add any. | Fix the new findings instead of recording them. | `pending` | 0.2.0 | yes |
+| `wiring` | The repository runs the standard: a CI Check job runs `standard check`, `package.json` pins the package exactly, the install matches the pin, `prepare` runs `standard install`, git tracks `.standard/config.json`, `CLAUDE.md` is `@AGENTS.md` when present, and git tracks no script a check retires unless that check is pending. `standard score`, not this check, reads the installed hooks. | Make the change the probe names, such as deleting a retired script. | `pending` | 0.4.0 | yes |
+| `dead-code` | knip finds no unused file, export, type or dependency, and no unlisted dependency. | Delete the unused code or dependency, or add the missing one. | none | 0.8.0 | yes |
+| `duplicates` | No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders. | Move the shared logic to the module that owns it and import it everywhere. | none | 0.8.0 | yes |
+| `typecheck` | Each TypeScript project loads the shared strict tsconfig and keeps its flags. The root and each project's `package.json` have a real `typecheck` script, `hooks.pre-push` runs `pnpm typecheck`, and the CI Check job runs it. The check reads configs and wiring; it does not type-check source, which the script does. | Add the shared base to `extends`, remove the overriding flag, or add the script, pre-push line or CI step the finding names. | `hooks.pre-push` | 0.9.0 | yes |
+| `tests` | The repository's test command exists, runs before a push, and runs in CI where a failure blocks the merge. | Add the test script, the `pnpm test` pre-push line or the CI step the finding names. | `hooks.pre-push` | 0.10.0 | yes |
+| `pr-tests` | A pull request that adds logic to a package's source adds or changes a test in that package. | Add or change a test in the package that covers the new logic. | none | 0.10.0 | yes |
+| `boundaries` | An import respects the package, module and forbid boundaries the repository draws. | Import through the module's entry or the package's exports, or move the code. | `boundaries` | 0.11.0 | yes |
+| `banned` | A file uses no API the repository bans, and no oxlint config bans APIs a second way. | Use what the entry's `fix` names instead. | `banned` | 0.12.0 | yes |
+| `react` | A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `"use client"` file does not read `fetch`, and only each Next app's `src/lib/swr.ts` imports swr. | Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr. | none | 0.12.0 | no |
+| `no-comments` | Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and license headers. Generated files are skipped. | Move the why into a name, test or type, or into a doc that a `See:` comment points at. | none | 0.13.0 | yes |
+<!-- explain:end -->
 
 `commit-subject` checks commit messages. A message is one subject line. The subject starts with a capital imperative verb, has three or more words and at most 80 characters, and has no prefix, no trailing period, no body and no trailers.
 
@@ -177,7 +201,7 @@ Each file and API is one finding, such as `src/a.ts process.env`, with every lin
 
 The bans every repository shares, `Reflect.apply`, `Reflect.get` and module mocking through `vi` or `jest`, live in the shared oxlint config, so the editor shows them. oxlint does not merge rule options: a config that sets `no-restricted-properties` replaces the shared list for its files, and an override that turns it `"off"` drops it. So each repository's own bans live in `banned`, and `banned` fails any oxlint config that sets one of these rules.
 
-Like `wiring`, `dead-code`, `duplicates`, `typecheck`, `tests`, `boundaries` and `banned` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+A tree check that the table marks baseline-free keeps no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 
 To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bumps the pin to 0.10.0, fix what `pnpm exec standard check tests` prints, then remove `tests` from `pending`. Remove `pr-tests` once the team is ready for every pull request that adds logic to carry a test.
 

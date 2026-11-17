@@ -517,6 +517,11 @@ export async function scan(repo) {
 export default {
   name: "boundaries",
   since: "0.11.0",
+  doc: {
+    enforces: "An import respects the package, module and forbid boundaries the repository draws.",
+    fix: "Import through the module's entry or the package's exports, or move the code.",
+    config: ["boundaries"],
+  },
   subject: "tree",
   baseline: false,
   retired: [

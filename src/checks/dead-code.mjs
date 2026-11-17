@@ -127,6 +127,11 @@ function parseReport(stdout) {
 export default {
   name: "dead-code",
   since: "0.8.0",
+  doc: {
+    enforces: "knip finds no unused file, export, type or dependency, and no unlisted dependency.",
+    fix: "Delete the unused code or dependency, or add the missing one.",
+    config: [],
+  },
   subject: "tree",
   baseline: false,
   retired: ["scripts/check-dead-code.mjs", "scripts/check-dead-code.test.mjs", "scripts/baselines/dead-code.json"],
