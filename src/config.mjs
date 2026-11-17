@@ -81,6 +81,9 @@ function strings(value, at) {
   return Object.freeze([...value]);
 }
 
+/** These names alias the global object, so a chain through them names the global after them: `window.JSON.parse` is `JSON.parse`. */
+export const GLOBAL_OBJECTS = new Set(["globalThis", "window", "self", "global"]);
+
 const TICKET_PREFIX = /^[A-Z][A-Z0-9]*$/;
 
 /**
