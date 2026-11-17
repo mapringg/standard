@@ -1,10 +1,9 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { createRequire } from "node:module";
 import { posix } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import base from "../../config/tsconfig.json" with { type: "json" };
 import { tracked } from "../repo.mjs";
+import { classicApi, majorOf, nativeApi, typescriptFor } from "./support/typescript.mjs";
 import { checkJobScripts, isRealScript, runsScript } from "../wiring.mjs";
 
 const RUNS_TYPECHECK = runsScript("typecheck");
@@ -34,7 +33,7 @@ const TSCONFIG = /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/;
  */
 function nativeParser(root) {
   return async (paths) => {
-    const { API } = await import(pathToFileURL(posix.join(root, "dist/api/sync/api.js")).href);
+    const API = await nativeApi(root);
     /** @type {string[]} */
     let reads = [];
     // TypeScript reads a config's text only to load it, so the reads while it parses one tsconfig are that tsconfig's chain.
@@ -68,7 +67,7 @@ function nativeParser(root) {
  */
 function classicParser(root) {
   return async (paths) => {
-    const ts = createRequire(posix.join(root, "package.json"))("./lib/typescript.js");
+    const ts = classicApi(root);
     const cache = new Map();
     return paths.map((path) => {
       /** @type {any[]} */
@@ -82,18 +81,6 @@ function classicParser(root) {
       };
     });
   };
-}
-
-/**
- * @param {string} tsconfig Absolute path.
- * @returns {string | null} The folder of the typescript package that tsconfig's folder resolves, or null when it has none.
- */
-function typescriptFor(tsconfig) {
-  try {
-    return posix.dirname(realpathSync(createRequire(tsconfig).resolve("typescript/package.json")));
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -135,8 +122,7 @@ async function parseAll(repo, paths) {
   /** @type {Map<string, Parsed>} */
   const parsed = new Map();
   for (const [install, group] of byInstall) {
-    const { version } = JSON.parse(readFileSync(posix.join(install, "package.json"), "utf8"));
-    const parse = Number.parseInt(version, 10) >= 7 ? nativeParser(install) : classicParser(install);
+    const parse = majorOf(install) >= 7 ? nativeParser(install) : classicParser(install);
     const results = await parse(group.map((path) => posix.join(repo.root, path)));
     group.forEach((path, index) => parsed.set(path, results[index]));
   }
