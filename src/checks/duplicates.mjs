@@ -11,7 +11,7 @@ import { parseSync } from "oxc-parser";
 const MIN_NODES = 8;
 const SCANNED = /\.tsx?$/;
 const SKIPPED = /\.d\.ts$|\.(test|spec|stories)\.[^/]+$|(^|\/)(__tests__|tests?)\//;
-const SKIPPED_KEYS = new Set([
+export const SKIPPED_KEYS = new Set([
   "start",
   "end",
   "range",
@@ -33,7 +33,7 @@ const SKIPPED_KEYS = new Set([
   "importKind",
   "exportKind",
 ]);
-const TYPE_WRAPPERS = new Set([
+export const TYPE_WRAPPERS = new Set([
   "TSAsExpression",
   "TSSatisfiesExpression",
   "TSNonNullExpression",
@@ -59,7 +59,7 @@ const NAMED = new Set(["LabeledStatement", "BreakStatement", "ContinueStatement"
  * @param {unknown} value
  * @returns {value is Node}
  */
-function isNode(value) {
+export function isNode(value) {
   return value !== null && typeof value === "object" && "type" in value && typeof value.type === "string";
 }
 

@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.9.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.10.0" }
 }
 ```
 
@@ -103,7 +103,31 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Hooks | No `hooks.pre-push` line is exactly `pnpm typecheck` or `pnpm run typecheck`. Anything before or after it, even `&&`, could skip it or hide its failure, so a chain goes on its own lines. |
 | CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
 
-Like `wiring`, `dead-code`, `duplicates` and `typecheck` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+`tests` checks that the repository's test command runs before a push and in CI. A test file is a tracked `*.test.*` or `*.spec.*` file with a `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.mjs` or `.cjs` extension. It does not apply when git tracks no `package.json`.
+
+| Rule | Fails when |
+| --- | --- |
+| Script | The root `package.json` has no `test` script. |
+| Packages | The `package.json` nearest a test file has no `test` script, so `turbo run test` skips that package. The fix names one test file it would never run. |
+| Hooks | No `hooks.pre-push` line is exactly `pnpm test` or `pnpm run test`, so nothing in the line can swallow a failure. `pnpm test:visual`, `pnpm turbo run test` and `pnpm lint && pnpm test` do not count. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`. When the `ci` probe finds no Check job, this rule stays quiet. |
+
+`pr-tests` fails a pull request that adds logic to a package's source and adds no test logic to that same package. It diffs the head against the merge base of the base and head, reads both sides from git, and parses each changed file.
+
+| Rule | What it means |
+| --- | --- |
+| Source | A `.ts`, `.tsx`, `.mts` or `.cts` file under a `src/` folder, except `.d.ts`, test files, `*.stories.*`, `*.gen.*`, and anything under a `test/`, `tests/`, `__tests__/` or `generated/` folder. |
+| Test | A test file, as `tests` defines it, anywhere. |
+| Package | The folder of the nearest `package.json` that git tracks at the head, `.` for the root. |
+| Logic | A top-level statement, with `export` unwrapped, once positions, comments, types and type casts are dropped. Imports, re-exports, type-only statements, `declare` statements and statements that hold only constant data, such as a translation table, are not logic. |
+| Adds | The head has a logic statement the merge base lacks. So deleting code, dropping an `export` keyword, changing imports, types, comments or formatting, and renaming a file add nothing. A source that does not parse adds logic; a test that does not parse adds none. |
+| Finding | Each package with a source that adds logic and no test that adds any is one finding, named by the package folder. Its fix names the sources and a co-located test name, such as `apps/api/src/a.test.ts`. |
+
+Neither check measures coverage; `pr-tests` asks only that a test changed beside the logic.
+
+Like `wiring`, `dead-code`, `duplicates`, `typecheck` and `tests` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+
+To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bumps the pin to 0.10.0, fix what `pnpm exec standard check tests` prints, then remove `tests` from `pending`. Remove `pr-tests` once the team is ready for every pull request that adds logic to carry a test.
 
 ## Shared configs
 

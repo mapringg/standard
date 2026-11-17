@@ -5,7 +5,9 @@ import { pathToFileURL } from "node:url";
 
 import base from "../../config/tsconfig.json" with { type: "json" };
 import { tracked } from "../repo.mjs";
-import { checkJobScripts, runsTypecheck } from "../wiring.mjs";
+import { checkJobScripts, runsScript } from "../wiring.mjs";
+
+const RUNS_TYPECHECK = runsScript("typecheck");
 
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
@@ -210,11 +212,11 @@ function runs(repo, projects) {
       if (folder === ".") break;
     }
   }
-  if (!repo.config.hooks["pre-push"].some(runsTypecheck)) {
+  if (!repo.config.hooks["pre-push"].some(RUNS_TYPECHECK)) {
     findings.push({ key: "hooks.pre-push", fix: `Add the line "pnpm typecheck" to hooks.pre-push in .standard/config.json, so a push that fails typecheck stops before CI.` });
   }
   const scripts = checkJobScripts(repo);
-  if (scripts.length > 0 && !scripts.some(runsTypecheck)) {
+  if (scripts.length > 0 && !scripts.some(RUNS_TYPECHECK)) {
     findings.push({ key: "ci", fix: `Add a step to the Check job whose run is "pnpm typecheck", with no continue-on-error, so a pull request that fails typecheck cannot merge.` });
   }
   return findings;

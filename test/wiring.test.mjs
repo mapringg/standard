@@ -112,7 +112,7 @@ test("the merge script fails, since standard merge replaces it and pending canno
 test("ci passes a Check job that checks out full history and then runs standard check", (t) => {
   const shapes = [
     ci(CI),
-    edit("on:\n  pull_request:\n", "on: [push, pull_request]\n", "      - ", "    - ", "      - ", "    - ", "      - ", "    - ", "        with:\n          fetch-depth: 0", "      with:\n        fetch-depth: 0"),
+    edit("on:\n  pull_request:\n", "on: [push, pull_request]\n", "      - ", "    - ", "      - ", "    - ", "      - ", "    - ", "      - ", "    - ", "        with:\n          fetch-depth: 0", "      with:\n        fetch-depth: 0"),
     edit("on:\n  pull_request:\n", "on: pull_request\n", "  check:\n    name: Check\n", "  Check:\n", "        with:\n          fetch-depth: 0", '        with: { fetch-depth: "0" }'),
     edit("  pull_request:\n", "  push:\n  pull_request:\n    branches: [develop, main]\n    types: [opened, synchronize, reopened, edited]\n"),
     edit("  pull_request:\n", "  pull_request:\n    branches: ['**', '!release/*']\n"),
@@ -190,20 +190,20 @@ test("pin passes an exact version or tag and fails anything else", (t) => {
   const manifest = (spec) => ({
     "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": spec } },
   });
-  for (const spec of ["0.9.0", "github:mapringg/standard#v0.9.0", "git+https://github.com/mapringg/standard.git#v0.9.0"]) {
+  for (const spec of ["0.10.0", "github:mapringg/standard#v0.10.0", "git+https://github.com/mapringg/standard.git#v0.10.0"]) {
     assertPasses(wiredRepo(t, manifest(spec)));
   }
   assertFails(
     wiredRepo(t, manifest("^0.4.0")),
-    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.9.0" in place of "^0.4.0", so every clone runs the same checks.',
+    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.10.0" in place of "^0.4.0", so every clone runs the same checks.',
   );
   assertFails(
     wiredRepo(t, manifest("github:mapringg/standard")),
-    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.9.0" in place of "github:mapringg/standard", so every clone runs the same checks.',
+    'pin: Pin @mapringg/standard to an exact version or tag such as "github:mapringg/standard#v0.10.0" in place of "github:mapringg/standard", so every clone runs the same checks.',
   );
 
   const { stdout, status } = wiring(wiredRepo(t, { "package.json": { scripts: { prepare: "standard install" } } }));
-  assert.equal(stdout.trim(), 'wiring: pin: Add @mapringg/standard to devDependencies in package.json at "github:mapringg/standard#v0.9.0".');
+  assert.equal(stdout.trim(), 'wiring: pin: Add @mapringg/standard to devDependencies in package.json at "github:mapringg/standard#v0.10.0".');
   assert.equal(status, 1);
 });
 
@@ -211,7 +211,7 @@ test("prepare passes when it starts with standard install and names what it runs
   const manifest = (prepare) => ({
     "package.json": {
       ...(prepare ? { scripts: { prepare } } : {}),
-      devDependencies: { "@mapringg/standard": "0.9.0" },
+      devDependencies: { "@mapringg/standard": "0.10.0" },
     },
   });
   for (const prepare of ["standard install", "standard install && node scripts/link.mjs", "pnpm exec standard install"]) {
@@ -247,7 +247,7 @@ test("installed fails when package.json pins another version than the one instal
   for (const spec of ["9.9.9", "github:mapringg/standard#v9.9.9"]) {
     assertFails(
       wiredRepo(t, manifest(spec)),
-      "installed: Run pnpm install, so the installed 0.9.0 becomes the @mapringg/standard 9.9.9 that package.json pins.",
+      "installed: Run pnpm install, so the installed 0.10.0 becomes the @mapringg/standard 9.9.9 that package.json pins.",
     );
   }
 });
@@ -256,7 +256,7 @@ test("installed fails when node_modules does not hold the package, whatever vers
   const cwd = tempRepo(t);
   write(cwd, WIRED);
   git(cwd, "add", "-A");
-  assertFails(cwd, "installed: Run pnpm install, so node_modules becomes the @mapringg/standard 0.9.0 that package.json pins.");
+  assertFails(cwd, "installed: Run pnpm install, so node_modules becomes the @mapringg/standard 0.10.0 that package.json pins.");
 });
 
 test("a repo without package.json fails pin and prepare", (t) => {
@@ -264,7 +264,7 @@ test("a repo without package.json fails pin and prepare", (t) => {
   assert.equal(
     stdout.trim(),
     [
-      'wiring: pin: Add a package.json whose devDependencies pin @mapringg/standard to "github:mapringg/standard#v0.9.0".',
+      'wiring: pin: Add a package.json whose devDependencies pin @mapringg/standard to "github:mapringg/standard#v0.10.0".',
       'wiring: prepare: Make package.json scripts.prepare start with "standard install", chaining anything else after it with &&, so every install writes the hooks.',
     ].join("\n"),
   );

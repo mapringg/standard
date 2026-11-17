@@ -245,11 +245,11 @@ function workflowMiss(path, text) {
 
 /**
  * Like the standard check step, the whole text must be the command, so nothing before it can exit or swallow its failure.
- * @param {string} text
- * @returns {boolean}
+ * @param {"typecheck" | "test"} script
+ * @returns {(text: string) => boolean} Whether a line is exactly pnpm <script> or pnpm run <script>.
  */
-export function runsTypecheck(text) {
-  return /^pnpm (?:run )?typecheck$/.test(text.trim());
+export function runsScript(script) {
+  return (text) => new RegExp(`^pnpm (?:run )?${script}$`).test(text.trim());
 }
 
 /**
