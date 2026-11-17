@@ -15,7 +15,8 @@ import { sourceFiles } from "./support/sources.mjs";
 
 const LISTED = "client-data/listed";
 const CLIENT_FETCH = "client-data/no-client-fetch";
-const USE_SERVER_DATA = /#useServerData(?:\.|$)/;
+/** The template's hook under its current and former name. A rename keeps the finding's key, so a baseline survives it. */
+const USE_SERVER_DATA = /#(useServerData|useServerSeeded)(?:\.|$)/;
 const LISTED_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in ${FILE} with its reason: pages, live, client-state or unreachable.`;
 const FETCH_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in ${FILE} with its reason.`;
 const BROWSER = 'and "use client" runs it in the browser.';
@@ -65,7 +66,7 @@ export default {
   name: "client-data",
   since: "0.14.13",
   doc: {
-    enforces: "Only a file that `client-data` lists, with its reason, calls `useServerData`. A `\"use client\"` file that it does not list reads no `fetch` and imports no module that `api-modules` matches, directly or through a re-export. Tests, stories and fixtures are exempt.",
+    enforces: "Only a file that `client-data` lists, with its reason, calls `useServerData`, or `useServerSeeded`, its former name. A `\"use client\"` file that it does not list reads no `fetch` and imports no module that `api-modules` matches, directly or through a re-export. Tests, stories and fixtures are exempt.",
     fix: "Read data in a Server Component and pass it as props, and write through a Server Action, or list the file in `client-data` with why the browser must load it.",
     config: ["client-data", "api-modules"],
   },
@@ -80,8 +81,9 @@ export default {
     const sites = [];
     for (const file of files.filter((item) => !NOT_PRODUCT.test(item.path) && !listed(item.path))) {
       for (const { space, path, kind, line } of file.uses) {
-        if (space === "module" && USE_SERVER_DATA.test(path)) {
-          sites.push({ file: file.path, key: `${file.path} useServerData`, group: LISTED, line, said: "uses useServerData", fix: `and client-data in ${FILE} does not list it. ${LISTED_FIX}` });
+        const hook = space === "module" ? USE_SERVER_DATA.exec(path)?.[1] : undefined;
+        if (hook) {
+          sites.push({ file: file.path, key: `${file.path} useServerData`, group: LISTED, line, said: `uses ${hook}`, fix: `and client-data in ${FILE} does not list it. ${LISTED_FIX}` });
         }
         if (!file.client) continue;
         if (space === "global" && (path === "fetch" || path.startsWith("fetch."))) {
