@@ -11,7 +11,8 @@
   "exports": {
     "./package.json": "./package.json",
     "./oxlint": "./config/oxlint.json",
-    "./oxfmt": "./config/oxfmt.json"
+    "./oxfmt": "./config/oxfmt.json",
+    "./tsconfig": "./config/tsconfig.json"
   },
   "files": [
     "bin",

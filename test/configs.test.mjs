@@ -12,3 +12,13 @@ test("an adopter spreads the oxfmt config and appends to its ignores", async () 
   assert.deepEqual([...config.ignorePatterns, "dist/**"], [".claude/**", "dist/**"]);
   assert.equal(config.sortPackageJson.sortScripts, true);
 });
+
+test("an adopter extends the tsconfig by its export name and gets the strict flags", async () => {
+  const { default: config } = await import("@mapringg/standard/tsconfig", { with: { type: "json" } });
+  const required = [
+    "strict", "noImplicitAny", "noImplicitThis", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply",
+    "strictPropertyInitialization", "useUnknownInCatchVariables", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes",
+    "noImplicitOverride", "noImplicitReturns",
+  ];
+  assert.deepEqual(required.filter((flag) => config.compilerOptions[flag] !== true), []);
+});
