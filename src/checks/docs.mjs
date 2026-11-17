@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 
 import { matches } from "../doc-kinds.mjs";
+import { referenceFindings } from "./support/doc-references.mjs";
 import { loadCorpus } from "./support/docs.mjs";
 
 /**
@@ -62,16 +63,16 @@ export default {
   name: "docs",
   since: "0.15.0",
   doc: {
-    enforces: "Every tracked Markdown file is a kind of doc the standard names by path, carries no `check-docs: external` marker, and is reached by links from an AGENTS.md, a CLAUDE.md, `.gemini/styleguide.md` or a SKILL.md unless it is a README or a pull request template. A file named like a log or plan fails in any folder.",
-    fix: "Move, delete or link the doc as the finding says.",
+    enforces: "Every tracked Markdown file is a kind of doc the standard names by path, carries no `check-docs: external` marker, and is reached by links from an AGENTS.md, a CLAUDE.md, `.gemini/styleguide.md` or a SKILL.md unless it is a README or a pull request template. A file named like a log or plan fails in any folder. The paths, links, heading anchors, `pnpm` scripts and code symbols a doc names exist; an external doc's are checked only for links and paths under a tracked top-level entry.",
+    fix: "Move, delete, link or correct the doc as the finding says.",
     config: [],
   },
   subject: "tree",
   baseline: false,
-  retired: [],
+  retired: ["scripts/check-docs.mjs", "scripts/check-docs.test.mjs"],
   applies: () => ({ on: true }),
   run(repo) {
     const corpus = loadCorpus(repo);
-    return [...kindFindings(corpus), ...orphanFindings(corpus)];
+    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus)];
   },
 };

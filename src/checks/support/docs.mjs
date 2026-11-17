@@ -6,6 +6,7 @@ import { gfm } from "micromark-extension-gfm";
 import { posix } from "node:path";
 
 import { isDoc, place } from "../../doc-kinds.mjs";
+import { slug } from "./markdown.mjs";
 
 /**
  * @typedef {import("../../doc-kinds.mjs").Kind} Kind
@@ -14,7 +15,9 @@ import { isDoc, place } from "../../doc-kinds.mjs";
  * A link as written, on the line it starts, and the repository path it lands on, which may not exist.
  * A reference link is its definition, once, however many references use it.
  * @typedef {{ line: number, text: string, path: string, anchor: string | null }} Link
- * @typedef {{ path: string, kind: Kind, links: Link[], marker: boolean }} Doc
+ * Code a doc names things in: each code span, and each line of a code block, with `span` false.
+ * @typedef {{ line: number, text: string, span: boolean }} Code
+ * @typedef {{ path: string, kind: Kind, links: Link[], code: Code[], anchors: ReadonlySet<string>, marker: boolean }} Doc
  * @typedef {{ docs: ReadonlyMap<string, Doc>, misplaced: { path: string, refused: boolean }[] }} Corpus
  */
 
@@ -34,6 +37,18 @@ function walk(node, visit) {
   if ("children" in node) for (const child of node.children) walk(child, visit);
 }
 
+/** @type {(node: Node) => string} The text a node renders, without its HTML. */
+const rendered = (node) => (node.type === "text" || node.type === "inlineCode" ? node.value : "children" in node ? node.children.map(rendered).join("") : "");
+
+/** @type {(part: string) => string} */
+function decode(part) {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+}
+
 /**
  * @param {string} from The doc the link is in.
  * @param {string} url
@@ -42,12 +57,9 @@ function walk(node, visit) {
 function land(from, url) {
   if (SCHEME.test(url)) return null;
   const [file = "", anchor] = url.split("#", 2);
-  let decoded = file.split("?")[0] ?? "";
-  try {
-    decoded = decodeURIComponent(decoded);
-  } catch {}
+  const decoded = decode(file.split("?")[0] ?? "");
   const path = decoded === "" ? from : decoded.startsWith("/") ? posix.normalize(decoded.slice(1)) : posix.join(posix.dirname(from), decoded);
-  return { path: path.replace(/\/$/, ""), anchor: anchor ?? null };
+  return { path: path.replace(/\/$/, ""), anchor: anchor === undefined ? null : decode(anchor) };
 }
 
 /**
@@ -64,6 +76,10 @@ export function parseDoc(path, kind, text) {
   const used = new Set();
   /** @type {import("mdast").Definition[]} */
   const definitions = [];
+  /** @type {Code[]} */
+  const code = [];
+  /** @type {Map<string, number>} */
+  const slugs = new Map();
   let marker = false;
   const add = (/** @type {number} */ line, /** @type {string} */ written, /** @type {string} */ url) => {
     const landed = land(path, url);
@@ -75,6 +91,16 @@ export function parseDoc(path, kind, text) {
     else if (node.type === "linkReference" || node.type === "imageReference") used.add(node.identifier);
     else if (node.type === "definition") definitions.push(node);
     else if (node.type === "html") marker ||= node.value.includes(MARKER);
+    else if (node.type === "inlineCode") code.push({ line: lineOf(node), text: node.value.replaceAll("\n", " "), span: true });
+    else if (node.type === "code") {
+      const fenced = "`~".includes(text[node.position?.start.offset ?? 0] ?? "");
+      node.value.split("\n").forEach((part, at) => code.push({ line: lineOf(node) + at + (fenced ? 1 : 0), text: part, span: false }));
+    } else if (node.type === "heading") {
+      const base = slug(rendered(node));
+      const seen = slugs.get(base) ?? 0;
+      slugs.set(base, seen + 1);
+      slugs.set(seen === 0 ? base : `${base}-${seen}`, 1);
+    }
     else if (node.type === "text" && kind.name === "agents") {
       node.value.split("\n").forEach((part, at) => {
         const line = lineOf(node) + at;
@@ -84,7 +110,7 @@ export function parseDoc(path, kind, text) {
     }
   });
   for (const definition of definitions) if (used.has(definition.identifier)) link(definition, definition.url);
-  return { path, kind, links, marker };
+  return { path, kind, links, code, anchors: new Set(slugs.keys()), marker };
 }
 
 /** @type {(repo: import("../../repo.mjs").Repo) => Corpus} Every governed doc parsed once. */

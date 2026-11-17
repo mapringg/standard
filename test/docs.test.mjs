@@ -170,3 +170,73 @@ for (const [name, agents, files, found] of [
 test("docs passes a repository with no Markdown", (t) => {
   passes(t, { "src/a.ts": "export const a = 1;\n" });
 });
+
+const REFERENCED = {
+  "AGENTS.md": "# Guide\n\n[Conventions](docs/conventions.md), [broken](docs/broken.md), [vendor](docs/external/vendor.md)\n",
+  ".gitignore": ".env*\nlogs/\n",
+  "package.json": JSON.stringify({ scripts: { build: "tsc" }, dependencies: { "@scope/pkg": "1.0.0" } }),
+  "apps/api/package.json": JSON.stringify({ name: "api", scripts: { "test:parity": "node --test" } }),
+  "packages/ui/package.json": JSON.stringify({ name: "@scope/ui", scripts: { storybook: "storybook dev" } }),
+  "apps/api/src/x.ts": "export const parseThing = 1;\nexport const MAX_ITEMS = 2;\n",
+  ".github/pull_request_template.md": "## Summary\n\nSee `missing.ts` and [nothing](nope.md).\n",
+};
+
+test("docs passes references that name tracked paths, globs, ignored paths, dependencies, scripts, symbols and headings", (t) => {
+  passes(t, {
+    ...REFERENCED,
+    "AGENTS.md": "# Guide\n\n[Conventions](docs/conventions.md) and [the api guide](apps/api/docs/guide.md)\n",
+    "apps/api/logo.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a]),
+    "apps/api/docs/guide.md": "# Guide\n\nFrom `apps/api`, `../../docs/conventions.md` holds the rules.\n",
+    "docs/conventions.md": [
+      "# Conventions",
+      "",
+      "## Local db",
+      "",
+      "Read `src/x.ts`, `apps/api/src/x.ts`, `x.ts`, `apps/*/src/*.ts`, `src/*.ts`, `apps/api/src/x.ts:2` and `../apps/api/src/x.ts`.",
+      "Name files by suffix, such as `.server.ts`, rule ids by prefix, such as `si/`, and screenshots, such as `figure-1-2.png`.",
+      "Copy `apps/api/.env.local` and check `logs/`. Import `@scope/pkg/sub.js`.",
+      "Skip `<name>.ts`, `$HOME/a.ts`, `~/a.md`, `/api/a.json` and `https://example.com/b.ts`.",
+      "Call `parseThing()` with `MAX_ITEMS`.",
+      "Run `pnpm --filter api test:parity`, `pnpm build`, `pnpm exec whatever`, `pnpm install`, `pnpm -C apps/api test:parity`, `pnpm --filter @scope/ui storybook` and `pnpm --filter ./packages/ui storybook`.",
+      "See [local](#local-db), [apps](../apps/) and [api](/apps/api/src/x.ts).",
+      "Use pnpm in prose without checking it.",
+      "",
+      "```sh",
+      "pnpm build",
+      "pnpm --filter=api run test:parity",
+      "```",
+      "",
+    ].join("\n"),
+  });
+});
+
+test("docs lists every reference in a doc that names nothing, and checks only links and local paths in external docs", (t) => {
+  fails(
+    t,
+    {
+      ...REFERENCED,
+      "docs/conventions.md": "# Conventions\n\n## Local db\n",
+      "docs/broken.md": [
+        "# Broken",
+        "",
+        "Read `src/missing.ts`, `./nope.md` and `apps/*/src/*.go`.",
+        "Call `parseWidget` and `MISSING_THING`.",
+        "Run `pnpm check:docs` and `pnpm --filter api build`.",
+        "See [setup `db`](conventions.md#setup) and [gone](gone.md), but not `[code](nowhere.md)`.",
+        "",
+        "```sh",
+        "pnpm lint",
+        "```",
+        "",
+      ].join("\n"),
+      "docs/external/vendor.md": "# Vendor\n\nTheir `src/server/handler.go` calls `fetchVendorThing` through `pnpm vendor:sync`. Ours is `apps/api/src/gone.ts` and [x](missing.md).\n",
+    },
+    "docs/broken.md reference: docs/broken.md names things that do not exist: line 3 `src/missing.ts` (no tracked file ends with this path), line 3 `./nope.md` (no tracked file at docs/nope.md or from a folder above it), line 3 `apps/*/src/*.go` (no tracked file matches this glob), line 4 `parseWidget` (no tracked source has this word), line 4 `MISSING_THING` (no tracked source has this word), line 5 `pnpm check:docs` (no package.json has the script check:docs), line 5 `pnpm --filter api build` (api has no script build), line 6 [setup `db`](conventions.md#setup) (docs/conventions.md has no heading #setup), line 6 [gone](gone.md) (docs/gone.md is not tracked), line 9 `pnpm lint` (no package.json has the script lint). Fix each name, or move facts about an outside system to docs/external/.",
+    "docs/external/vendor.md reference: docs/external/vendor.md names things that do not exist: line 3 `apps/api/src/gone.ts` (no tracked file ends with this path), line 3 [x](missing.md) (docs/external/missing.md is not tracked). Fix each name.",
+  );
+});
+
+test("docs replaces the repository's check-docs script", (t) => {
+  const { stdout } = standard(tempRepo(t), ["explain", "docs"]);
+  assert.match(stdout, /^ {2}Replaces: scripts\/check-docs\.mjs, scripts\/check-docs\.test\.mjs$/m);
+});
