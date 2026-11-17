@@ -62,6 +62,15 @@ const NAMESPACES = new Set(["react", "react#default"]);
 /** @type {(path: string) => string | undefined} The effect hook a path reads, itself or a member such as `.bind`. */
 const hookOf = (path) => EFFECTS.paths.find((hook) => path === hook || path.startsWith(`${hook}.`));
 
+/** The swr template's test cache, under its current and former names, from whatever path the app imports its copy. */
+const TEST_CACHE = /** @type {BannedRule} */ ({
+  space: "module",
+  paths: ["*#SWRTestCache", "*#ServerDataTestCache", "*#SwrScope"],
+  files: [],
+  except: [],
+  fix: "SWRTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useSWR from src/lib/swr.ts on the global cache when the data must load in the client.",
+});
+
 const OXLINT_CONFIG = /(?:^|\/)(?:[^/]*\.)?oxlintrc\.json$|(?:^|\/)oxlint\.config\.[cm]?[jt]s$/;
 
 /** @type {(rule: BannedRule, path: string) => boolean} */
@@ -70,8 +79,14 @@ function covers(rule, path) {
   return (rule.files.length === 0 || rule.files.some(matches)) && !rule.except.some(matches);
 }
 
-/** @type {(rule: BannedRule, path: string, use: string) => boolean} A path covers itself and every longer use: `react` covers `react#useMemo`, which covers `react#useMemo.call`. */
-const under = (rule, path, use) => use === path || use.startsWith(path + (rule.space === "module" && !path.includes("#") ? "#" : "."));
+/**
+ * @type {(rule: BannedRule, path: string, use: string) => boolean} A path covers itself and every longer use: `react` covers `react#useMemo`,
+ * which covers `react#useMemo.call`. A `*` module covers the export from any module.
+ */
+const under = (rule, path, use) => {
+  const seen = path.startsWith("*#") && use.includes("#") ? `*${use.slice(use.indexOf("#"))}` : use;
+  return seen === path || seen.startsWith(path + (rule.space === "module" && !path.includes("#") ? "#" : "."));
+};
 
 /**
  * The effect ban holds in every file. A product file may not use an effect hook at all. An exempt file, a test, a timer template copy or
@@ -104,7 +119,7 @@ function findings(file, rules, exempt) {
       const api = rule.paths.find((path) => under(rule, path, use.path));
       if (api === undefined) continue;
       claimed.add(use);
-      add(api, use.line, rule.fix);
+      add(api.replace(/^\*#/, ""), use.line, rule.fix);
     }
   }
   for (const { space, path, line } of file.exports) {
@@ -162,7 +177,7 @@ export default {
   name: "banned",
   since: "0.12.0",
   doc: {
-    enforces: "A file uses no API the repository bans, and no React effect hook outside tests, the timer template and listed wrappers, which call one but never pass it on. No file reads React's namespace whole or at a key that is not a constant, and no oxlint config bans APIs a second way.",
+    enforces: "A file uses no API the repository bans, no file outside tests imports the swr template's SWRTestCache, and no React effect hook outside tests, the timer template and listed wrappers, which call one but never pass it on. No file reads React's namespace whole or at a key that is not a constant, and no oxlint config bans APIs a second way.",
     fix: "Use what the entry's `fix` names instead, replace an effect with what it does, export only hooks that call an effect hook, and name each React export you read.",
     config: ["banned", "effect-wrappers"],
   },
@@ -171,10 +186,14 @@ export default {
   retired: ["no-process-env", "no-bare-json-parse", "no-module-mocking", "no-manual-memo"].flatMap((rule) => [`packages/oxlint-plugin-*/rules/${rule}.ts`, `packages/oxlint-plugin-*/rules/${rule}.test.ts`]),
   applies: () => ({ on: true }),
   run(repo) {
-    const rules = [...BUILT_IN, ...repo.config.banned];
     const wrappers = new Set([...repo.config.effectWrappers.map((wrapper) => wrapper.file), ...reactApps(repo).map((app) => posix.join(app, TIMER))]);
-    const product = [...BUILT_IN, EFFECTS, ...repo.config.banned];
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
-    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : (NOT_PRODUCT.test(file.path) || wrappers.has(file.path) ? findings(file, rules, true) : findings(file, product, false))))];
+    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => {
+      if ("error" in file) return [parseError(file)];
+      const test = NOT_PRODUCT.test(file.path);
+      const exempt = test || wrappers.has(file.path);
+      const rules = [...BUILT_IN, ...(test ? [] : [TEST_CACHE]), ...(exempt ? [] : [EFFECTS]), ...repo.config.banned];
+      return findings(file, rules, exempt);
+    })];
   },
 };
