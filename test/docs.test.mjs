@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { git, standard, tempRepo, write } from "./helpers.mjs";
@@ -277,7 +279,7 @@ const WEB = {
   "apps/web/package.json": JSON.stringify({ name: "@scope/web", scripts: { build: "echo build" } }),
 };
 
-for (const [name, command, miss] of [
+for (const [name, command, miss, shown = command] of [
   ["a double-quoted filter", 'pnpm --filter "@scope/web" build', null],
   ["a single-quoted filter", "pnpm --filter '@scope/web' build", null],
   ["a quoted directory", 'pnpm --dir "apps/web" build', null],
@@ -293,13 +295,53 @@ for (const [name, command, miss] of [
   ["an unclosed quote in a line that runs no pnpm", "echo it's done", null],
   ["a hash inside a word, which starts no comment", "echo a#b && pnpm missing", "package.json has no script missing"],
   ["a command after an operator", "cd apps/web; pnpm --filter=@scope/web run missing", "@scope/web has no script missing"],
+  ["a continued filter", 'pnpm --filter \\\n  "@scope/web" build', null],
+  ["a continued filter with a missing script", 'pnpm --filter \\\n  "@scope/web" missing', "@scope/web has no script missing", 'pnpm --filter "@scope/web" missing'],
+  ["a continued line inside a quoted filter", 'pnpm --filter "@scope/\\\nweb" build', null],
+  ["a continued run of a missing script", "pnpm run \\\n  missing", "package.json has no script missing", "pnpm run missing"],
+  ["a heredoc body, which is data", "cat <<'EOF'\npnpm missing\nEOF", null],
+  ["an unclosed quote in a heredoc body", "cat <<'EOF'\npnpm --filter \"whatever\nEOF", null],
+  ["pnpm as an argument to echo", "echo pnpm missing", null],
+  ["pnpm as an argument to a pnpm script", 'pnpm --filter "@scope/web" build --label pnpm missing', null],
 ]) {
   test(`docs splits a pnpm command as a POSIX shell does: ${name}`, (t) => {
     const files = { ...WEB, "docs/guide.md": `# Guide\n\n\`\`\`sh\n${command}\n\`\`\`\n` };
     if (miss === null) passes(t, files);
-    else fails(t, files, reference("docs/guide.md", `line 4 \`${command}\` (${miss})`));
+    else fails(t, files, reference("docs/guide.md", `line 4 \`${shown}\` (${miss})`));
   });
 }
+
+test("docs passes a path git ignores beside a symlink git cannot look through", (t) => {
+  const cwd = tempRepo(t);
+  write(cwd, {
+    "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+    ".gitignore": "node_modules/\ngenerated/\n",
+    "package.json": JSON.stringify({ scripts: {} }),
+    "vendor/types.json": "{}\n",
+    "docs/guide.md": "# Guide\n\nRead `node_modules/pkg/types.json` and `generated/result.json`.\n",
+  });
+  mkdirSync(join(cwd, "node_modules"));
+  symlinkSync("../vendor", join(cwd, "node_modules/pkg"));
+  git(cwd, "add", "-A");
+  assert.deepEqual(standard(cwd, ["check", "docs"]).stdout, "docs: OK\n");
+});
+
+test("docs gives a heading repeated after its suffixed name the next free suffix, as GitHub does", (t) => {
+  passes(t, { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Setup\n\n# Setup-1\n\n# Setup\n\n[Jump](#setup-2)\n" });
+});
+
+test("docs passes a bare file name that tracked source writes, and fails one source names only inside a folder", (t) => {
+  fails(
+    t,
+    {
+      "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+      "package.json": JSON.stringify({ scripts: {} }),
+      "scripts/verify.mjs": 'writeFileSync(join(out, "result.json"), "{}");\nreadFileSync("evidence/cleanup.json");\n',
+      "docs/guide.md": "# Guide\n\nThe run writes `result.json` and `cleanup.json`.\n",
+    },
+    reference("docs/guide.md", "line 3 `cleanup.json` (no tracked file ends with this path)"),
+  );
+});
 
 test("docs checks no reference inside an HTML comment", (t) => {
   passes(t, { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Guide\n<!--\nUse `missingThing()` and [x](missing.md).\n-->\n" });
