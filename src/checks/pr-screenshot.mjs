@@ -2,6 +2,9 @@ import { FILE } from "../config.mjs";
 import { git } from "../repo.mjs";
 import { evidenceHasImage } from "./support/markdown.mjs";
 
+/** A file no page renders: a lint, format or TypeScript config, a test, or a file in a __tests__ folder. */
+const CANNOT_RENDER = /(?:^|\/)(?:\.oxlintrc[^/]*|\.oxfmtrc[^/]*|tsconfig[^/]*\.json|[^/]*\.test\.[^/]*)$|(?:^|\/)__tests__\//;
+
 /** @type {import("../registry.mjs").Check} */
 export default {
   name: "pr-screenshot",
@@ -19,7 +22,7 @@ export default {
     );
     const range = `${pr.baseSha}...${pr.headSha}`;
     const pathspecs = when.map((glob) => (glob.startsWith("!") ? `:(glob,exclude)${glob.slice(1)}` : `:(glob)${glob}`));
-    const visual = git(repo.root, "diff", "--name-only", "-z", range, "--", ...pathspecs).split("\0").filter(Boolean);
+    const visual = git(repo.root, "diff", "--name-only", "-z", range, "--", ...pathspecs).split("\0").filter((path) => path !== "" && !CANNOT_RENDER.test(path));
     if (visual.length === 0 || evidenceHasImage(pr.body)) return [];
     const shown = visual.length > 3 ? `${visual.slice(0, 3).join(", ")} and ${visual.length - 3} more` : visual.join(", ");
     return [

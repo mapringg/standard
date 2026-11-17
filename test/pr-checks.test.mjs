@@ -207,6 +207,23 @@ test("pr-screenshot skips files a ! entry in when excludes, and needs one entry 
   assert.equal(status, 1);
 });
 
+test("pr-screenshot does not ask for a screenshot for a UI file no page renders", (t) => {
+  const unrendered = [
+    "apps/web/.oxlintrc.json",
+    "apps/web/.oxfmtrc.jsonc",
+    "apps/web/tsconfig.json",
+    "apps/web/tsconfig.build.json",
+    "apps/web/src/page.test.tsx",
+    "packages/ui/src/__tests__/button.tsx",
+  ];
+  for (const changed of unrendered) assert.equal(checkScreenshot(t, changed, PAIR).stdout.trim(), "pr-screenshot: OK (#123)", changed);
+  for (const changed of ["apps/web/package.json", "apps/web/app/test/page.tsx", "apps/web/app/scripts/page.tsx", "apps/web/src/tsconfig-panel.tsx", "apps/web/src/scripts.tsx", "apps/web/src/testimonials/card.tsx"]) {
+    assert.match(checkScreenshot(t, changed, PAIR).stdout, /::warning title=pr-screenshot::/, changed);
+  }
+  const repo = pullRequestRepo(t, { base: { ".standard/config.json": SCREENSHOTS }, head: { "apps/web/.oxlintrc.json": "x", "apps/web/src/page.tsx": "x" } });
+  assert.match(checkPullRequest(t, repo, { body: body({ evidence: PAIR }) }, ["pr-screenshot"]).stdout, /but the PR changes apps\/web\/src\/page\.tsx\. Upload/);
+});
+
 test("pr-screenshot accepts a UI change whose Evidence embeds a screenshot", (t) => {
   const evidence = `${PAIR}\n\n![after](https://example.com/b.png)`;
   assert.equal(checkScreenshot(t, "packages/ui/src/button.tsx", evidence).stdout.trim(), "pr-screenshot: OK (#123)");
