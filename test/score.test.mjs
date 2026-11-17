@@ -140,11 +140,13 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  pr-tests         on",
       "  boundaries       on",
       "  banned           on",
+      "  react            n/a",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
       `duplicates in ${name}: n/a, git tracks no TypeScript source to scan`,
       `typecheck in ${name}: n/a, git tracks no tsconfig.json`,
+      `react in ${name}: n/a, no tracked package.json declares react`,
       "",
       `${name}: 19 of 20 pass`,
       "",
@@ -191,7 +193,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -273,6 +275,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     "pr-tests": "absent",
     boundaries: "n/a",
     banned: "absent",
+    react: "n/a",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 17]);
 });

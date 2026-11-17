@@ -181,6 +181,24 @@ Like `wiring`, `dead-code`, `duplicates`, `typecheck`, `tests`, `boundaries` and
 
 To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bumps the pin to 0.10.0, fix what `pnpm exec standard check tests` prints, then remove `tests` from `pending`. Remove `pr-tests` once the team is ready for every pull request that adds logic to carry a test.
 
+`react` holds React state and data fetching to one shape. It has no settings, and it does not apply when no tracked `package.json` declares `react`. An owner is the nearest named function around a call whose name is PascalCase or starts with `use` and a capital, or an anonymous `export default` function. A name comes from the declaration, or from the variable or property that holds the function, through wrapping calls such as `memo(...)`. Hooks count as owners, so moving two `useState` calls into `useFoo` still fails. A call outside an owner counts for no rule, since React's rules of hooks already forbid it. `React.useState` through a default or namespace import, and a local that takes either, such as `const { useState } = React`, count the same as `useState`.
+
+| Rule | Fails when | Fix |
+| --- | --- | --- |
+| `react/single-use-state` | An owner calls `useState` a second time. Each call after the first is one finding. A single `useState` that holds one value, an object included, passes. | Hold the owner's state in one `useReducer`. |
+| `react/no-flag-state` | A `useState` call's first binding is `loading`, `isLoading`, `error` or `isError`. | Model the status in a `useReducer` state union, such as `{ status: "loading" } \| { status: "done", data }`. |
+| `react/no-client-fetch` | A file whose directive prologue holds `"use client"` reads the global `fetch`, also through `window` or `globalThis` or passed as a value. A local named `fetch` passes. | Fetch in a server component, or through `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts` when the data needs pagination or revalidation. |
+| `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a folder whose tracked `package.json` declares `next`. A type-only import passes. | Use `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`. |
+| Parse | A tracked source does not parse. | Fix the syntax. |
+
+Each finding names the file, the owner and the API, such as `src/form.tsx Form useState`, with no line number, and a later owner of the same name in the file is `Form 2`. Its fix lists the lines. `react` keeps a baseline, one group per rule, so `standard check react --init` records today's findings and the check fails only new ones. The wrapper ships in the package. Copy it into each Next app and import its hooks instead of `swr`:
+
+```sh
+cp node_modules/@mapringg/standard/templates/swr.ts apps/web/src/lib/swr.ts
+```
+
+`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. `SwrScope` gives a test an empty cache in place of `SWRConfig`.
+
 ## Shared configs
 
 The package ships one oxlint config, one oxfmt config and one tsconfig. The lint and format configs are tested with oxlint 1.92 and 1.93 and oxfmt 0.77 and 0.78. Each holds only the settings every adopting repository already agreed on, so a repository adds its own plugins, rules, ignores and Tailwind stylesheets on top.

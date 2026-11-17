@@ -82,5 +82,5 @@ test("the swr template passes the strict base and requires fallbackData", (t) =>
 test("no package code imports swr", () => {
   const files = readdirSync(join(PACKAGE, "src"), { recursive: true, encoding: "utf8" }).filter((file) => file.endsWith(".mjs"));
   assert.ok(files.length > 0);
-  assert.deepEqual(files.filter((file) => /["']swr(?:\/[^"']*)?["']/.test(readFileSync(join(PACKAGE, "src", file), "utf8"))), []);
+  assert.deepEqual(files.filter((file) => /(?:from\s*|import\(\s*|require\(\s*)["']swr(?:\/[^"']*)?["']/.test(readFileSync(join(PACKAGE, "src", file), "utf8"))), []);
 });
