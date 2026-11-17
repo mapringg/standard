@@ -373,7 +373,7 @@ test("banned refuses a script's set:html or set:text value that holds HTML chara
   );
 });
 
-const EFFECT_FIX = "Replace the effect with what it does: read data with useServerSeeded or useServerSeededInfinite from src/lib/swr.ts or in a server component, compute derived state in render, act on an event in its handler, reset state on a prop change with a key, read an external store with useSyncExternalStore, measure or focus the DOM in a ref callback, read the latest props from a callback with useEffectEvent instead of copying them into a ref, and run a timer with useTimeout, useInterval or useAnimationFrame from src/lib/timer.ts, copied from node_modules/@mapringg/standard/templates/timer.ts. A wrapper that must keep an effect goes in effect-wrappers in .standard/config.json with its reason.";
+const EFFECT_FIX = "Replace the effect with what it does: read data in a Server Component and pass it down as props, or with useSWR or useSWRInfinite from src/lib/swr.ts when it must load in the browser, compute derived state in render, act on an event in its handler, reset state on a prop change with a key, read an external store with useSyncExternalStore, measure or focus the DOM in a ref callback, read the latest props from a callback with useEffectEvent instead of copying them into a ref, and run a timer with useTimeout, useInterval or useAnimationFrame from src/lib/timer.ts, copied from node_modules/@mapringg/standard/templates/timer.ts. A wrapper that must keep an effect goes in effect-wrappers in .standard/config.json with its reason.";
 
 const REACT_EXPORT_FIX = "Import from react where you use it, so banned sees each effect hook.";
 
