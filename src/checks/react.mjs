@@ -96,19 +96,6 @@ const RULES = [
     },
   },
   {
-    name: "react/no-client-fetch",
-    find: ({ files }) =>
-      files.filter((file) => file.client).flatMap((file) =>
-        file.uses
-          .filter((use) => use.space === "global" && (use.path === "fetch" || use.path.startsWith("fetch.")))
-          .map(({ line }) => ({
-            key: `${file.path} fetch`,
-            line,
-            fix: (lines) => `${file.path} uses fetch on ${lines}, and "use client" runs it in the browser. Fetch in a server component, or through useSWR or useSWRInfinite from src/lib/swr.ts when the data must load in the client.`,
-          })),
-      ),
-  },
-  {
     name: "react/no-direct-swr",
     find: ({ files, wrappers }) =>
       files.filter((file) => !wrappers.has(file.path)).flatMap((file) =>
@@ -134,8 +121,8 @@ export default {
   name: "react",
   since: "0.12.0",
   doc: {
-    enforces: "A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `\"use client\"` file does not read `fetch`, and only each React app's `src/lib/swr.ts` imports swr.",
-    fix: "Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr.",
+    enforces: "A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. Only each React app's `src/lib/swr.ts` imports swr.",
+    fix: "Hold more than one value in a `useReducer` with a status union, and use the `src/lib/swr.ts` hooks instead of swr.",
     config: [],
   },
   subject: "tree",

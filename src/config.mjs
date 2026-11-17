@@ -11,6 +11,8 @@ import { parseDocument } from "yaml";
  * @property {Boundaries} boundaries
  * @property {readonly BannedRule[]} banned
  * @property {readonly EffectWrapper[]} effectWrappers The `effect-wrappers` list: files that may call React's effect hooks, each with why.
+ * @property {readonly ClientData[]} clientData The `client-data` list: files, or whole apps, that may load data in the browser, each with why.
+ * @property {readonly string[]} apiModules Globs of the app's API modules, which a `"use client"` file may not import.
  *
  * @typedef {object} Boundaries
  * @property {readonly ModuleRule[]} modules
@@ -28,6 +30,10 @@ import { parseDocument } from "yaml";
  * @typedef {{ space: "module" | "global" | "property", paths: readonly string[], files: readonly string[], except: readonly string[], fix: string }} BannedRule
  *
  * @typedef {{ file: string, reason: string }} EffectWrapper
+ * Why a file loads data in the browser. `live` data changes without navigation, `client-state` depends on state that does not belong in
+ * the URL, and `unreachable` data is out of the Next server's reach. Only an `unreachable` app goes in whole.
+ * @typedef {"pages" | "live" | "client-state" | "unreachable"} ClientDataReason
+ * @typedef {{ file: string, reason: ClientDataReason } | { app: string, reason: "unreachable" }} ClientData
  *
  * @typedef {{ "ticket-prefix"?: string, screenshots?: { when: readonly string[], uploader: string } }} PullRequestConfig
  * `ticket-prefix` is the tracker's key, such as "ABC" in `Ticket: ABC-12`. Absent means the repo has no tickets.
@@ -132,6 +138,28 @@ function effectWrappers(value) {
       if (/[*?[\]{}]/.test(file)) throw new Error(`${at}.file has "${file}", a glob. List each wrapper by its exact path.`);
       if (typeof wrapper.reason !== "string" || wrapper.reason.trim() === "") throw new Error(`${at}.reason must say why the file keeps an effect, such as "Binds the map instance, which renders no element."`);
       return Object.freeze({ file, reason: wrapper.reason });
+    }),
+  );
+}
+
+const REASONS = /** @type {const} */ (["pages", "live", "client-state", "unreachable"]);
+
+/** @type {(value: unknown) => readonly ClientData[]} */
+function clientData(value) {
+  if (!Array.isArray(value)) throw new Error(`${FILE} client-data must be a list.`);
+  return Object.freeze(
+    value.map((item, index) => {
+      const entry = section(item, `client-data[${index}]`, ["file", "app", "reason"]);
+      const at = `${FILE} client-data[${index}]`;
+      if (("file" in entry) === ("app" in entry)) throw new Error(`${at} names a file or an app; give it exactly one.`);
+      const { reason } = entry;
+      if (!REASONS.some((known) => known === reason)) throw new Error(`${at}.reason is ${JSON.stringify(reason)}. Give one of ${REASONS.join(", ")}.`);
+      const key = "file" in entry ? "file" : "app";
+      const path = repoPath(entry[key], `${at}.${key}`).replace(/\/$/, "");
+      if (/[*?[\]{}]/.test(path)) throw new Error(`${at}.${key} has "${path}", a glob. List each ${key} by its exact path.`);
+      if (key === "file") return Object.freeze({ file: path, reason: /** @type {ClientDataReason} */ (reason) });
+      if (reason !== "unreachable") throw new Error(`${at} lists the whole app ${path} for "${reason}". Only an app whose server cannot reach its data goes in whole, with reason "unreachable"; list each file for another reason.`);
+      return Object.freeze({ app: path, reason });
     }),
   );
 }
@@ -281,7 +309,7 @@ export function parseConfig(text) {
     const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
     throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
-  const top = section(raw, "", ["banned", "boundaries", "effect-wrappers", "hooks", "pending", "pr"]);
+  const top = section(raw, "", ["api-modules", "banned", "boundaries", "client-data", "effect-wrappers", "hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
   return Object.freeze({
     hooks: Object.freeze({
@@ -293,6 +321,8 @@ export function parseConfig(text) {
     boundaries: boundaries(top.boundaries ?? {}),
     banned: banned(top.banned ?? []),
     effectWrappers: effectWrappers(top["effect-wrappers"] ?? []),
+    clientData: clientData(top["client-data"] ?? []),
+    apiModules: strings(top["api-modules"] ?? [], `${FILE} api-modules`),
   });
 }
 
