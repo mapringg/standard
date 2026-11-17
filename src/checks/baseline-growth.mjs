@@ -48,7 +48,7 @@ function budgetGrowth(pr, repo, starts) {
     if (was !== undefined || now === undefined || starts || !existed.has(name)) return [];
     return [{
       key,
-      fix: `This PR adds budgets.${name} (${now}) to ${FILE}, while ${name} docs existed at the base and docs ran there. A budget starts only in the pull request that removes docs from pending, in a pin bump that brings docs, or with the first doc of its kind.`,
+      fix: `This PR adds budgets.${name} (${now}) to ${FILE}, while ${name} docs existed at the base. A budget starts only in the pull request that removes docs from pending, in a pin bump that brings docs, or with the first doc of its kind.`,
     }];
   });
 }
@@ -88,7 +88,7 @@ export default {
     const before = rawPendingAt(repo, pr.baseSha);
     const after = rawPendingAt(repo, pr.headSha);
     const adopted = before.filter((name) => !after.includes(name));
-    const findings = budgetGrowth(pr, repo, before.includes("docs") || arrived("docs"));
+    const findings = budgetGrowth(pr, repo, adopted.includes("docs") || arrived("docs"));
     findings.push(...after
       .filter((name) => !before.includes(name) && !arrived(name))
       .map((name) => ({
