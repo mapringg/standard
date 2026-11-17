@@ -442,8 +442,8 @@ test("no-comments leaves title text under a font spread undecided, but checks co
   fails(
     t,
     { "src/pages/a.astro": '<svg><font {...props}><title><!-- prose --></title>{/* code */ 1}</font></svg>\n<!-- sibling -->\n' },
-    `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`,
     `src/pages/a.astro comment: src/pages/a.astro has a comment on line 1. ${COMMENT}`,
+    `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`,
   );
 });
 

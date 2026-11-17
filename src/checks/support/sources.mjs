@@ -150,6 +150,7 @@ function astroUnits(text, markup) {
   /** @type {number[]} */
   let sources = [];
   let written = false;
+  let uncertainFonts = 0;
   /** @type {string[]} */
   const open = [];
   /** @type {(html: string, at?: number | ((offset: number) => number)) => void} */
@@ -161,7 +162,7 @@ function astroUnits(text, markup) {
   };
   /** Notes each comment a browser finds in the page so far, and starts a new page inside the open elements. */
   const restart = () => {
-    if (written) {
+    if (written && uncertainFonts === 0) {
       for (const found of htmlComments(page)) {
         const start = sources[found.at] ?? -1;
         if (start >= 0) html.push(comment(found.value, start));
@@ -260,7 +261,9 @@ function astroUnits(text, markup) {
       const opens = node.type === "element" || node.type === "custom-element";
       const injected = node.attributes.find((attribute) => attribute.name === "set:html");
       const unknown = node.type === "component" || (injected !== undefined && injected.kind !== "quoted" && injected.kind !== "empty");
-      if (unknown) restart();
+      const uncertainFont = node.name.toLowerCase() === "font" && node.attributes.some((attribute) => attribute.kind === "spread");
+      if (unknown || uncertainFont) restart();
+      if (uncertainFont) uncertainFonts++;
       if (opens) {
         const tag = startTag(node);
         emit(tag);
@@ -282,6 +285,10 @@ function astroUnits(text, markup) {
       if (opens) {
         open.pop();
         if (!VOID.has(node.name.toLowerCase())) emit(`</${node.name}>`);
+      }
+      if (uncertainFont) {
+        restart();
+        uncertainFonts--;
       }
       if (unknown) restart();
       return;
@@ -343,7 +350,7 @@ function htmlComments(page) {
 /**
  * @param {{ name: string, attributes: import("@astrojs/compiler/types").AttributeNode[] }} node
  * @returns {string} The element's start tag as a browser parses it. An attribute whose value is an expression keeps its
- * name, which is what sets parsing, as a `font`'s `color` does. A spread's names are unknown, so it has none.
+ * name, which is what sets parsing, as a `font`'s `color` does. A font spread makes its subtree's namespace uncertain.
  */
 function startTag(node) {
   const attributes = node.attributes.flatMap((attribute) => {
