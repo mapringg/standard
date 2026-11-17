@@ -8,7 +8,7 @@ import useSWR, {
   type Cache,
   type SWRConfiguration,
 } from "swr";
-import { defaultConfigOptions, type ProviderConfiguration } from "swr/_internal";
+import { defaultConfigOptions, SWRGlobalState, type ProviderConfiguration } from "swr/_internal";
 
 export type ServerDataKey = readonly [resource: string, ...parts: readonly unknown[]];
 
@@ -19,7 +19,10 @@ type Revalidation = Pick<
 
 type Mount = { fresh?: boolean; reuseCache?: boolean };
 
-export type ServerDataOptions<Data> = Revalidation & Mount & { fallbackData: Data };
+type Visit = { visit: true; fresh?: never; reuseCache?: never };
+
+export type ServerDataOptions<Data> = Revalidation &
+  ((Mount & { visit?: false }) | Visit) & { fallbackData: Data };
 
 export type ServerData<Data> = {
   data: Data;
@@ -37,19 +40,55 @@ function revalidateOnMount(
   return !fresh && !(reuseCache && cache.get(id)?.data !== undefined);
 }
 
+type Ended = { cache: Cache; prefix: string };
+
+const VISIT = "$visit";
+let visits = 0;
+
+const ended = new FinalizationRegistry<Ended>(({ cache, prefix }) => {
+  const [revalidators, mutations, fetches, preloads] = SWRGlobalState.get(cache) ?? [];
+  for (const id of [...cache.keys()].filter((id) => id.startsWith(prefix))) {
+    cache.delete(id);
+    if (revalidators?.[id]?.length === 0) delete revalidators[id];
+    for (const records of [mutations, fetches, preloads]) if (records) delete records[id];
+  }
+});
+
+function startVisit(cache: Cache): { id: string } {
+  visits += 1;
+  const visit = { id: String(visits) };
+  ended.register(visit, { cache, prefix: unstable_serialize([VISIT, visit.id]) });
+  return visit;
+}
+
 export function useServerData<Key extends ServerDataKey, Data>(
   key: Key | null,
   fetcher: (key: Key) => Promise<Data>,
   options: ServerDataOptions<Data>,
 ): ServerData<Data> {
-  const { fallbackData, fresh = false, reuseCache = false, ...revalidation } = options;
+  const {
+    fallbackData,
+    fresh = false,
+    reuseCache = false,
+    visit = false,
+    ...revalidation
+  } = options;
   const { cache, mutate } = useSWRConfig();
+  const visitId = useState(() => (visit ? startVisit(cache) : null))[0]?.id;
+  const swrKey = key === null || visitId === undefined ? key : ([VISIT, visitId, key] as const);
   const { data, error, isValidating } = useSWR<Data, Error>(
-    key,
-    (current: Key) => fetcher(current),
+    swrKey,
+    (current: readonly unknown[]) => fetcher((visitId === undefined ? current : current[2]) as Key),
     {
       ...revalidation,
-      revalidateOnMount: revalidateOnMount(cache, unstable_serialize(key), { fresh, reuseCache }),
+      ...(visitId !== undefined
+        ? { revalidateOnMount: true, revalidateIfStale: false }
+        : {
+            revalidateOnMount: revalidateOnMount(cache, unstable_serialize(key), {
+              fresh,
+              reuseCache,
+            }),
+          }),
     },
   );
   return {
@@ -57,12 +96,16 @@ export function useServerData<Key extends ServerDataKey, Data>(
     error,
     validating: isValidating,
     async revalidate() {
-      await mutate(key);
+      await mutate(swrKey);
     },
     async replace(change, { revalidate = false } = {}) {
-      await mutate<Data>(key, (current) => change(current === undefined ? fallbackData : current), {
-        revalidate,
-      });
+      await mutate<Data>(
+        swrKey,
+        (current) => change(current === undefined ? fallbackData : current),
+        {
+          revalidate,
+        },
+      );
     },
   };
 }
