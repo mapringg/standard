@@ -465,6 +465,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "no-comments: OK",
       "docs: OK",
       "docs-prose: OK",
+      "no-doc-pointers: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);
