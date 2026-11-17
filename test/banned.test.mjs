@@ -377,6 +377,8 @@ const EFFECT_FIX = "Replace the effect with what it does: read data with useServ
 
 const REACT_EXPORT_FIX = "Import from react where you use it, so banned sees each effect hook.";
 
+const READ_FIX = "Read each React export by its name, such as React.useState or a named import, so banned sees which hook each line uses.";
+
 test("banned fails React's effect hooks in product code through named, aliased, namespace, default, destructured, required, computed and re-exported uses, and a re-export of react's namespace", (t) => {
   fails(
     t,
@@ -413,7 +415,6 @@ test("banned passes effect hooks in tests, stories, fixtures and test folders, a
     "src/use-tick.ts": effect,
     "src/form.test.tsx": effect,
     "src/form.spec.ts": effect,
-    "src/all.test.ts": 'export * from "react";\n',
     "src/form.test.jsx": 'import { useEffect } from "react";\nexport function Form() {\n  useEffect(() => {}, []);\n  return <form />;\n}\n',
     "src/form.stories.tsx": effect,
     "src/__tests__/render.tsx": effect,
@@ -433,6 +434,52 @@ test("banned passes effect hooks in tests, stories, fixtures and test folders, a
       `banned: src/use-clock.ts react#useEffect: src/use-clock.ts uses react#useEffect on lines 1, 3. ${EFFECT_FIX}`,
       "",
     ].join("\n"),
+  );
+  assert.equal(status, 1);
+});
+
+const WRAPPERS = ["named", "alias", "default", "getter", "holder", "namespace", "star", "spread", "then", "calls"].map((name) => ({ file: `src/w/${name}.ts`, reason: "Binds the map instance, which renders no element." }));
+
+const passes = (path, hook, lines) => `${path} ${hook}: ${path} passes ${hook} on as a value on line${lines.includes(",") ? "s" : ""} ${lines}. A wrapper may call ${hook}, and exports only the hooks that call it, never ${hook} itself or a value that holds it, so banned sees each file that uses it.`;
+
+test("banned fails a test, timer copy or wrapper that exports or passes on an effect hook or react's namespace, and passes one that only calls the hooks it exports", (t) => {
+  const cwd = tempRepo(t, { "effect-wrappers": WRAPPERS });
+  write(cwd, {
+    "src/w/named.ts": 'export { useEffect } from "react";\n',
+    "src/w/alias.ts": 'import { useEffect } from "react";\nconst run = useEffect;\nexport { run as useMount };\n',
+    "src/w/default.ts": 'import { useLayoutEffect } from "react";\nexport default useLayoutEffect;\n',
+    "src/w/getter.ts": 'import { useEffect } from "react";\nexport const get = () => useEffect;\n',
+    "src/w/holder.ts": 'import * as React from "react";\nexport const hooks = { run: React.useInsertionEffect, bound: React.useEffect.bind(null) };\n',
+    "src/w/namespace.ts": 'import * as React from "react";\nexport * as R from "react";\nexport { React };\n',
+    "src/w/star.ts": 'export * from "react";\n',
+    "src/w/spread.ts": 'import * as React from "react";\nexport const all = { ...React };\n',
+    "src/w/then.ts": 'export const later = import("react").then((m) => m.useEffect);\n',
+    "src/w/calls.ts": 'import React, { useEffect } from "react";\nexport function useTick(run: () => void) {\n  useEffect(run, [run]);\n  React.useLayoutEffect(run);\n}\n',
+    "src/app.tsx": 'import { useMount } from "./w/alias";\nimport { useTick } from "./w/calls";\nexport function App() {\n  useMount(() => {});\n  useTick(() => {});\n}\n',
+    "src/hooks.test.ts": 'import { useEffect } from "react";\nexport { useEffect };\nexport * from "react";\n',
+    "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } },
+    "apps/web/src/lib/timer.ts": 'export { useEffect as useMount } from "react";\n',
+  });
+  git(cwd, "add", "-A");
+  const { stdout, status } = standard(cwd, ["check", "banned"]);
+  assert.equal(
+    stdout,
+    [
+      passes("apps/web/src/lib/timer.ts", "react#useEffect", "1"),
+      `src/hooks.test.ts export react: src/hooks.test.ts re-exports react, whose namespace holds its effect hooks, on line 3. ${REACT_EXPORT_FIX}`,
+      passes("src/hooks.test.ts", "react#useEffect", "2"),
+      passes("src/w/alias.ts", "react#useEffect", "2, 3"),
+      passes("src/w/default.ts", "react#useLayoutEffect", "2"),
+      passes("src/w/getter.ts", "react#useEffect", "2"),
+      passes("src/w/holder.ts", "react#useInsertionEffect", "2"),
+      passes("src/w/holder.ts", "react#useEffect", "2"),
+      passes("src/w/named.ts", "react#useEffect", "1"),
+      `src/w/namespace.ts export react: src/w/namespace.ts re-exports react, whose namespace holds its effect hooks, on lines 2, 3. ${REACT_EXPORT_FIX}`,
+      `src/w/spread.ts read react: src/w/spread.ts reads react's namespace whole, or at a key banned cannot resolve, on line 2. ${READ_FIX}`,
+      `src/w/star.ts export react: src/w/star.ts re-exports react, whose namespace holds its effect hooks, on line 1. ${REACT_EXPORT_FIX}`,
+      `src/w/then.ts read react: src/w/then.ts reads react's namespace whole, or at a key banned cannot resolve, on line 1. ${READ_FIX}`,
+      "",
+    ].map((line) => (line ? `banned: ${line}` : line)).join("\n"),
   );
   assert.equal(status, 1);
 });
