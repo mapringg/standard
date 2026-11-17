@@ -10,7 +10,8 @@ import { parseSource, sourceFiles } from "./support/sources.mjs";
  * @typedef {{ type: "Line" | "Block" | "Html", value: string, start: number, end: number }} Comment
  *
  * What a kind needs to judge one comment: the comment's text without its markers, whether it is part of the file's
- * license tag run, whether it sits above the code in a header that holds a copyright or license notice, the SAFETY
+ * license tag run, whether it sits above the code in a header that holds a copyright or license notice besides that
+ * run, the SAFETY
  * comments a type assertion claims, and the doc headings.
  * @typedef {{ body: string, licensed: boolean, noticed: boolean, comment: Comment, claimed: ReadonlyMap<Comment, Comment[]>, docs: ReadonlyMap<string, () => ReadonlySet<string>> }} Context
  *
@@ -223,7 +224,7 @@ function findings(path, source, docs) {
   const codeStart = /** @type {Node[]} */ (program.body)[0]?.start ?? text.length;
   const header = sorted.filter((comment) => comment.start < codeStart);
   const licensed = new Set(licenseHeader(header));
-  const noticed = new Set(header.some((comment) => NOTICE.test(bodyOf(comment))) ? header : []);
+  const noticed = new Set(header.some((comment) => !licensed.has(comment) && NOTICE.test(bodyOf(comment))) ? header : []);
   const claimed = claimedSafety(text, program, sorted);
   /** @type {Map<string, { key: string, lines: Set<number>, fix: string }>} */
   const found = new Map();

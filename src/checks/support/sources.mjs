@@ -26,6 +26,10 @@ const TOP_LEVEL_RETURN = "A 'return' statement can only be used within a functio
  * One piece of the component that parses as TypeScript on its own.
  * @typedef {{ patches: Patch[], lang: "ts" | "tsx", frontmatter: boolean }} Unit
  *
+ * Where a node sits, as the HTML parser sees it: `foreign` when its parent is an SVG or MathML element, where CDATA is
+ * text and not a comment, and `nested` when an element in it is SVG or MathML too.
+ * @typedef {{ foreign: boolean, nested: boolean }} Space
+ *
  * An HTML comment in the markup, which ships to every visitor. `start` is where its text starts.
  * @typedef {{ type: "Html", value: string, start: number, end: number }} HtmlComment
  */
@@ -81,6 +85,15 @@ function lay(text, patches) {
   return laid + blank.slice(at);
 }
 
+/** The SVG and MathML elements whose child elements are HTML again, from the HTML standard. */
+const INTEGRATION_POINTS = new Set(["foreignObject", "desc", "title", "mi", "mo", "mn", "ms", "mtext", "annotation-xml"]);
+/** The HTML elements whose content a browser reads as text, from the HTML standard. */
+const RAW_TEXT = new Set(["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes", "plaintext"]);
+
+/** A custom element to read raw HTML in, since the compiler reads text that starts a document as a string, quotes and all. */
+const RAW_OPEN = "<astro-raw>";
+const RAW_CLOSE = "</astro-raw>";
+
 /** The characters that open an attribute's value, by its kind, after its name and `=`. */
 const OPENINGS = { quoted: /[^\s=]+\s*=\s*(["'])/y, expression: /[^\s=]+\s*=\s*(\{)/y, "template-literal": /[^\s=]+\s*=\s*(`)/y };
 const CLOSINGS = { '"': '"', "'": "'", "{": "}", "`": "`" };
@@ -121,15 +134,34 @@ function astroUnits(text, markup) {
     return open && text.slice(start, end) === attribute.value && text[end] === CLOSINGS[/** @type {keyof typeof CLOSINGS} */ (open)] ? { start, end } : null;
   };
 
-  /** @type {(start: number, value: string) => void} The HTML comments in raw HTML, parsed as the markup is. */
-  const raw = (start, value) => {
-    const local = byteIndex(value);
-    /** @param {import("@astrojs/compiler/types").Node} node */
-    const visit = (node) => {
-      if (node.type === "comment" && node.position) html.push(comment(node.value, start + local(node.position.start.offset)));
-      if ("children" in node) node.children.forEach(visit);
+  /** @type {(source: string, at: number, start: number, node: import("@astrojs/compiler/types").CommentNode, space: Space) => void} Notes a comment node at `at` in `source`, which sits at `start` in the text, unless it is CDATA where that is text. */
+  const note = (source, at, start, node, space) => {
+    if (!(space.foreign && source.startsWith("<![CDATA[", at - "<!".length))) html.push(comment(node.value, start + at));
+  };
+
+  /**
+   * The HTML comments a browser finds in raw HTML, such as is:raw content, which sits at `start` in the text. The
+   * compiler reads it as markup inside an element, as it sits in the page. There a nested is:raw and braces hide text
+   * that the browser reads as HTML, so each text it gives back that is shorter than the whole is read again.
+   * @type {(start: number, value: string, space: Space, host: { position?: import("@astrojs/compiler/types").Position }) => void}
+   */
+  const raw = (start, value, space, host) => {
+    const wrapped = byteIndex(`${RAW_OPEN}${value}${RAW_CLOSE}`);
+    /** @type {(offset: number) => number} */
+    const local = (offset) => wrapped(offset) - RAW_OPEN.length;
+    /** @type {(node: import("@astrojs/compiler/types").Node, space: Space) => void} */
+    const visit = (node, space) => {
+      if (node.type === "comment" && node.position) note(value, local(node.position.start.offset), start, node, space);
+      if (node.type === "text" && node.position && node.value.length < value.length) {
+        const at = local(node.position.start.offset);
+        if (value.slice(at, at + node.value.length) !== node.value) return unreadable(host);
+        raw(start + at, node.value, space, host);
+      }
+      if (node.type === "element" && !space.nested && RAW_TEXT.has(node.name)) return;
+      const within = node.type === "element" ? inside(node.name, space) : space;
+      if ("children" in node) node.children.forEach((child) => visit(child, within));
     };
-    visit(parseAstro(value, { position: true }).ast);
+    visit(parseAstro(`${RAW_OPEN}${value}${RAW_CLOSE}`, { position: true }).ast, space);
   };
 
   /** @param {import("@astrojs/compiler/types").AttributeNode} attribute */
@@ -177,16 +209,25 @@ function astroUnits(text, markup) {
     unit(patches);
   };
 
-  /** @type {(node: import("@astrojs/compiler/types").Node, scripts: boolean) => void} `scripts` is false inside noscript, where no script runs. */
-  const visit = (node, scripts) => {
+  /** @type {(node: import("@astrojs/compiler/types").Node, scripts: boolean, space: Space) => void} `scripts` is false inside noscript, where no script runs. */
+  const visit = (node, scripts, space) => {
     if (node.type === "frontmatter" && node.position) {
       const start = index(node.position.start.offset + "---".length);
       const end = start + node.value.length;
       units.push({ patches: [original(start, end)], lang: "ts", frontmatter: true });
       if (!text.startsWith("---", end)) problems.push("the frontmatter has no closing --- fence");
     }
-    if (markup && node.type === "comment" && node.position) html.push(comment(node.value, index(node.position.start.offset)));
+    if (markup && node.type === "comment" && node.position) note(text, index(node.position.start.offset), 0, node, space);
     if (markup && node.type === "expression") expression(node);
+    if (markup && node.type === "root") {
+      for (const child of node.children) {
+        if (child.type !== "text" || !child.position) break;
+        const start = index(child.position.start.offset);
+        if (text.slice(start, start + child.value.length) !== child.value) return unreadable(child);
+        raw(start, child.value, space, child);
+      }
+    }
+    const within = node.type === "element" ? inside(node.name, space) : space;
     if (node.type === "element" || node.type === "component" || node.type === "custom-element" || node.type === "fragment") {
       if (markup) node.attributes.forEach(attribute);
       if (node.name === "script") return scripts ? script(node) : undefined;
@@ -197,7 +238,7 @@ function astroUnits(text, markup) {
           if (child.type !== "text" || !child.position) return unreadable(node);
           const start = index(child.position.start.offset);
           if (text.slice(start, start + child.value.length) !== child.value) return unreadable(node);
-          raw(start, child.value);
+          raw(start, child.value, within, node);
         }
         return;
       }
@@ -205,11 +246,11 @@ function astroUnits(text, markup) {
       if (markup && injected) {
         const value = valueOf(injected);
         if (!value) return unreadable(injected);
-        raw(value.start, injected.value);
+        raw(value.start, injected.value, within, injected);
       }
-      if (node.name === "noscript") return node.children.forEach((child) => visit(child, false));
+      if (node.name === "noscript") return node.children.forEach((child) => visit(child, false, within));
     }
-    if ("children" in node) node.children.forEach((child) => visit(child, scripts));
+    if ("children" in node) node.children.forEach((child) => visit(child, scripts, within));
   };
 
   /** @param {{ attributes: import("@astrojs/compiler/types").AttributeNode[], children: import("@astrojs/compiler/types").Node[] }} node */
@@ -239,8 +280,14 @@ function astroUnits(text, markup) {
     }
   };
 
-  visit(ast, true);
+  visit(ast, true, { foreign: false, nested: false });
   return { units, html, problems };
+}
+
+/** @type {(name: string, space: Space) => Space} The space inside an element in `space`. */
+function inside(name, space) {
+  const foreign = name === "svg" || name === "math" || space.nested;
+  return { foreign, nested: foreign && !INTEGRATION_POINTS.has(name) };
 }
 
 /** @type {(value: string | undefined, start: number) => HtmlComment} The compiler gives a bogus comment such as `</ x>` no value. */
