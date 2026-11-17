@@ -162,8 +162,8 @@ export default {
   name: "banned",
   since: "0.12.0",
   doc: {
-    enforces: "A file uses no API the repository bans, no React effect hook outside tests, the timer template and listed wrappers, and no oxlint config bans APIs a second way.",
-    fix: "Use what the entry's `fix` names instead, and replace an effect with what it does.",
+    enforces: "A file uses no API the repository bans, and no React effect hook outside tests, the timer template and listed wrappers, which call one but never pass it on. No file reads React's namespace whole or at a key that is not a constant, and no oxlint config bans APIs a second way.",
+    fix: "Use what the entry's `fix` names instead, replace an effect with what it does, export only hooks that call an effect hook, and name each React export you read.",
     config: ["banned", "effect-wrappers"],
   },
   subject: "tree",
