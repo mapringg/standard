@@ -37,9 +37,10 @@ function server(failing = new Set()) {
 const pageKey = (index) => (index < 3 ? ["items", index] : null);
 
 async function mount(t, useHook, props) {
-  const result = { current: undefined };
+  const result = { first: undefined, current: undefined };
   function Probe(probeProps) {
     result.current = useHook(probeProps);
+    result.first ??= result.current;
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -91,7 +92,7 @@ test("a seeded hook marked fresh makes no request on mount", async (t) => {
 test("a seeded hook without fresh revalidates on mount", async (t) => {
   const api = server();
   const { result } = await mount(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: { id: "a", name: "seed" } }));
-  assert.deepEqual(result.current.data, { id: "a", name: "seed" });
+  assert.deepEqual(result.first.data, { id: "a", name: "seed" });
   await settle(() => result.current.data.name !== "seed");
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["item", "a"]], data: { id: "a", name: "fetched a" } });
 });
