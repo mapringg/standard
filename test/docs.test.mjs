@@ -269,6 +269,8 @@ test("docs resolves a pnpm script with no package flag against the doc's nearest
 
 const reference = (path, ...misses) => `${path} reference: ${path} names things that do not exist: ${misses.join(", ")}. Fix each name, or move facts about an outside system to docs/external/.`;
 
+const UNCLOSED = "a quote is not closed, so no shell can run it; fix the quoting";
+
 const WEB = {
   "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
   "package.json": JSON.stringify({ scripts: {} }),
@@ -282,12 +284,13 @@ for (const [name, command, miss] of [
   ["quotes in the middle of a word", 'pnpm --filter "@scope/web" "bu"ild', null],
   ["a comment that names pnpm build", 'pnpm --filter "@scope/web" build # runs pnpm build in the web package', null],
   ["a comment that names a missing script", 'pnpm --filter "@scope/web" build # pnpm missing', null],
-  ["an unclosed quote in the filter", 'pnpm --filter "@scope/web build', null],
-  ["an unclosed double quote", 'pnpm --filter "@scope/web" "build', null],
-  ["an unclosed single quote", "pnpm --filter '@scope/web' 'build", null],
-  ["an unclosed quote inside a word", 'pnpm --filter "@scope/web" bu"ild', null],
-  ["an unclosed quote after a missing script", 'pnpm --filter "@scope/web" missing"', null],
-  ["an unclosed quote before a missing script", 'pnpm --filter "@scope/web" "missing', null],
+  ["an unclosed quote in the filter", 'pnpm --filter "@scope/web build', UNCLOSED],
+  ["an unclosed double quote", 'pnpm --filter "@scope/web" "build', UNCLOSED],
+  ["an unclosed single quote", "pnpm --filter '@scope/web' 'build", UNCLOSED],
+  ["an unclosed quote inside a word", 'pnpm --filter "@scope/web" bu"ild', UNCLOSED],
+  ["an unclosed quote after a missing script", 'pnpm --filter "@scope/web" missing"', UNCLOSED],
+  ["an unclosed quote before a missing script", 'pnpm --filter "@scope/web" "missing', UNCLOSED],
+  ["an unclosed quote in a line that runs no pnpm", "echo it's done", null],
   ["a hash inside a word, which starts no comment", "echo a#b && pnpm missing", "package.json has no script missing"],
   ["a command after an operator", "cd apps/web; pnpm --filter=@scope/web run missing", "@scope/web has no script missing"],
 ]) {
