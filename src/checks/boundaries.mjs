@@ -17,7 +17,7 @@ import { projects, resolveAsset } from "./support/resolve.mjs";
  * @property {boolean} module Whether its package.json sets "type": "module".
  * @property {ReadonlySet<string>} declares Package names its dependency lists name, with @types/ stripped.
  *
- * @typedef {"static" | "dynamic" | "require"} Kind How the file imports: a declaration, an import(), or require() and import x = require().
+ * @typedef {import("./support/resolve.mjs").Kind} Kind
  * @typedef {{ specifier: string, kind: Kind, base?: string }} Request `base` is the absolute file a createRequire require resolves from.
  *
  * @typedef {object} Edge An import whose target is a repo file.
@@ -396,7 +396,8 @@ function sources(repo) {
  */
 export async function scan(repo) {
   const root = realpathSync(repo.root);
-  const resolvers = await projects(root, repo.files("**/tsconfig.json").filter((path) => !path.split("/").includes("node_modules")));
+  const files = sources(repo);
+  const resolvers = await projects(root, repo.files("**/tsconfig.json").filter((path) => !path.split("/").includes("node_modules")), files);
   const context = { workspaces: workspacesOf(repo) };
   const workspaceNames = new Set(context.workspaces.flatMap(({ name }) => (name ? [name] : [])));
   const inRepo = (/** @type {string | null} */ path) => {
@@ -419,7 +420,7 @@ export async function scan(repo) {
   };
   /** @type {Problem[]} */
   const problems = [];
-  for (const file of sources(repo)) {
+  for (const file of files) {
     const absolute = posix.join(root, file);
     const found = importsOf(file, repo.read(file), absolute);
     if ("error" in found) {
@@ -432,13 +433,13 @@ export async function scan(repo) {
       const project = base ? resolvers.node : resolvers.of(file);
       const from = workspaceOf(context.workspaces, inRepo(base ?? null) ?? file);
       const mode = modeOf(file, kind, from, project.moduleResolution);
-      const resolved = project.resolve(origin, specifier, mode, true) ?? resolveAsset(origin, specifier, true);
+      const resolved = project.resolve(origin, specifier, mode, true, kind) ?? resolveAsset(origin, specifier, true);
       if (resolved === "builtin") continue;
       if (resolved !== null) {
         const target = inRepo(resolved);
         if (target === null) continue;
         const unaliased = () => {
-          const path = project.resolve(origin, specifier, mode, false) ?? resolveAsset(origin, specifier, false);
+          const path = project.resolve(origin, specifier, mode, false, kind) ?? resolveAsset(origin, specifier, false);
           return path === "builtin" ? null : inRepo(path);
         };
         for (const rule of RULES) {

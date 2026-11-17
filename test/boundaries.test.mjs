@@ -28,6 +28,8 @@ const WORKSPACE = {
 function repoWith(t, files) {
   const cwd = tempRepo(t, {});
   write(cwd, { ...WORKSPACE, ...files });
+  mkdirSync(join(cwd, "node_modules"), { recursive: true });
+  symlinkSync(join(import.meta.dirname, "../node_modules/typescript"), join(cwd, "node_modules/typescript"));
   for (const [from, to] of [["apps/web/node_modules/api", "../../api"], ["apps/web/node_modules/tokens", "../../../packages/tokens"]]) {
     mkdirSync(join(cwd, from, ".."), { recursive: true });
     symlinkSync(to, join(cwd, from));
@@ -324,6 +326,37 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
     const unexported = (name) => `boundaries: apps/node/src/${name}.mts imports api/${name}: "api/${name}" is not in the exports of the workspace package api. Import a subpath its exports list, or add this one there.`;
     assert.deepEqual(findings(cwd), {
       lines: ["escape", "inner-parent", "null-array", "null-condition"].map(unexported),
+      status: 1,
+    });
+  });
+}
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries takes the declaration TypeScript ${major} takes: a versioned types condition, typesVersions, a declaration after a JavaScript target, and an imports fallback past a missing package`, (t) => {
+    const literal = (value) => `export declare const value: "${value}";\n`;
+    const cwd = repoWith(t, {
+      "packages/versioned/package.json": { name: "versioned", type: "module", exports: { "types@>=5.2": "./modern/index.d.ts", types: "./legacy/index.d.ts", default: "./index.js" } },
+      "packages/versioned/modern/index.d.ts": literal("modern"),
+      "packages/versioned/legacy/index.d.ts": literal("legacy"),
+      "packages/versioned/index.js": 'export const value = "modern";\n',
+      "packages/routed/package.json": { name: "routed", type: "module", types: "./index.d.ts", typesVersions: { ">=5.2": { "*": ["modern/*"] } } },
+      "packages/routed/index.d.ts": literal("legacy"),
+      "packages/routed/modern/index.d.ts": literal("modern"),
+      "packages/js-first/package.json": { name: "js-first", type: "module", exports: { import: "./untyped.js", default: "./types.d.ts" } },
+      "packages/js-first/untyped.js": 'export const value = "modern";\n',
+      "packages/js-first/types.d.ts": literal("modern"),
+      "apps/node/package.json": { name: "node-app", type: "module", imports: { "#x": { types: "optional-types", default: "./src/required.ts" } } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/node/src/fallback.mts": 'import { value } from "#x";\nexport const v: "required" = value;\n',
+      ...Object.fromEntries(["versioned", "routed", "js-first"].map((name) => [`apps/node/src/${name}.mts`, `import { value } from "${name}-alias";\nexport const v: "modern" = value;\n`])),
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    for (const name of ["versioned", "routed", "js-first"]) symlinkSync(join(cwd, "packages", name), join(cwd, `apps/node/node_modules/${name}-alias`));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const path = (name, target) => `boundaries: apps/node/src/${name}.mts imports ${name}-alias: packages/${name}/${target} belongs to packages/${name}, so import it as "${name}" or a subpath its exports list, not by path.`;
+    assert.deepEqual(findings(cwd), {
+      lines: [path("js-first", "types.d.ts"), path("routed", "modern/index.d.ts"), path("versioned", "modern/index.d.ts")],
       status: 1,
     });
   });
