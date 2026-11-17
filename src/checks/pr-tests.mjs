@@ -3,43 +3,63 @@ import { posix } from "node:path";
 import { parseSync } from "oxc-parser";
 
 import { git } from "../repo.mjs";
-import { isNode, SKIPPED_KEYS, TYPE_WRAPPERS } from "./duplicates.mjs";
 import { packageOf, TEST_FILE } from "./support/packages.mjs";
 
 /**
  * @typedef {import("../repo.mjs").Repo} Repo
  * @typedef {import("../subjects.mjs").PullRequest} PullRequest
+ * @typedef {{ type: string, [key: string]: any }} Node
  *
- * @typedef {object} Change
- * @property {string} path At the head commit.
+ * One side of a changed file. Head content counts each fingerprint up and merge-base content counts it down,
+ * so summing a package's sides leaves what the pull request adds there.
+ * @typedef {object} Side
+ * @property {string} path
  * @property {string} package Folder of the nearest package.json at the head commit, "." for the root.
  * @property {"source" | "test"} role
- * @property {boolean} gained Whether the head has a logic statement the merge base lacks.
+ * @property {Map<string, number>} counts Signed count of each logic statement or test registration.
  */
 
 const SOURCE = /(?:^|\/)src\/.*\.(?:ts|tsx|mts|cts)$/;
 const NOT_SOURCE = /\.d\.[cm]?ts$|\.(?:stories|gen)\.[^/]+$|(?:^|\/)(?:test|tests|__tests__|generated)\//;
-const RUNTIME_TS = new Set(["TSEnumDeclaration", "TSEnumBody", "TSEnumMember", "TSParameterProperty"]);
-const IGNORED_KEYS = new Set([...SKIPPED_KEYS, "implements"]);
-const DATA = new Set([
-  "Literal",
-  "ObjectExpression",
-  "Property",
-  "ArrayExpression",
-  "TemplateLiteral",
-  "TemplateElement",
-  "Identifier",
-  "VariableDeclaration",
-  "VariableDeclarator",
-  "SpreadElement",
-  "UnaryExpression",
-  "MemberExpression",
-  "EmptyStatement",
+const DROPPED_KEYS = new Set([
+  "start",
+  "end",
+  "range",
+  "loc",
+  "raw",
+  "typeAnnotation",
+  "returnType",
+  "typeParameters",
+  "typeArguments",
+  "superTypeArguments",
+  "implements",
+  "importKind",
+  "exportKind",
+  "abstract",
+  "readonly",
+  "override",
+  "accessibility",
+  "definite",
+  "declare",
 ]);
+const OPTIONAL_CHAINS = new Set(["MemberExpression", "CallExpression"]);
+const TYPE_WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "TSTypeAssertion", "TSInstantiationExpression"]);
+const RUNTIME_TS = new Set([
+  "TSEnumDeclaration",
+  "TSEnumBody",
+  "TSEnumMember",
+  "TSParameterProperty",
+  "TSExportAssignment",
+  "TSModuleDeclaration",
+  "TSModuleBlock",
+  "TSQualifiedName",
+]);
+const MODIFIERS = new Set(["concurrent", "sequential", "each()"]);
+const SKIP_OPTIONS = new Set(["skip", "todo", "only"]);
 
 /**
  * @param {string} path
- * @returns {Change["role"] | null}
+ * @returns {Side["role"] | null}
  */
 function roleOf(path) {
   if (TEST_FILE.test(path)) return "test";
@@ -48,88 +68,227 @@ function roleOf(path) {
 
 /**
  * @param {unknown} value
- * @returns {unknown} The value without positions, raw text and types.
+ * @returns {value is Node}
  */
-function strip(value) {
-  if (Array.isArray(value)) return value.map(strip);
-  if (typeof value === "bigint") return `${value}n`;
-  if (value === null || typeof value !== "object") return value;
-  if (isNode(value)) {
-    if (TYPE_WRAPPERS.has(value.type)) return strip(value.expression);
-    if (value.type.startsWith("TS") && !RUNTIME_TS.has(value.type)) return null;
-  }
-  return Object.fromEntries(Object.entries(value).filter(([key]) => !IGNORED_KEYS.has(key)).map(([key, child]) => [key, strip(child)]));
+function isNode(value) {
+  return value !== null && typeof value === "object" && "type" in value && typeof value.type === "string";
 }
 
 /**
- * @param {unknown} value A stripped tree.
- * @returns {boolean} Whether it only declares constant data, such as a translation table.
+ * @param {unknown} value
+ * @returns {any} The value as the JavaScript it emits, without positions, raw text and types, or null when it emits nothing.
  */
-function isData(value) {
-  if (Array.isArray(value)) return value.every(isData);
-  if (value === null || typeof value !== "object") return true;
+function emitted(value) {
+  if (Array.isArray(value)) return value.flatMap((child) => (child === null ? [null] : [emitted(child)].filter((kept) => kept !== null)));
+  if (typeof value === "bigint") return `${value}n`;
+  if (value === null || typeof value !== "object") return value;
   if (isNode(value)) {
-    if (!DATA.has(value.type)) return false;
-    if (value.type === "Property" && (value.kind !== "init" || value.method)) return false;
+    if (TYPE_WRAPPERS.has(value.type)) return emitted(value.expression);
+    if (value.declare === true || (value.type.startsWith("TS") && !RUNTIME_TS.has(value.type))) return null;
+    if (value.type === "MethodDefinition" && value.value.type === "TSEmptyBodyFunctionExpression") return null;
   }
-  return Object.values(value).every(isData);
+  const type = isNode(value) ? value.type : null;
+  /** @type {Record<string, any>} */
+  const kept = Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !DROPPED_KEYS.has(key) && (key !== "optional" || (type !== null && OPTIONAL_CHAINS.has(type))))
+      .map(([key, child]) => [key, emitted(child)]),
+  );
+  if (type === "ExportNamedDeclaration" && kept.declaration === null && kept.specifiers.length === 0) return null;
+  if (type === "TSModuleDeclaration" && (kept.body?.body ?? []).length === 0) return null;
+  return kept;
+}
+
+/**
+ * @param {Node} node An emitted expression.
+ * @returns {boolean} Whether evaluating it can run no code, as with a translation table.
+ */
+function isInert(node) {
+  switch (node.type) {
+    case "Literal":
+      return true;
+    case "TemplateLiteral":
+      return node.expressions.every(isInert);
+    case "ArrayExpression":
+      return node.elements.every((/** @type {Node | null} */ element) => element === null || isInert(element));
+    case "ObjectExpression":
+      return node.properties.every(
+        (/** @type {Node} */ property) =>
+          property.type === "Property" &&
+          property.kind === "init" &&
+          !property.method &&
+          !property.shorthand &&
+          (!property.computed || property.key.type === "Literal") &&
+          isInert(property.value),
+      );
+    case "UnaryExpression":
+      return (node.operator === "-" || node.operator === "+") && node.argument.type === "Literal" && typeof node.argument.value === "number";
+    default:
+      return false;
+  }
+}
+
+/**
+ * @param {Node} node An emitted top-level statement, with export unwrapped.
+ * @returns {boolean} Whether it only declares inert data.
+ */
+function isData(node) {
+  if (node.type === "EmptyStatement") return true;
+  if (node.type === "VariableDeclaration") {
+    return node.declarations.every((/** @type {Node} */ { id, init }) => id.type === "Identifier" && (init === null || isInert(init)));
+  }
+  return isInert(node);
 }
 
 /**
  * @param {string} path
  * @param {string} text
- * @returns {Set<string> | null} One fingerprint per top-level logic statement, or null when the file does not parse.
+ * @returns {Node[] | null} The top-level statements, or null when the file does not parse.
  */
-function logic(path, text) {
+function statements(path, text) {
   const { program, errors } = parseSync(path, text, { preserveParens: false });
-  if (errors.length > 0) return null;
-  /** @type {Set<string>} */
-  const fingerprints = new Set();
-  for (const statement of program.body) {
-    const node =
-      statement.type === "ExportNamedDeclaration" || statement.type === "ExportDefaultDeclaration" ? statement.declaration : statement;
-    if (!node || node.type === "ImportDeclaration" || node.type === "ExportAllDeclaration" || (node.type.startsWith("TS") && !RUNTIME_TS.has(node.type))) continue;
-    if ("declare" in node && node.declare === true) continue;
-    const tree = strip(node);
-    if (!isData(tree)) fingerprints.add(JSON.stringify(tree));
+  return errors.length > 0 ? null : program.body;
+}
+
+/**
+ * @param {Map<string, number>} counts
+ * @param {string} fingerprint
+ * @param {number} [by]
+ */
+function add(counts, fingerprint, by = 1) {
+  counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + by);
+}
+
+/**
+ * @param {Node[]} body
+ * @returns {Map<string, number>} One entry per top-level logic statement.
+ */
+function logic(body) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const statement of body) {
+    const node = statement.type === "ExportNamedDeclaration" || statement.type === "ExportDefaultDeclaration" ? statement.declaration : statement;
+    if (node === null || node.type === "ImportDeclaration" || node.type === "ExportAllDeclaration") continue;
+    const tree = emitted(node);
+    if (tree !== null && !isData(tree)) add(counts, JSON.stringify(tree));
   }
-  return fingerprints;
+  return counts;
+}
+
+/**
+ * @param {Node} callee
+ * @returns {{ name: string, modifiers: string[] } | null} The name a test framework call starts from and the modifiers chained on it.
+ */
+function chain(callee) {
+  if (callee.type === "Identifier") return { name: callee.name, modifiers: [] };
+  if (callee.type === "MemberExpression" && !callee.computed) {
+    const inner = chain(callee.object);
+    return inner && { name: inner.name, modifiers: [...inner.modifiers, callee.property.name] };
+  }
+  if (callee.type === "CallExpression") {
+    const inner = chain(callee.callee);
+    return inner?.modifiers.at(-1) === "each" ? { name: inner.name, modifiers: [...inner.modifiers.slice(0, -1), "each()"] } : null;
+  }
+  return null;
+}
+
+/**
+ * @param {Node} call
+ * @returns {"suite" | "test" | null} What the call registers, or null for anything skipped, focused, pending or not a registration.
+ */
+function registration(call) {
+  const found = chain(call.callee);
+  if (found === null || !found.modifiers.every((modifier) => MODIFIERS.has(modifier))) return null;
+  const optedOut = call.arguments.some(
+    (/** @type {Node} */ argument) =>
+      argument.type === "ObjectExpression" &&
+      argument.properties.some((/** @type {Node} */ property) => property.type === "Property" && SKIP_OPTIONS.has(property.key.name ?? property.key.value)),
+  );
+  if (optedOut) return null;
+  if (found.name === "describe" || found.name === "suite") return "suite";
+  return found.name === "it" || found.name === "test" ? "test" : null;
+}
+
+/**
+ * @param {Node[]} body
+ * @param {Map<string, number>} [counts]
+ * @returns {Map<string, number>} One entry per test that runs a body, inside suites too.
+ */
+function registrations(body, counts = new Map()) {
+  for (const statement of body) {
+    if (statement.type !== "ExpressionStatement" || statement.expression.type !== "CallExpression") continue;
+    const call = statement.expression;
+    const kind = registration(call);
+    const callback = call.arguments.findLast((/** @type {Node} */ argument) => argument.type === "ArrowFunctionExpression" || argument.type === "FunctionExpression");
+    if (kind === null || callback === undefined) continue;
+    const block = callback.body.type === "BlockStatement" ? callback.body.body : null;
+    if (kind === "suite") {
+      if (block !== null) registrations(block, counts);
+    } else if (block === null || block.length > 0) {
+      add(counts, JSON.stringify(emitted(call)));
+    }
+  }
+  return counts;
+}
+
+/**
+ * @param {Side["role"]} role
+ * @param {string} path
+ * @param {string} text
+ * @param {1 | -1} by 1 for the head, -1 for the merge base.
+ * @returns {Map<string, number>}
+ */
+function countsOf(role, path, text, by) {
+  const body = statements(path, text);
+  if (body === null) return role === "source" && by === 1 ? new Map([[`unparsed ${path}`, 1]]) : new Map();
+  const counts = role === "test" ? registrations(body) : logic(body);
+  return by === 1 ? counts : new Map([...counts].map(([fingerprint, count]) => [fingerprint, -count]));
 }
 
 /**
  * @param {PullRequest} pr
  * @param {Repo} repo
- * @returns {Change[]}
+ * @returns {Side[]}
  */
-function changes(pr, repo) {
+function sides(pr, repo) {
   const base = git(repo.root, "merge-base", pr.baseSha, pr.headSha);
   const manifests = new Set(
     git(repo.root, "ls-tree", "-r", "-z", "--name-only", pr.headSha)
       .split("\0")
       .filter((path) => posix.basename(path) === "package.json"),
   );
-  const fields = git(repo.root, "diff", "--name-status", "-z", "-M", base, pr.headSha).split("\0");
-  /** @type {Change[]} */
+  /** @type {Side[]} */
   const found = [];
+  const side = (/** @type {string} */ path, /** @type {string} */ commit, /** @type {1 | -1} */ by) => {
+    const role = roleOf(path);
+    if (role === null) return;
+    found.push({ path, package: packageOf(manifests, path) ?? ".", role, counts: countsOf(role, path, repo.readAt(commit, path) ?? "", by) });
+  };
+  const fields = git(repo.root, "diff", "--name-status", "-z", "-M", base, pr.headSha).split("\0");
   for (let at = 0; at < fields.length - 1; ) {
     const status = fields[at];
-    const moved = /^[RC]/.test(status);
-    const before = status === "A" ? null : fields[at + 1];
-    const path = moved ? fields[at + 2] : fields[at + 1];
-    at += moved ? 3 : 2;
-    const role = roleOf(path);
-    if (status === "D" || role === null) continue;
-    const head = logic(path, repo.readAt(pr.headSha, path) ?? "");
-    const old = before === null ? null : repo.readAt(base, before);
-    const prior = (before === null || old === null ? null : logic(before, old)) ?? new Set();
-    found.push({
-      path,
-      package: packageOf(manifests, path) ?? ".",
-      role,
-      gained: head === null ? role === "source" : [...head].some((fingerprint) => !prior.has(fingerprint)),
-    });
+    if (status.startsWith("R")) {
+      side(fields[at + 1], base, -1);
+      side(fields[at + 2], pr.headSha, 1);
+      at += 3;
+      continue;
+    }
+    if (status !== "A") side(fields[at + 1], base, -1);
+    if (status !== "D") side(fields[at + 1], pr.headSha, 1);
+    at += 2;
   }
   return found;
+}
+
+/**
+ * @param {Side[]} group
+ * @returns {Map<string, number>}
+ */
+function net(group) {
+  /** @type {Map<string, number>} */
+  const total = new Map();
+  for (const { counts } of group) for (const [fingerprint, count] of counts) add(total, fingerprint, count);
+  return total;
 }
 
 /** @type {import("../registry.mjs").Check} */
@@ -139,16 +298,14 @@ export default {
   subject: "pr",
   retired: [],
   run(pr, repo) {
-    /** @type {Map<string, { sources: string[], tested: boolean }>} */
-    const packages = new Map();
-    for (const change of changes(pr, repo).filter(({ gained }) => gained)) {
-      const entry = packages.get(change.package) ?? { sources: [], tested: false };
-      if (change.role === "source") entry.sources.push(change.path);
-      else entry.tested = true;
-      packages.set(change.package, entry);
-    }
-    return [...packages].flatMap(([folder, { sources, tested }]) => {
-      if (tested || sources.length === 0) return [];
+    return [...Map.groupBy(sides(pr, repo), (side) => side.package)].flatMap(([folder, group]) => {
+      const tests = net(group.filter(({ role }) => role === "test"));
+      if ([...tests.values()].some((count) => count > 0)) return [];
+      const logic = net(group.filter(({ role }) => role === "source"));
+      const sources = group
+        .filter(({ role, counts }) => role === "source" && [...counts].some(([fingerprint, count]) => count > 0 && (logic.get(fingerprint) ?? 0) > 0))
+        .map(({ path }) => path);
+      if (sources.length === 0) return [];
       const [first] = sources;
       const what = sources.length === 1 ? `${first} adds logic` : `${first} and ${sources.length - 1} more add logic`;
       const example = first.replace(/(\.[cm]?tsx?)$/, ".test$1");

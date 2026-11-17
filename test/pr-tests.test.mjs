@@ -26,7 +26,7 @@ const PARSE = [
   "",
 ].join("\n");
 
-const TEST = ['import { test } from "node:test";', "", 'test("parse splits a line", () => {});', ""].join("\n");
+const TEST = ['import { test } from "node:test";', "", 'test("parse splits a line", () => {', '  assert.deepEqual(parse("a b"), ["a", "b"]);', "});", ""].join("\n");
 
 function prTests(t, head, base = {}) {
   const repo = pullRequestRepo(t, { base: { ...PACKAGES, ...base }, head });
@@ -46,6 +46,8 @@ function fails(t, head, base, ...lines) {
 }
 
 const edited = (from, to) => PARSE.replace(from, to);
+const missing = (path, folder = "apps/api") =>
+  `${folder}: ${path} adds logic, but no test in ${folder} adds any. Add or change a test there, such as ${path.replace(/\.ts$/, ".test.ts")}, that covers it.`;
 
 test("pr-tests passes a logic change that comes with a test change in the same package", (t) => {
   passes(
@@ -102,11 +104,11 @@ test("pr-tests passes changes that add no logic, with no test", (t) => {
 });
 
 test("pr-tests passes a translation table edit, declarations, generated code and stories", (t) => {
-  const table = 'export const messages = { hello: "Hello", bye: `Bye ${"now"}`, list: ["a", -1], ...base.extra };\n';
+  const table = 'export const messages = { hello: "Hello", bye: `Bye ${"now"}`, list: ["a", -1, , +2], ["x-y"]: null, nested: { on: true } };\n';
   passes(
     t,
     {
-      "apps/web/src/i18n/en.ts": table.replace('"Hello"', '"Hi"').replace("list:", 'extra: other.value, list:'),
+      "apps/web/src/i18n/en.ts": table.replace('"Hello"', '"Hi"').replace("list:", "extra: /a+/g, list:"),
       "apps/web/src/env.d.ts": "declare function hook(): void;\n",
       "apps/web/src/generated/client.ts": "export function call() { return fetch('/'); }\n",
       "apps/web/src/api.gen.ts": "export function call() { return 1; }\n",
@@ -121,7 +123,7 @@ test("pr-tests passes a translation table edit, declarations, generated code and
 test("pr-tests does not count a test file change that is whitespace only", (t) => {
   fails(
     t,
-    { "apps/api/src/parse.ts": edited("part.trim()", "part.trimEnd()"), "apps/api/test/parse.test.ts": TEST.replace("{});", "{ });\n\n") },
+    { "apps/api/src/parse.ts": edited("part.trim()", "part.trimEnd()"), "apps/api/test/parse.test.ts": TEST.replace("() => {", "()=>{\n") },
     { "apps/api/src/parse.ts": PARSE, "apps/api/test/parse.test.ts": TEST },
     "apps/api: apps/api/src/parse.ts adds logic, but no test in apps/api adds any. Add or change a test there, such as apps/api/src/parse.test.ts, that covers it.",
   );
@@ -150,4 +152,84 @@ test("pr-tests reads the package from the head commit and diffs from the merge b
   const { stdout, status } = checkEvent(t, cwd, pullRequestEvent({ base: ahead, head: git(cwd, "rev-parse", "feature") }), ["pr-tests"]);
   assert.notEqual(ahead, base);
   assert.deepEqual([stdout, status], [OK, 0]);
+});
+
+test("pr-tests credits no test that is empty, skipped, pending or focused", (t) => {
+  const source = { "apps/api/src/a.ts": "export function compute(n: number) { return n * 2; }\n" };
+  for (const body of [
+    'it("works", () => {});',
+    'it.skip("works", () => { throw Error("never"); });',
+    'describe.skip("suite", () => { it("works", () => { throw Error("never"); }); });',
+    'test.todo("works");',
+    'it.only("works", () => { expect(compute(1)).toBe(2); });',
+    'describe("suite", () => { it.concurrent.only("works", () => { expect(compute(1)).toBe(2); }); });',
+    'xit("works", () => { expect(compute(1)).toBe(2); });',
+    'it.skipIf(ci)("works", () => { expect(compute(1)).toBe(2); });',
+    'test("works", { skip: true }, () => { assert.equal(compute(1), 2); });',
+    'const n = 1;',
+  ]) {
+    const { stdout, status } = prTests(t, { ...source, "apps/api/test/a.test.ts": body });
+    assert.deepEqual([stdout, status], [`::error title=pr-tests::${missing("apps/api/src/a.ts")}\n`, 1], body);
+  }
+  for (const body of [
+    'it.each([1, 2])("works for %d", (n) => { expect(compute(n)).toBe(n * 2); });',
+    'describe.concurrent("suite", () => { beforeEach(reset); it("works", () => expect(compute(1)).toBe(2)); });',
+    'test("works", { timeout: 10 }, async function () { assert.equal(compute(1), 2); });',
+  ]) {
+    const { stdout, status } = prTests(t, { ...source, "apps/api/test/a.test.ts": body });
+    assert.deepEqual([stdout, status], [OK, 0], body);
+  }
+});
+
+test("pr-tests credits no test that moved or was renamed", (t) => {
+  const source = { "apps/api/src/a.ts": "export const compute = (n: number) => n * 2;\n" };
+  const kept = 'it("works", () => { expect(compute(1)).toBe(2); });\n';
+  const other = 'it("other", () => { expect(compute(2)).toBe(4); });\n';
+  fails(t, { ...source, "apps/api/test/old.test.ts": null, "apps/api/test/new.test.ts": kept }, { "apps/api/test/old.test.ts": kept }, missing("apps/api/src/a.ts"));
+  fails(t, { ...source, "apps/api/test/b.test.ts": `${other}${kept}`, "apps/api/test/c.test.ts": other }, { "apps/api/test/b.test.ts": other, "apps/api/test/c.test.ts": `${other}${kept}` }, missing("apps/api/src/a.ts"));
+});
+
+test("pr-tests counts code that runs inside a namespace or a decorator", (t) => {
+  fails(t, { "apps/api/src/a.ts": 'export namespace Ops { export function go() { return fetch("/"); } }\n' }, {}, missing("apps/api/src/a.ts"));
+  fails(t, { "apps/api/src/a.ts": '@register("new") export class A {}\n' }, { "apps/api/src/a.ts": '@register("old") export class A {}\n' }, missing("apps/api/src/a.ts"));
+  passes(t, { "apps/api/src/a.ts": "export namespace Types { export type Id = string; export namespace Inner { export interface Row {} } }\n" });
+});
+
+test("pr-tests counts data that runs code as logic", (t) => {
+  for (const text of [
+    "export const cleared = delete globalThis.cache;\n",
+    "export const state = { [delete globalThis.cache]: 1 };\n",
+    "export const value = globalThis.trigger.value;\n",
+    "export const copy = { ...defaults };\n",
+    "export default [size];\n",
+  ]) {
+    const { stdout, status } = prTests(t, { "apps/api/src/a.ts": text });
+    assert.deepEqual([stdout, status], [`::error title=pr-tests::${missing("apps/api/src/a.ts")}\n`, 1], text);
+  }
+  passes(t, { "apps/api/src/a.ts": 'export const LEVELS = ["low", "high"] as const;\nexport default { retries: 3 } satisfies Options;\nlet unset;\n' });
+});
+
+test("pr-tests counts a statement that the head runs more times than the base", (t) => {
+  fails(t, { "apps/api/src/a.ts": "charge(1);\ncharge(1);\n" }, { "apps/api/src/a.ts": "charge(1);\n" }, missing("apps/api/src/a.ts"));
+});
+
+test("pr-tests passes modifiers that TypeScript erases", (t) => {
+  const cases = [
+    ["export function f(n: number) { return n; }", "export function f(n?: number) { return n; }"],
+    ["export class A { f() { return 1; } }", "export abstract class A { f() { return 1; } abstract g(): void; }"],
+    ["export class A { x = 1; f() { return 1; } }", "export class A { readonly x = 1; private f() { return 1; } }"],
+    ["export class B extends A { f() { return 1; } }", "export class B extends A { override f() { return 1; } declare y: number; }"],
+    ["export function g(a: any) { return a; }", "export function g(a: string): string;\nexport function g(a: any) { return a; }"],
+  ];
+  for (const [before, after] of cases) {
+    const { stdout, status } = prTests(t, { "apps/api/src/a.ts": `${after}\n` }, { "apps/api/src/a.ts": `${before}\n` });
+    assert.deepEqual([stdout, status], [OK, 0], after);
+  }
+  fails(t, { "apps/api/src/a.ts": "export const read = (a) => a?.b;\n" }, { "apps/api/src/a.ts": "export const read = (a) => a.b;\n" }, missing("apps/api/src/a.ts"));
+});
+
+test("pr-tests passes a function moved between files of one package, and fails one moved to another package", (t) => {
+  const run = "export function run() {\n  return start();\n}\n";
+  passes(t, { "apps/api/src/a.ts": "export const unused = 1;\n", "apps/api/src/b.ts": run }, { "apps/api/src/a.ts": run, "apps/api/src/b.ts": "" });
+  fails(t, { "apps/api/src/a.ts": null, "apps/web/src/a.ts": `${run}export const extra = 1;\n` }, { "apps/api/src/a.ts": run }, missing("apps/web/src/a.ts", "apps/web"));
 });

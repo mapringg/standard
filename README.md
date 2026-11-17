@@ -112,16 +112,16 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Hooks | No `hooks.pre-push` line is exactly `pnpm test` or `pnpm run test`, so nothing in the line can swallow a failure. `pnpm test:visual`, `pnpm turbo run test` and `pnpm lint && pnpm test` do not count. |
 | CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`, but not a constant false. When the `ci` probe finds no Check job, this rule stays quiet. |
 
-`pr-tests` fails a pull request that adds logic to a package's source and adds no test logic to that same package. It diffs the head against the merge base of the base and head, reads both sides from git, and parses each changed file.
+`pr-tests` fails a pull request that adds logic to a package's source and adds no test to that same package. It diffs the head against the merge base of the base and head, reads both sides from git, and parses each changed file.
 
 | Rule | What it means |
 | --- | --- |
 | Source | A `.ts`, `.tsx`, `.mts` or `.cts` file under a `src/` folder, except `.d.ts`, test files, `*.stories.*`, `*.gen.*`, and anything under a `test/`, `tests/`, `__tests__/` or `generated/` folder. |
-| Test | A test file, as `tests` defines it, anywhere. |
+| Test | A test file, as `tests` defines it, anywhere. Each `it` or `test` call whose callback has a body is one test, at the top level or inside a `describe` or `suite` callback. `.each(...)`, `.concurrent` and `.sequential` may follow the name. A call marked `.skip`, `.todo`, `.only`, `.fails`, `.skipIf` or `.runIf`, an `xit`, `xtest`, `xdescribe`, `fit` or `fdescribe`, and a call with a `skip`, `todo` or `only` option are not tests, and neither is anything inside them. |
 | Package | The folder of the nearest `package.json` that git tracks at the head, `.` for the root. |
-| Logic | A top-level statement, with `export` unwrapped, once positions, comments, types and type casts are dropped. Imports, re-exports, type-only statements, `declare` statements and statements that hold only constant data, such as a translation table, are not logic. |
-| Adds | The head has a logic statement the merge base lacks. So deleting code, dropping an `export` keyword, changing imports, types, comments or formatting, and renaming a file add nothing. A source that does not parse adds logic; a test that does not parse adds none. |
-| Finding | Each package with a source that adds logic and no test that adds any is one finding, named by the package folder. Its fix names the sources and a co-located test name, such as `apps/api/src/a.test.ts`. |
+| Logic | A top-level statement, with `export` unwrapped, as the JavaScript it emits. Positions, comments, types, casts and the modifiers TypeScript erases, such as an optional parameter's `?`, `abstract`, `readonly`, `override` and `private`, are dropped. Decorators, enums, parameter properties and namespaces that hold code stay. Imports, re-exports, type-only statements, `declare` statements and fields, overloads, abstract members and inert data are not logic. Inert data is a variable or `export default` built only from literals, templates, arrays, objects with plain or literal keys, and `as const`. A name, a property read, a spread, a call or a `delete` runs code, so it is logic. |
+| Adds | Each package sums its changed files, deleted and renamed ones included. The head's statements count up and the merge base's count down, and a statement with a positive total is added, so each extra copy of a statement counts. Deleting code, dropping an `export` keyword, changing imports, types, comments or formatting, renaming a file and moving code between files of one package add nothing. Moving code into another package adds it there. Tests count the same way, so a moved or renamed test adds none, and editing a test's name or body adds one. A source that does not parse adds logic; a test that does not parse adds none. |
+| Finding | Each package that adds logic and no test is one finding, named by the package folder. Its fix names the sources that hold the added logic and a co-located test name, such as `apps/api/src/a.test.ts`. |
 
 Neither check measures coverage; `pr-tests` asks only that a test changed beside the logic.
 
