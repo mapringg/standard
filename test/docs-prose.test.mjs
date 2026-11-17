@@ -144,6 +144,12 @@ for (const [name, body, fixes] of [
   ["an HTML comment is no prose", "<!--\nJust — very robust.\n-->", []],
   ["abbreviations, versions, lists and headings split no sentence", "Use e.g. this file.ts with v1.2. Then use i.e. this command.\n\n- First item.\n- Second item.", []],
   ["a sentence may start in lowercase", `${lowercase}. ${lowercase}.`, []],
+  ["a sentence may start with a number", `${lowercase}. 3 ${Array(20).fill("word").join(" ")}.`, []],
+  [
+    "a sentence that starts with a date",
+    "A patient last seen on that day is kept, and one last seen the day before is deleted. 3 November 2021 starts in Bangkok at 17:00 UTC on 2 November 2021, so a moment one millisecond earlier falls on the deleted day.",
+    [],
+  ],
   ["a question mark that ends a label before a lowercase word ends no sentence", `Open the Cancel Comparison? modal ${lowercase} ${lowercase}.`, [`docs/guide.md has sentences over 40 words on line 3 (47 words). ${LENGTH}`]],
   [
     "a comment opener in a code span over two lines hides no prose",
