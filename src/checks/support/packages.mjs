@@ -39,3 +39,11 @@ export function reactApps(repo) {
   const bundled = new Set([...dependents(repo, "next"), ...dependents(repo, "vite")]);
   return dependents(repo, "react").filter((folder) => bundled.has(folder));
 }
+
+/**
+ * @param {import("../../repo.mjs").Repo} repo
+ * @returns {Set<string>} Each React app's copies of the package templates, which repeat by design.
+ */
+export function templateCopies(repo) {
+  return new Set(reactApps(repo).flatMap((app) => ["src/lib/swr.ts", "src/lib/timer.ts"].map((file) => posix.join(app, file))));
+}
