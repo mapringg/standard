@@ -406,7 +406,7 @@ test("banned fails React's effect hooks in product code through named, aliased, 
   );
 });
 
-test("banned passes effect hooks in test files and in a wrapper that effect-wrappers lists with its reason", (t) => {
+test("banned passes effect hooks in tests, stories, fixtures and test folders, and in a wrapper that effect-wrappers lists with its reason", (t) => {
   const effect = 'import { useEffect } from "react";\nexport function useTick(run: () => void) {\n  useEffect(() => {\n    const id = setInterval(run, 1000);\n    return () => clearInterval(id);\n  }, [run]);\n}\n';
   const cwd = tempRepo(t, { "effect-wrappers": [{ file: "src/use-tick.ts", reason: "Runs the one interval every countdown shares." }] });
   write(cwd, {
@@ -414,11 +414,26 @@ test("banned passes effect hooks in test files and in a wrapper that effect-wrap
     "src/form.test.tsx": effect,
     "src/form.spec.ts": effect,
     "src/all.test.ts": 'export * from "react";\n',
+    "src/form.test.jsx": 'import { useEffect } from "react";\nexport function Form() {\n  useEffect(() => {}, []);\n  return <form />;\n}\n',
+    "src/form.stories.tsx": effect,
+    "src/__tests__/render.tsx": effect,
+    "test/setup.ts": effect,
+    "apps/web/tests/page.tsx": effect,
+    "src/fixtures/clock.tsx": effect,
+    "src/__fixtures__/clock.tsx": effect,
+    "src/testing.tsx": effect,
     "src/use-clock.ts": effect,
   });
   git(cwd, "add", "-A");
   const { stdout, status } = standard(cwd, ["check", "banned"]);
-  assert.equal(stdout, `banned: src/use-clock.ts react#useEffect: src/use-clock.ts uses react#useEffect on lines 1, 3. ${EFFECT_FIX}\n`);
+  assert.equal(
+    stdout,
+    [
+      `banned: src/testing.tsx react#useEffect: src/testing.tsx uses react#useEffect on lines 1, 3. ${EFFECT_FIX}`,
+      `banned: src/use-clock.ts react#useEffect: src/use-clock.ts uses react#useEffect on lines 1, 3. ${EFFECT_FIX}`,
+      "",
+    ].join("\n"),
+  );
   assert.equal(status, 1);
 });
 
