@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.8.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.9.0" }
 }
 ```
 
@@ -91,16 +91,29 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Nesting | A copy inside a larger reported copy is not reported again. |
 | Finding | Each copy is one finding, named by the file and the symbol path, such as `src/form.tsx#Form>submit`, with `@2` on the second copy that shares a path. Its fix names the other copies with their lines. |
 
-Like `wiring`, `dead-code` and `duplicates` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+`typecheck` makes each TypeScript project build on the shared strict tsconfig and run its typecheck. A project is a tracked `tsconfig.json` or `tsconfig.*.json`, except a solution file, which has no input files and no error. The check does not resolve `extends` itself. It asks the TypeScript that each project's folder resolves, so it reads a config exactly as `tsc` does: the native API for TypeScript 7 and the compiler API before it. It does not apply when git tracks no tsconfig.
 
-## Lint and format configs
+| Rule | Fails when |
+| --- | --- |
+| Compiler | No `typescript` package resolves from the project's folder. |
+| Config | TypeScript reports an error for the config itself, such as an `extends` target it cannot find. The finding quotes it. |
+| Base | TypeScript never loads `config/tsconfig.json` of `@mapringg/standard` for the project. |
+| Flags | The project's effective value of a base `compilerOptions` flag differs from the base. A project that inherits the problem from another project is not reported again. |
+| Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a project has none, which `turbo run typecheck` would skip. |
+| Hooks | No `hooks.pre-push` line is exactly `pnpm typecheck` or `pnpm run typecheck`. Anything before or after it, even `&&`, could skip it or hide its failure, so a chain goes on its own lines. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
 
-The package ships one oxlint config and one oxfmt config, tested with oxlint 1.92 and 1.93 and oxfmt 0.77 and 0.78. Each holds only the settings every adopting repository already agreed on, so a repository adds its own plugins, rules, ignores and Tailwind stylesheets on top.
+Like `wiring`, `dead-code`, `duplicates` and `typecheck` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+
+## Shared configs
+
+The package ships one oxlint config, one oxfmt config and one tsconfig. The lint and format configs are tested with oxlint 1.92 and 1.93 and oxfmt 0.77 and 0.78. Each holds only the settings every adopting repository already agreed on, so a repository adds its own plugins, rules, ignores and Tailwind stylesheets on top.
 
 | Export | File | Holds |
 | --- | --- | --- |
 | `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names and no `any`. |
 | `@mapringg/standard/oxfmt` | `config/oxfmt.json` | Type imports first, then grouped value imports; sorted `package.json` scripts; `.claude/**` ignored. |
+| `@mapringg/standard/tsconfig` | `config/tsconfig.json` | `strict` and each flag in its family, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` and `isolatedModules`; unreachable code and unused labels as errors. |
 
 `.oxlintrc.json` takes a path in `extends`, relative to the file that extends, and refuses a package name. A child's `plugins` adds to the shared list:
 
@@ -131,6 +144,20 @@ export default {
   overrides: [{ files: ["apps/web/**"], options: { sortTailwindcss: { stylesheet: "./apps/web/src/app/globals.css" } } }],
 };
 ```
+
+A `tsconfig.json` names the tsconfig export in `extends`. Environment options such as `module`, `target`, `jsx`, `lib` and `paths` stay in the app's own file:
+
+```json
+{ "extends": "@mapringg/standard/tsconfig", "compilerOptions": { "module": "nodenext", "target": "es2024" } }
+```
+
+A framework preset goes first, so the base comes last and wins:
+
+```json
+{ "extends": ["astro/tsconfigs/strict", "@mapringg/standard/tsconfig"] }
+```
+
+To adopt it, add `"typecheck"` to `pending`, fix what `pnpm exec standard check typecheck` prints, then remove it from `pending`.
 
 ## Merge
 

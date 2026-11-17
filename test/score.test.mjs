@@ -135,10 +135,12 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  wiring           on",
       "  dead-code        on",
       "  duplicates       n/a",
+      "  typecheck        n/a",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
       `duplicates in ${name}: n/a, git tracks no TypeScript source to scan`,
+      `typecheck in ${name}: n/a, git tracks no tsconfig.json`,
       "",
       `${name}: 15 of 16 pass`,
       "",
@@ -185,7 +187,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -229,7 +231,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.8.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.9.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -262,6 +264,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     wiring: "absent",
     "dead-code": "n/a",
     duplicates: "n/a",
+    typecheck: "n/a",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 15]);
 });
@@ -554,7 +557,7 @@ test("--remote fails current when a newer release tag than the pin exists", (t) 
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.10.0, the latest release; the repo pins 0.8.0."],
+    notes: ["Bump @mapringg/standard to v0.10.0, the latest release; the repo pins 0.9.0."],
   });
   assert.equal(status, 1);
 });
