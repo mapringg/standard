@@ -40,7 +40,8 @@ import wiring from "./checks/wiring.mjs";
  *
  * @typedef {(Named & { subject: "commit", run(commit: Commit, repo: Repo): Finding[] })
  *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, summary?(pr: PullRequest): string, run(pr: PullRequest, repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })
- *   | (Named & { subject: "tree", baseline?: false, applies(repo: Repo): Applies, run(repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })} Check
+ *   | (Named & { subject: "tree", baseline?: false, moved?: Readonly<Record<string, string>>, applies(repo: Repo): Applies, run(repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })} Check
+ * A tree check's `moved` maps a baseline group it no longer finds to the check that finds it now.
  */
 
 /** @type {Check[]} */

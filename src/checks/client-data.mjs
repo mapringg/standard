@@ -14,6 +14,7 @@ import { sourceFiles } from "./support/sources.mjs";
  */
 
 const LISTED = "client-data/listed";
+const CONFIG = "client-data/config";
 const CLIENT_FETCH = "client-data/no-client-fetch";
 const TEMPLATE = "src/lib/swr.ts";
 /** The template's `useSWR` under its current and former names. A rename keeps the finding's key, so a baseline survives it. */
@@ -24,7 +25,7 @@ const SWR_HOOK = /^swr(?:#(?:default|useSWR)|\/immutable#default)(?:\.|$)/;
 const GLOBALS = new Set(["fetch", "XMLHttpRequest"]);
 const CLIENTS = new Set(["ky", "axios"]);
 const LISTED_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in ${FILE} with its reason: pages, live, client-state or unreachable.`;
-const FETCH_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in ${FILE} with its reason.`;
+const FETCH_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in ${FILE} with its reason: pages, live, client-state or unreachable.`;
 const BROWSER = 'and "use client" runs it in the browser.';
 
 /** @type {(path: string) => string} The module a use path names: `@/api/users` for `@/api/users#getUser`. A subpath import such as `#api` keeps its leading `#`. */
@@ -123,9 +124,21 @@ export default {
         if (reached) sites.push({ file: file.path, key: `${file.path} imports ${specifier}`, group: CLIENT_FETCH, line, said: `imports ${specifier}`, fix: `which reaches ${reached}, ${BROWSER} ${FETCH_FIX}` });
       }
     }
-    return [...Map.groupBy(sites, (site) => site.key)].map(([key, [first, ...rest]]) => {
+    const tracked = repo.files();
+    /** @type {import("../registry.mjs").Finding[]} */
+    const config = [];
+    for (const entry of repo.config.clientData) {
+      const path = "file" in entry ? entry.file : entry.app;
+      const missing = "file" in entry ? (tracked.includes(path) ? null : "which git does not track") : tracked.some((item) => item.startsWith(`${path}/`)) ? null : "which holds no tracked file";
+      if (missing) config.push({ key: `client-data ${path}`, group: CONFIG, fix: `client-data in ${FILE} lists ${path}, ${missing}. Remove the entry, or fix its path.` });
+    }
+    const [next] = dependents(repo, "next");
+    if (next !== undefined && repo.config.apiModules.length === 0) {
+      config.push({ key: "api-modules", group: CONFIG, fix: `api-modules in ${FILE} is empty, and ${next} is a Next app. List the globs of its API modules, so that a "use client" file that imports one fails.` });
+    }
+    return [...config, ...[...Map.groupBy(sites, (site) => site.key)].map(([key, [first, ...rest]]) => {
       const lines = [...new Set([first.line, ...rest.map((site) => site.line)])].sort((a, b) => a - b);
       return { key, group: first.group, fix: `${first.file} ${first.said} on line${lines.length > 1 ? "s" : ""} ${lines.join(", ")}, ${first.fix}` };
-    });
+    })];
   },
 };

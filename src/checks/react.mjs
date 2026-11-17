@@ -126,6 +126,7 @@ export default {
     config: [],
   },
   subject: "tree",
+  moved: { "react/no-client-fetch": "client-data" },
   retired: [],
   applies: (repo) => (dependents(repo, "react").length > 0 ? { on: true } : { on: false, because: "no tracked package.json declares react" }),
   async run(repo) {
