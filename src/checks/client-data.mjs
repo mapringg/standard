@@ -40,7 +40,8 @@ async function reachers(repo, files) {
   const resolved = new Map();
   /** @type {(file: string, specifier: string) => string | null} */
   const resolve = (file, specifier) => {
-    const found = resolvers.of(file).resolve(posix.join(root, file), specifier, "import", true, "static");
+    const resolver = resolvers.of(file);
+    const found = resolver.resolve(posix.join(root, file), specifier, "import", true, "static") ?? resolver.resolve(posix.join(root, file), specifier, "import", true, "dynamic");
     const relative = found === null || found === "builtin" ? null : posix.relative(root, found);
     return relative === null || relative.startsWith("../") || relative.split("/").includes("node_modules") ? null : relative;
   };
