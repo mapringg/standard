@@ -83,6 +83,14 @@ test("tests wants a Check job step that runs the test command without continue-o
   }
 });
 
+test("tests does not count a Check job step whose if is constant false", (t) => {
+  const step = (condition) => ({ ".github/workflows/ci.yml": CI.replace("      - run: pnpm test\n", `      - if: ${condition}\n        run: pnpm test\n`) });
+  passes(t, step("${{ !cancelled() }}"));
+  for (const condition of ["false", "0", "${{ false }}", " ${{ 0 }} ", "''", "\"${{ '' }}\""]) {
+    fails(t, step(condition), STEP);
+  }
+});
+
 test("tests leaves a repository without a Check job to the ci probe", (t) => {
   passes(t, { ".github/workflows/ci.yml": null });
 });

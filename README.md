@@ -101,7 +101,7 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Flags | The project's effective value of a base `compilerOptions` flag differs from the base. A project that inherits the problem from another project is not reported again. |
 | Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a project has none, which `turbo run typecheck` would skip. |
 | Hooks | No `hooks.pre-push` line is exactly `pnpm typecheck` or `pnpm run typecheck`. Anything before or after it, even `&&`, could skip it or hide its failure, so a chain goes on its own lines. |
-| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that is exactly that command. A step may have an `if`, such as one that skips a draft, but not a constant false such as `false`, `0`, `''` or `${{ false }}`, which GitHub never runs. When the `ci` probe finds no Check job, this rule stays quiet. |
 
 `tests` checks that the repository's test command runs before a push and in CI. A test file is a tracked `*.test.*` or `*.spec.*` file with a `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.mjs` or `.cjs` extension. It does not apply when git tracks no `package.json`.
 
@@ -110,7 +110,7 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Script | The root `package.json` has no `test` script. |
 | Packages | The `package.json` nearest a test file has no `test` script, so `turbo run test` skips that package. The fix names one test file it would never run. |
 | Hooks | No `hooks.pre-push` line is exactly `pnpm test` or `pnpm run test`, so nothing in the line can swallow a failure. `pnpm test:visual`, `pnpm turbo run test` and `pnpm lint && pnpm test` do not count. |
-| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`. When the `ci` probe finds no Check job, this rule stays quiet. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`, but not a constant false. When the `ci` probe finds no Check job, this rule stays quiet. |
 
 `pr-tests` fails a pull request that adds logic to a package's source and adds no test logic to that same package. It diffs the head against the merge base of the base and head, reads both sides from git, and parses each changed file.
 

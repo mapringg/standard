@@ -253,9 +253,20 @@ export function runsScript(script) {
 }
 
 /**
+ * @param {unknown} condition A step's if.
+ * @returns {boolean} Whether the condition is a constant that GitHub reads as false.
+ */
+function neverRuns(condition) {
+  if (condition === false || condition === 0) return true;
+  if (typeof condition !== "string") return false;
+  const bare = condition.trim().replace(/^\$\{\{([\s\S]*)\}\}$/, "$1").trim();
+  return ["", "false", "0", "''", '""'].includes(bare);
+}
+
+/**
  * @param {Repo} repo
- * @returns {string[]} The run scripts of the steps without continue-on-error or shell in every Check job the ci probe accepts.
- * An if may skip a step on a draft or an already green commit, so only continue-on-error hides a failure.
+ * @returns {string[]} The run scripts of the steps without continue-on-error, shell or a constant false if in every Check job the ci probe accepts.
+ * Any other if may skip a step on a draft or an already green commit, so it stays allowed.
  */
 export function checkJobScripts(repo) {
   const workflows = repo.files(".github/workflows/*").filter((path) => /\.ya?ml$/.test(path));
@@ -266,7 +277,9 @@ export function checkJobScripts(repo) {
       const job = record(value) ?? {};
       if ((job.name ?? id) !== "Check" || checkJobMiss(path, id, job) !== null) return [];
       const steps = Array.isArray(job.steps) ? job.steps.map(record) : [];
-      return steps.flatMap((step) => (step !== null && !("continue-on-error" in step) && !("shell" in step) && typeof step.run === "string" ? [step.run] : []));
+      return steps.flatMap((step) =>
+        step !== null && !("continue-on-error" in step) && !("shell" in step) && !neverRuns(step.if) && typeof step.run === "string" ? [step.run] : [],
+      );
     });
   });
 }

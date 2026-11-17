@@ -200,6 +200,13 @@ test("typecheck wants a Check job step whose run is exactly the typecheck comman
   }
 });
 
+test("typecheck does not count a Check job step whose if is constant false", (t) => {
+  const miss = 'ci: Add a step to the Check job whose run is "pnpm typecheck", with no continue-on-error, so a pull request that fails typecheck cannot merge.';
+  for (const condition of ["false", "${{ false }}", "''"]) {
+    fails(t, { ".github/workflows/ci.yml": `${WIRED[".github/workflows/ci.yml"]}      - if: ${condition}\n        run: pnpm typecheck\n` }, miss);
+  }
+});
+
 test("typecheck leaves a repository without a Check job to the ci probe", (t) => {
   passes(t, { ".github/workflows/ci.yml": null });
 });
