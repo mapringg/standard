@@ -11,7 +11,7 @@ const FLAG_FIX = 'Model the request as a status in a useReducer state union, suc
 const FETCH_FIX = "Fetch in a server component, or through useServerSeeded or useServerSeededInfinite from src/lib/swr.ts when the data needs pagination or revalidation.";
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
-const SWR_FIX = "Use useServerSeeded or useServerSeededInfinite from src/lib/swr.ts of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts.";
+const SWR_FIX = "Use useServerSeeded or useServerSeededInfinite from src/lib/swr.ts of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.";
 
 function react(t, files, ...flags) {
   const cwd = tempRepo(t);

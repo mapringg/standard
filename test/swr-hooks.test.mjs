@@ -45,7 +45,7 @@ async function mount(t, useHook, props, config = {}) {
     return null;
   }
   const root = createRoot(document.createElement("div"));
-  const tree = (next) => createElement(SWRConfig, { value: { shouldRetryOnError: false, ...config } }, createElement(SwrScope, null, createElement(Probe, next)));
+  const tree = (next) => createElement(SWRConfig, { value: { shouldRetryOnError: false, ...config } }, createElement(SwrScope, null, next?.shown === false ? null : createElement(Probe, next)));
   const render = (next) => act(async () => root.render(tree(next)));
   await render(props);
   t.after(() => act(async () => root.unmount()));
@@ -142,6 +142,46 @@ test("try again after a failed page fetches only that page", async (t) => {
 
 const listKey = (id) => (index) => (index < 3 ? ["items", id, index] : null);
 const firstItems = (result) => result.current.pages.map((page) => page.items[0]);
+
+async function mountThreeTimes(t, useHook) {
+  const { result, rerender } = await mount(t, useHook, { shown: true }, { dedupingInterval: 0 });
+  const idle = async () => {
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    await settle(() => !result.current.validating);
+  };
+  await idle();
+  for (const shown of [false, true, false, true]) {
+    await rerender({ shown });
+    await idle();
+  }
+  return result;
+}
+
+const SEED = { id: "a", name: "seed" };
+
+test("a hook with reuseCache fetches on its first mount and reuses the cached result when it mounts again", async (t) => {
+  const api = server();
+  const result = await mountThreeTimes(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: SEED, reuseCache: true }));
+  assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["item", "a"]], data: { id: "a", name: "fetched a" } });
+});
+
+test("a hook without reuseCache refetches each time it mounts", async (t) => {
+  const api = server();
+  const result = await mountThreeTimes(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: SEED }));
+  assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["item", "a"], ["item", "a"], ["item", "a"]], data: { id: "a", name: "fetched a" } });
+});
+
+test("a page list with reuseCache fetches on its first mount and reuses the cached pages when it mounts again", async (t) => {
+  const api = server();
+  const result = await mountThreeTimes(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [], reuseCache: true }));
+  assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 0]], pages: ["fetched 0"] });
+});
+
+test("a page list without reuseCache refetches each time it mounts", async (t) => {
+  const api = server();
+  const result = await mountThreeTimes(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [] }));
+  assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 0], ["items", 0], ["items", 0]], pages: ["fetched 0"] });
+});
 
 test("an edit to one page list never reaches the list selected next", async (t) => {
   const api = server();

@@ -36,6 +36,9 @@
   "devDependencies": {
     "@types/react": "19.3.0",
     "jsdom": "31.0.1",
+    "oxfmt": "0.78.0",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2007",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "swr": "2.5.1",
