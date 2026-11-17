@@ -168,3 +168,53 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
   });
 }
 
+
+test("boundaries resolves a createRequire require from its anchor, under any name, and skips one with a computed anchor", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/scripts/anchor.mjs": [
+      'import { createRequire } from "node:module";',
+      'const require = createRequire(new URL("../../api/package.json", import.meta.url));',
+      'require("./src/auth/session.ts");',
+      "const req = createRequire(import.meta.url);",
+      'req("../../api/src/db/client.ts");',
+      'const computed = createRequire(process.cwd() + "/x.js");',
+      'computed("./absent.cjs");',
+      "",
+    ].join("\n"),
+    "scripts/browser.mjs": 'import { createRequire } from "node:module";\nconst load = createRequire(new URL("../apps/web/package.json", import.meta.url));\nexport const browser = load("only-web");\n',
+    "apps/web/node_modules/only-web/package.json": { name: "only-web", main: "index.js" },
+    "apps/web/node_modules/only-web/index.js": "module.exports = 1;\n",
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/scripts/anchor.mjs imports ./src/auth/session.ts: apps/api/src/auth/session.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+      'boundaries: apps/web/scripts/anchor.mjs imports ../../api/src/db/client.ts: apps/api/src/db/client.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+    ],
+    status: 1,
+  });
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries follows TypeScript ${major} past an exports condition whose target is missing, and fails an alias of a workspace package that does not resolve`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": { name: "api", exports: { "./fallback": { types: "./missing.d.ts", import: "./src/required.ts" }, "./gone": { types: "./missing.d.ts" } } },
+      "apps/api/src/required.ts": "export const value = 1;\n",
+      "apps/node/package.json": { name: "node-app", dependencies: { api: "workspace:*", "api-alias": "workspace:api@*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/direct.mts": 'import { value } from "api/fallback";\nexport const a = value;\n',
+      "apps/node/src/alias.mts": 'import { value } from "api-alias/fallback";\nexport const b = value;\n',
+      "apps/node/src/gone.mts": 'import { value } from "api-alias/gone";\nexport const c = value;\n',
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api-alias"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    assert.deepEqual(findings(cwd), {
+      lines: [
+        'boundaries: apps/node/src/alias.mts imports api-alias/fallback: apps/api/src/required.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+        'boundaries: apps/node/src/gone.mts imports api-alias/gone: "api-alias/gone" is not in the exports of the workspace package api-alias. Import a subpath its exports list, or add this one there.',
+      ],
+      status: 1,
+    });
+  });
+}

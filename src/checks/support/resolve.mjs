@@ -49,16 +49,18 @@ function oxcProject(tsconfig, options) {
   const node = tsconfig === null || NODE_RESOLUTION.has(options.moduleResolution ?? (NODE_MODULES.has(options.module) ? 99 : 100));
   /** @type {Map<string, ResolverFactory>} */
   const factories = new Map();
+  /** @param {Mode} mode */
+  const conditionsFor = (mode) => [...(tsconfig ? ["types"] : []), mode, ...(node ? ["node"] : []), ...(options.customConditions ?? [])];
   /**
-   * @param {Mode} mode
+   * @param {readonly string[]} conditions
    * @param {boolean} viaPaths
    */
-  const factory = (mode, viaPaths) => {
-    const key = `${mode} ${viaPaths}`;
+  const factory = (conditions, viaPaths) => {
+    const key = `${conditions.join(",")} ${viaPaths}`;
     if (!factories.has(key)) {
       factories.set(key, new ResolverFactory({
         ...(tsconfig && viaPaths ? { tsconfig: { configFile: tsconfig } } : {}),
-        conditionNames: [...(tsconfig ? ["types"] : []), mode, ...(node ? ["node"] : []), ...(options.customConditions ?? []), "default"],
+        conditionNames: [...conditions, "default"],
         mainFields: tsconfig ? ["types", "typings", "main"] : ["main"],
         extensions: EXTENSIONS,
         extensionAlias: EXTENSION_ALIAS,
@@ -69,8 +71,31 @@ function oxcProject(tsconfig, options) {
   };
   return {
     moduleResolution: node ? "node" : "bundler",
-    resolve: (file, specifier, mode, viaPaths) => oxc(factory(mode, viaPaths), file, specifier),
+    resolve(file, specifier, mode, viaPaths) {
+      const conditions = conditionsFor(mode);
+      const found = oxc(factory(conditions, viaPaths), file, specifier);
+      if (found !== null || tsconfig === null || /^[./]/.test(specifier)) return found;
+      // TypeScript skips an exports condition whose target does not exist and tries the next one. oxc-resolver stops at the first,
+      // so drop the fewest conditions that reach an existing target: exactly the matching keys before it.
+      for (let size = 1; size <= conditions.length; size++) {
+        for (const dropped of combinations(conditions, size)) {
+          const fallback = oxc(factory(conditions.filter((condition) => !dropped.includes(condition)), viaPaths), file, specifier);
+          if (fallback !== null) return fallback;
+        }
+      }
+      return null;
+    },
   };
+}
+
+/**
+ * @param {readonly string[]} items
+ * @param {number} size
+ * @returns {string[][]} Every choice of size items, in order.
+ */
+function combinations(items, size) {
+  if (size === 0) return [[]];
+  return items.flatMap((item, index) => combinations(items.slice(index + 1), size - 1).map((rest) => [item, ...rest]));
 }
 
 /**
@@ -97,7 +122,7 @@ function classicProject(ts, options) {
 /**
  * @param {string} root Absolute real path of the repository.
  * @param {readonly string[]} tsconfigs Repo paths of the tracked tsconfig.json files.
- * @returns {Promise<(file: string) => Project>} The project of a repo file: the one its nearest tsconfig.json opens.
+ * @returns {Promise<{ of(file: string): Project, node: Project }>} The project of a repo file, the one its nearest tsconfig.json opens, and the resolver Node itself uses, as for a require that createRequire makes.
  */
 export async function projects(root, tsconfigs) {
   /** @type {Map<string | null, Project>} */
@@ -128,12 +153,16 @@ export async function projects(root, tsconfigs) {
     }
   }
   const owned = new Set(tsconfigs);
-  return (file) => {
-    for (let dir = posix.dirname(file); ; dir = posix.dirname(dir)) {
-      const config = posix.join(dir, "tsconfig.json");
-      if (owned.has(config)) return /** @type {Project} */ (byConfig.get(config));
-      if (dir === ".") return /** @type {Project} */ (byConfig.get(null));
-    }
+  const node = /** @type {Project} */ (byConfig.get(null));
+  return {
+    node,
+    of(file) {
+      for (let dir = posix.dirname(file); ; dir = posix.dirname(dir)) {
+        const config = posix.join(dir, "tsconfig.json");
+        if (owned.has(config)) return /** @type {Project} */ (byConfig.get(config));
+        if (dir === ".") return node;
+      }
+    },
   };
 }
 
