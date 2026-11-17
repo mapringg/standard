@@ -48,6 +48,7 @@ const CASES = [
   ['const r = require("ioredis"); await import("zod");', ["import module ioredis", "call global require", "bind module ioredis", "import module zod", "read module zod"]],
   ['import r = require("ioredis");', ["import module ioredis"]],
   ['import { vi as v } from "vitest"; v.mock("m"); const { doMock } = v;', ["import module vitest", "import module vitest#vi", "call module vitest#vi.mock", "bind module vitest#vi", "read module vitest#vi.doMock"]],
+  ['const k = "mo" + `${"c"}k`; vi[k]("m"); vi[x]("m"); const { [k]: a, [x]: b, ...rest } = vi;', ["call global vi.mock", "read global x", "read global vi", "bind global vi", "read global vi.mock", "read global x", "read global vi", "read global vi"]],
   ['const { mock } = vi; vi["mock"]("m");', ["bind global vi", "read global vi.mock", "call global vi.mock"]],
   ["label: for (;;) { break label; }", []],
   ["for (let i = 0, JSON = 1; i < 1; i++) JSON.parse(); for (const fetch of []) fetch();", []],

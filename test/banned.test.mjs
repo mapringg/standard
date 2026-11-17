@@ -438,6 +438,28 @@ test("banned passes effect hooks in tests, stories, fixtures and test folders, a
   assert.equal(status, 1);
 });
 
+test("banned reads a constant computed key on react's namespace, and fails one it cannot read and a namespace read whole", (t) => {
+  fails(
+    t,
+    [],
+    {
+      "src/const.tsx": 'import React from "react";\nexport function A() {\n  React[key](() => {});\n}\nconst key = "useEffect";\n',
+      "src/template.tsx": 'import * as React from "react";\nconst part = "Layout";\nexport function A() {\n  React?.[`use${part}Effect` as const]?.(() => {});\n}\n',
+      "src/sum.tsx": 'const start = "use" + "Insertion";\nconst name = start;\nexport function A() {\n  const { [name + "Effect"]: run } = require("react");\n  run(() => {});\n}\n',
+      "src/state.tsx": 'import React from "react";\nconst key = "useState";\nexport function A() {\n  return React[key](0);\n}\n',
+      "src/unknown.tsx": 'import React from "react";\nlet key = "useState";\nexport function A(name: string) {\n  React[name](() => {});\n  React[key](0);\n  const { [name]: run } = React;\n}\n',
+      "src/whole.tsx": 'import * as React from "react";\nconst pick = (namespace: typeof React) => namespace.useEffect;\nexport function A() {\n  Reflect.get(React, "useEffect")(() => {});\n  pick(React)(() => {});\n  Object.values(React);\n}\n',
+      "src/default.tsx": 'import * as React from "react";\nexport function A() {\n  React.default.useEffect(() => {});\n}\n',
+    },
+    `src/const.tsx react#useEffect: src/const.tsx uses react#useEffect on line 3. ${EFFECT_FIX}`,
+    `src/default.tsx react#useEffect: src/default.tsx uses react#useEffect on line 3. ${EFFECT_FIX}`,
+    `src/sum.tsx react#useInsertionEffect: src/sum.tsx uses react#useInsertionEffect on lines 4, 5. ${EFFECT_FIX}`,
+    `src/template.tsx react#useLayoutEffect: src/template.tsx uses react#useLayoutEffect on line 4. ${EFFECT_FIX}`,
+    `src/unknown.tsx read react: src/unknown.tsx reads react's namespace whole, or at a key banned cannot resolve, on lines 4, 5, 6. ${READ_FIX}`,
+    `src/whole.tsx read react: src/whole.tsx reads react's namespace whole, or at a key banned cannot resolve, on lines 4, 5, 6. ${READ_FIX}`,
+  );
+});
+
 const WRAPPERS = ["named", "alias", "default", "getter", "holder", "namespace", "star", "spread", "then", "calls"].map((name) => ({ file: `src/w/${name}.ts`, reason: "Binds the map instance, which renders no element." }));
 
 const passes = (path, hook, lines) => `${path} ${hook}: ${path} passes ${hook} on as a value on line${lines.includes(",") ? "s" : ""} ${lines}. A wrapper may call ${hook}, and exports only the hooks that call it, never ${hook} itself or a value that holds it, so banned sees each file that uses it.`;
