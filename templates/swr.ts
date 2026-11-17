@@ -177,16 +177,17 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
   };
   const fetchNext = async () => {
     if (list === null) return;
-    setRequested({ list: id, status: "loading" });
+    const loading: NextPage = { list: id, status: "loading" };
+    const finish = (after: NextPage | null) =>
+      setRequested((now) => (now === loading ? after : now));
+    const { restarts } = flights;
+    setRequested(loading);
     try {
       await joinNext(flights, appendNext);
-      settle(null);
+      finish(null);
     } catch (thrown) {
-      settle({
-        list: id,
-        status: "failed",
-        error: thrown instanceof Error ? thrown : new Error(String(thrown)),
-      });
+      const error = thrown instanceof Error ? thrown : new Error(String(thrown));
+      finish(flights.restarts === restarts ? { list: id, status: "failed", error } : null);
     }
   };
   return {
