@@ -36,6 +36,7 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SYMBOL = /^(?:[a-z][a-z0-9]*[A-Z]\w*|[A-Z][a-z0-9]+[A-Z]\w*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:\(\))?$/;
 const VALUE_FLAGS = new Set(["--filter", "-F", "-C", "--dir"]);
 const OPERATORS = ";&|()<>`";
+const UNCLOSED = "a quote is not closed, so no shell can run it; fix the quoting";
 const PNPM_COMMANDS = new Set(
   "add approve-builds audit bin cache config create dedupe deploy dlx env exec fetch help i import init install install-test it licenses link list ln ls outdated pack patch patch-commit patch-remove prune publish rb rebuild remove rm root run self-update server setup start store t test un uninstall unlink up update upgrade why".split(" "),
 );
@@ -128,10 +129,11 @@ function pathMiss(path, doc, index) {
   return index.tails.has(bare) ? null : { reason: "no tracked file ends with this path", ignorable: [path, posix.join(posix.dirname(doc.path), path)] };
 }
 
-/** @type {(text: string) => string[][]} Each command a POSIX shell reads in the text, as its words with quotes and escapes resolved. A `#` that starts a word comments out the rest, and an unclosed quote leaves no command, as the shell runs none. */
+/** @type {(text: string) => { commands: string[][], closed: boolean }} Each command a POSIX shell reads in the text, as its words with quotes and escapes resolved, up to a quote that never closes. A `#` that starts a word comments out the rest. */
 function shellCommands(text) {
   /** @type {string[][]} */
   const commands = [[]];
+  const read = (/** @type {boolean} */ closed) => ({ commands: commands.filter((words) => words.length > 0), closed });
   /** @type {string | null} */
   let word = null;
   const end = () => {
@@ -142,13 +144,13 @@ function shellCommands(text) {
     const char = text[at] ?? "";
     if (char === "'") {
       const close = text.indexOf("'", at + 1);
-      if (close === -1) return [];
+      if (close === -1) return read(false);
       word = (word ?? "") + text.slice(at + 1, close);
       at = close;
     } else if (char === '"') {
       word ??= "";
       for (at++; text[at] !== '"'; at++) {
-        if (at >= text.length) return [];
+        if (at >= text.length) return read(false);
         const escaped = text[at] === "\\" && '$`"\\\n'.includes(text[at + 1] ?? "-");
         if (escaped) at++;
         if (!escaped || text[at] !== "\n") word += text[at];
@@ -164,12 +166,14 @@ function shellCommands(text) {
     } else word = (word ?? "") + char;
   }
   end();
-  return commands.filter((words) => words.length > 0);
+  return read(true);
 }
 
-/** @type {(text: string) => PnpmCall[]} Each `pnpm` command in code, with the package flags that pick where its script lives. */
+/** @type {(text: string) => PnpmCall[] | null} Each `pnpm` command in code, with the package flags that pick where its script lives, or null when a quote in a `pnpm` command never closes. */
 function pnpmCalls(text) {
-  return shellCommands(text).flatMap((words) =>
+  const { commands, closed } = shellCommands(text);
+  if (!closed) return commands.some((words) => words.includes("pnpm")) ? null : [];
+  return commands.flatMap((words) =>
     words.flatMap((word, at) => {
       if (word !== "pnpm") return [];
       /** @type {PnpmCall} */
@@ -215,9 +219,9 @@ function misses(doc, corpus, index) {
   for (const { line, text, span } of doc.code) {
     const shown = `\`${text.trim()}\``;
     const calls = pnpmCalls(text);
-    if (calls.length > 0) {
+    if (calls === null || calls.length > 0) {
       if (local) continue;
-      for (const reason of calls.map((call) => scriptMiss(call, doc, index))) if (reason) found.push({ line, shown, reason, ignorable: [] });
+      for (const reason of calls?.map((call) => scriptMiss(call, doc, index)) ?? [UNCLOSED]) if (reason) found.push({ line, shown, reason, ignorable: [] });
       continue;
     }
     if (!span) continue;
