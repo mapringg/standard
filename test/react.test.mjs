@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
@@ -10,6 +10,7 @@ const STATE_FIX = "Hold its state in one useReducer whose state is a union with 
 const FLAG_FIX = 'Model the request as a status in a useReducer state union, such as { status: "loading" } | { status: "done", data }.';
 const FETCH_FIX = "Fetch in a server component, or through useServerSeeded or useServerSeededInfinite from src/lib/swr.ts when the data needs pagination or revalidation.";
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
+const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
 const SWR_FIX = "Use useServerSeeded or useServerSeededInfinite from src/lib/swr.ts of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts.";
 
 function react(t, files, ...flags) {
@@ -153,4 +154,57 @@ test("react passes one useState holding one value, and skips a repository whose 
   write(cwd, { "package.json": { dependencies: { zod: "4.0.0" } }, "src/a.ts": 'import useSWR from "swr";\n' });
   git(cwd, "add", "-A");
   assert.equal(standard(cwd, ["check", "react"]).stdout, "react: skipped, no tracked package.json declares react\n");
+});
+
+function reducers(t, files) {
+  const cwd = tempRepo(t);
+  write(cwd, {
+    ".gitignore": "node_modules\n",
+    "package.json": { dependencies: { react: "19.0.0" } },
+    "node_modules/react/package.json": { name: "react", version: "19.0.0", types: "index.d.ts" },
+    "node_modules/react/index.d.ts": "export function useReducer<S, A>(reducer: (state: S, action: A) => S, initial: S): [S, (action: A) => void];\n",
+    "tsconfig.json": { compilerOptions: { strict: true, jsx: "preserve", module: "preserve", target: "esnext", noEmit: true }, include: ["src"] },
+    ...files,
+  });
+  mkdirSync(join(cwd, "node_modules"), { recursive: true });
+  symlinkSync(join(import.meta.dirname, "../node_modules/typescript"), join(cwd, "node_modules/typescript"));
+  git(cwd, "add", "-A");
+  return standard(cwd, ["check", "react"]);
+}
+
+const STATES = 'import { useReducer } from "react";\ntype Good = { status: "idle" } | { status: "done"; data: string };\ntype Bad = { status: "idle" | "done"; data?: string };\n';
+
+test("react passes a useReducer whose state is a union with a literal status, and fails one it cannot prove is", (t) => {
+  const { stdout, stderr, status } = reducers(t, {
+    "src/good.tsx": `${STATES}export function Good() {\n  const [{ status }] = useReducer((state: Good, next: Good) => next, { status: "idle" });\n  return status;\n}\n`,
+    "src/bad.tsx": `${STATES}export function useBad() {\n  return useReducer((state: Bad, next: Bad) => next, { status: "idle" });\n}\n`,
+    "outside/stray.tsx": `${STATES}export function Stray() {\n  return useReducer((state: Good, next: Good) => next, { status: "idle" });\n}\n`,
+  });
+  assert.equal(stderr, "");
+  assert.equal(
+    stdout,
+    [
+      "react: 2 new findings.",
+      "  outside/stray.tsx: Stray's useReducer on line 5 is in no TypeScript project, so the check cannot read its state. Add outside/stray.tsx to the include of tsconfig.json.",
+      `  src/bad.tsx: useBad's useReducer on line 5 holds Bad, which is not a union whose members each have a literal status. Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.`,
+      NO_BASELINE,
+      "",
+    ].join("\n"),
+  );
+  assert.equal(status, 1);
+});
+
+test("react reads the state of a useReducer called through a local alias", (t) => {
+  const { stdout, status } = reducers(t, { "src/alias.tsx": 'import { useReducer } from "react";\nconst reducerHook = useReducer;\nexport function A() {\n  return reducerHook((state: number) => state, 0);\n}\n' });
+  assert.equal(stdout, `react: 1 new findings.\n  src/alias.tsx: A's useReducer on line 4 holds number, which is not a union whose members each have a literal status. ${UNION_FIX}\n${NO_BASELINE}\n`);
+  assert.equal(status, 1);
+});
+
+test("react fails a useReducer state whose members share a status", (t) => {
+  const { stdout, status } = reducers(t, {
+    "src/twins.tsx": 'import { useReducer } from "react";\ntype State = { status: "ready"; a: string } | { status: "ready"; b: number } | { status: "idle" };\ndeclare const initial: State;\nexport function A() {\n  return useReducer((state: State) => state, initial);\n}\n',
+  });
+  const members = '{ status: "ready"; a: string; } | { status: "ready"; b: number; } | { status: "idle"; }';
+  assert.equal(stdout, `react: 1 new findings.\n  src/twins.tsx: A's useReducer on line 5 holds ${members}, whose members share status "ready". ${UNION_FIX}\n${NO_BASELINE}\n`);
+  assert.equal(status, 1);
 });
