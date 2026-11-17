@@ -6,6 +6,7 @@ import prBody from "./checks/pr-body.mjs";
 import prScreenshot from "./checks/pr-screenshot.mjs";
 import prSize from "./checks/pr-size.mjs";
 import prTitle from "./checks/pr-title.mjs";
+import typecheck from "./checks/typecheck.mjs";
 import wiring from "./checks/wiring.mjs";
 
 /**
@@ -32,4 +33,4 @@ import wiring from "./checks/wiring.mjs";
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck];

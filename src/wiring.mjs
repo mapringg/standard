@@ -243,6 +243,28 @@ function workflowMiss(path, text) {
   return /** @type {Miss[]} */ (misses).reduce((best, miss) => (miss.stage > best.stage ? miss : best));
 }
 
+/** `pnpm typecheck` or `pnpm run typecheck` as a whole command inside a longer shell line. */
+export const RUNS_TYPECHECK = /(?:^|[;&|('"])\s*pnpm (?:run )?typecheck(?=$|[\s;&|)'"])/m;
+
+/**
+ * @param {Repo} repo
+ * @returns {string[]} The run scripts of the steps without continue-on-error in every Check job the ci probe accepts.
+ * An if may skip a step on a draft or an already green commit, so only continue-on-error hides a failure.
+ */
+export function checkJobScripts(repo) {
+  const workflows = repo.files(".github/workflows/*").filter((path) => /\.ya?ml$/.test(path));
+  return workflows.flatMap((path) => {
+    const text = repo.read(path);
+    if (workflowMiss(path, text) !== null) return [];
+    return Object.entries(record(record(parse(text))?.jobs) ?? {}).flatMap(([id, value]) => {
+      const job = record(value) ?? {};
+      if ((job.name ?? id) !== "Check" || checkJobMiss(path, id, job) !== null) return [];
+      const steps = Array.isArray(job.steps) ? job.steps.map(record) : [];
+      return steps.flatMap((step) => (step !== null && !("continue-on-error" in step) && typeof step.run === "string" ? [step.run] : []));
+    });
+  });
+}
+
 /** @type {readonly Probe[]} */
 export const PROBES = [
   {
