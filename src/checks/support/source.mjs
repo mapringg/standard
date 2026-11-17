@@ -8,10 +8,14 @@ import { namesOf as names } from "../boundaries.mjs";
  *
  * One use of an API from outside the file. A "module" path is a specifier, or `specifier#export`, such as `react#useMemo`.
  * A "global" path is a dotted chain from an unshadowed global, such as `process.env.API_URL`. Kind "type" is a type-only import, which no rule counts.
- * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read" | "call", line: number }} Use
+ * A call adds `call`: the name and start offset of the nearest named function around it, the first name its result's
+ * array pattern binds, and the UTF-16 offset where the call ends.
+ * @typedef {{ owner: { name: string, at: number } | null, first: string | null, end: number }} Call
+ * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read", line: number } | { space: "module" | "global", path: string, kind: "call", line: number, call: Call }} Use
  *
  * `members` holds the lines of each static property name read on any object, by member access or destructuring.
- * @typedef {{ path: string, uses: readonly Use[], members: ReadonlyMap<string, readonly number[]> }} Parsed
+ * `client` is true when the directive prologue holds "use client".
+ * @typedef {{ path: string, uses: readonly Use[], members: ReadonlyMap<string, readonly number[]>, client: boolean }} Parsed
  * @typedef {Parsed | { path: string, error: string }} FileFacts
  *
  * What a chain names so far, and what a binding holds: an import, or a local that a static chain initialized. Other locals hold null. A module ref with a `namespace` is a namespace or default binding, whose next key names an export.
@@ -122,13 +126,23 @@ function factsOf(path, text) {
   const starts = [0];
   for (let index = text.indexOf("\n"); index !== -1; index = text.indexOf("\n", index + 1)) starts.push(index + 1);
   const lineOf = (/** @type {Node} */ node) => starts.findLastIndex((start) => start <= node.start) + 1;
-  const pending = /** @type {{ ref: Later, kind: Use["kind"], line: number }[]} */ ([]);
+  const pending = /** @type {{ ref: Later, kind: Use["kind"], line: number, call?: Call }[]} */ ([]);
   const members = /** @type {Map<string, number[]>} */ (new Map());
   const stack = /** @type {Map<string, Later | null>[]} */ ([]);
+  const owners = /** @type {{ name: string, at: number }[]} */ ([]);
+  const labels = /** @type {Map<Node, string>} */ (new Map());
+  const firsts = /** @type {Map<Node, string>} */ (new Map());
 
-  /** @type {(ref: Later | null, kind: Use["kind"], node: Node) => void} */
-  const emit = (ref, kind, node) => {
-    if (ref) pending.push({ ref, kind, line: lineOf(node) });
+  /** @type {(ref: Later | null, kind: Use["kind"], node: Node, call?: Call) => void} */
+  const emit = (ref, kind, node, call) => {
+    if (ref) pending.push({ ref, kind, line: lineOf(node), call });
+  };
+  /** @type {(node: Node | null, name: string) => void} Names the functions a binding holds, through wrapping calls such as memo(...). */
+  const label = (node, name) => {
+    if (!node) return;
+    if (FUNCTIONS.has(node.type)) labels.set(node, name);
+    else if (WRAPPERS.has(node.type)) label(node.expression, name);
+    else if (node.type === "CallExpression") node.arguments.forEach((/** @type {Node} */ arg) => label(arg, name));
   };
   /** @type {(key: string, node: Node) => void} */
   const note = (key, node) => {
@@ -170,8 +184,8 @@ function factsOf(path, text) {
     }
   }
 
-  /** @type {(node: Node, kind: Use["kind"]) => Later | null} */
-  const refer = (node, kind) => {
+  /** @type {(node: Node, kind: Use["kind"], call?: Call) => Later | null} */
+  const refer = (node, kind, call) => {
     const chain = /** @type {Node[]} */ ([]);
     let root = node;
     while (WRAPPERS.has(root.type) || root.type === "MemberExpression" || root.type === "JSXMemberExpression") {
@@ -190,7 +204,7 @@ function factsOf(path, text) {
       else note(key, link.property);
       ref = at(ref, key);
     }
-    emit(ref, kind, root);
+    emit(ref, kind, root, call);
     return ref;
   };
 
@@ -227,8 +241,12 @@ function factsOf(path, text) {
   /** @type {(node: Node) => void} */
   const visit = (node) => {
     if (FUNCTIONS.has(node.type)) {
+      const name = node.id?.name ?? labels.get(node);
+      if (name) owners.push({ name, at: node.start });
       for (const param of node.params) pattern(param, null);
-      return walk(node.body);
+      walk(node.body);
+      if (name) owners.pop();
+      return;
     }
     if (node.type.endsWith("Pattern") || node.type === "RestElement") return pattern(node, null);
     switch (node.type) {
@@ -238,7 +256,7 @@ function factsOf(path, text) {
       case "CallExpression": {
         const module = loaded(node);
         if (module !== null) emit(now(moduleRef(module)), "import", node);
-        refer(node.callee, "call");
+        refer(node.callee, "call", { owner: owners.at(-1) ?? null, first: firsts.get(node) ?? null, end: node.end });
         return walk(node.arguments);
       }
       case "ImportExpression":
@@ -249,7 +267,15 @@ function factsOf(path, text) {
         walk(node.declaration);
         for (const specifier of node.specifiers) if (specifier.exportKind !== "type") refer(specifier.local, "read");
         return;
-      case "VariableDeclarator": return pattern(node.id, node.init ? refer(node.init, "read") : null);
+      case "VariableDeclarator": {
+        if (node.id.type === "Identifier") label(node.init, node.id.name);
+        const first = node.id.type === "ArrayPattern" ? node.id.elements[0] : null;
+        if (first?.type === "Identifier" && node.init) firsts.set(node.init, first.name);
+        return pattern(node.id, node.init ? refer(node.init, "read") : null);
+      }
+      case "ExportDefaultDeclaration":
+        label(node.declaration, "default");
+        return walk(node.declaration);
       case "AssignmentExpression": {
         const base = refer(node.right, "read");
         return node.left.type.endsWith("Pattern") ? pattern(node.left, base) : walk(node.left);
@@ -259,7 +285,11 @@ function factsOf(path, text) {
       case "Property":
       case "MethodDefinition":
       case "PropertyDefinition":
-      case "AccessorProperty": return walk([node.decorators, node.computed ? node.key : null, node.value]);
+      case "AccessorProperty": {
+        const key = keyOf(node.key, node.computed);
+        if (key !== null) label(node.value, key);
+        return walk([node.decorators, node.computed ? node.key : null, node.value]);
+      }
       case "LabeledStatement": return walk(node.body);
       case "JSXOpeningElement":
         if (node.name.type === "JSXMemberExpression" || /^[A-Z]/.test(node.name.name ?? "")) refer(node.name, "read");
@@ -283,20 +313,29 @@ function factsOf(path, text) {
 
   stack.push(top);
   walk(program.body);
-  const uses = pending.flatMap(({ ref, kind, line }) => {
+  const uses = pending.flatMap(({ ref, kind, line, call }) => {
     const found = ref();
-    return found?.path ? [{ space: found.space, path: found.path, kind, line }] : [];
+    if (!found?.path) return [];
+    const use = { space: found.space, path: found.path, line };
+    return [call ? { ...use, kind: /** @type {const} */ ("call"), call } : { ...use, kind: /** @type {Exclude<Use["kind"], "call">} */ (kind) }];
   });
-  return { path, uses, members };
+  return { path, uses, members, client: program.body.some((/** @type {Node} */ node) => node.directive === "use client") };
 }
+
+/** banned and react read the same repo in one run, so each parses it once. */
+const parsed = /** @type {WeakMap<object, FileFacts[]>} */ (new WeakMap());
 
 /**
  * @param {Pick<import("../../repo.mjs").Repo, "files" | "read">} repo
  * @returns {FileFacts[]} One per tracked source outside node_modules, except .d.ts files, which hold no runtime uses.
  */
 export function sourceFacts(repo) {
-  return repo
+  const cached = parsed.get(repo);
+  if (cached) return cached;
+  const facts = repo
     .files()
     .filter((path) => SOURCE.test(path) && !path.endsWith(".d.ts") && !path.split("/").includes("node_modules"))
     .map((path) => factsOf(path, repo.read(path)));
+  parsed.set(repo, facts);
+  return facts;
 }

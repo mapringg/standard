@@ -1,0 +1,147 @@
+import { posix } from "node:path";
+
+import { sourceFacts } from "./support/source.mjs";
+
+/**
+ * @typedef {import("../repo.mjs").Repo} Repo
+ * @typedef {import("./support/source.mjs").Parsed} Parsed
+ * @typedef {import("./support/source.mjs").Use} Use
+ *
+ * What a rule sees: every parsed source, and the one path in each Next app that may import swr.
+ * @typedef {{ files: readonly Parsed[], wrappers: ReadonlySet<string> }} Scope
+ *
+ * One occurrence. Occurrences that share a key share one fix, which lists all their lines, because the baseline shows
+ * the first fix of each key.
+ * @typedef {{ key: string, line: number, fix: (lines: string) => string }} Problem
+ *
+ * @typedef {{ name: string, find(scope: Scope): Problem[] }} Rule
+ */
+
+const FLAG_STATES = new Set(["loading", "isLoading", "error", "isError"]);
+const SWR = new Set(["swr", "swr/infinite"]);
+const WRAPPER = "src/lib/swr.ts";
+const OWNER = /^(?:[A-Z]|use[A-Z])/;
+
+/**
+ * @param {Parsed} file
+ * @param {string} path
+ * @returns {{ owner: string, key: string, use: Extract<Use, { kind: "call" }> }[]} Each call of the module export inside a
+ * component or hook. `key` names the owner within the file: a second function of the same name gets "View 2", and so on in source order.
+ */
+function ownedCalls(file, path) {
+  const owners = [...new Map(file.uses.flatMap((use) => (use.kind === "call" && use.call.owner ? [[use.call.owner.at, use.call.owner.name]] : [])))].sort(([a], [b]) => a - b);
+  const keys = new Map(owners.map(([at, name], index) => {
+    const count = owners.slice(0, index + 1).filter(([, other]) => other === name).length;
+    return [at, `${file.path} ${name}${count > 1 ? ` ${count}` : ""}`];
+  }));
+  return file.uses.flatMap((use) => {
+    if (use.kind !== "call" || use.space !== "module" || use.path !== path) return [];
+    const { owner } = use.call;
+    return owner !== null && (OWNER.test(owner.name) || owner.name === "default") ? [{ owner: owner.name, key: /** @type {string} */ (keys.get(owner.at)), use }] : [];
+  });
+}
+
+/** @type {readonly Rule[]} */
+const RULES = [
+  {
+    name: "react/single-use-state",
+    find: ({ files }) =>
+      files.flatMap((file) =>
+        [...Map.groupBy(ownedCalls(file, "react#useState"), ({ key }) => key)].flatMap(([key, [first, ...rest]]) =>
+          rest.map(({ owner, use }) => ({
+            key: `${key} useState`,
+            line: use.line,
+            fix: (lines) => `${file.path}: ${owner} calls useState on line ${first?.use.line}, and again on ${lines}. Hold its state in one useReducer whose state is a union with a status field.`,
+          })),
+        ),
+      ),
+  },
+  {
+    name: "react/no-flag-state",
+    find: ({ files }) =>
+      files.flatMap((file) =>
+        ownedCalls(file, "react#useState").flatMap(({ owner, key, use: { line, call } }) =>
+          call.first !== null && FLAG_STATES.has(call.first)
+            ? [{
+              key: `${key} ${call.first}`,
+              line,
+              fix: (lines) => `${file.path}: ${owner} keeps ${call.first} in useState on ${lines}. Model the request as a status in a useReducer state union, such as { status: "loading" } | { status: "done", data }.`,
+            }]
+            : [],
+        ),
+      ),
+  },
+  {
+    name: "react/no-client-fetch",
+    find: ({ files }) =>
+      files.filter((file) => file.client).flatMap((file) =>
+        file.uses
+          .filter((use) => use.space === "global" && (use.path === "fetch" || use.path.startsWith("fetch.")))
+          .map(({ line }) => ({
+            key: `${file.path} fetch`,
+            line,
+            fix: (lines) => `${file.path} uses fetch on ${lines}, and "use client" runs it in the browser. Fetch in a server component, or through useServerSeeded or useServerSeededInfinite from src/lib/swr.ts when the data needs pagination or revalidation.`,
+          })),
+      ),
+  },
+  {
+    name: "react/no-direct-swr",
+    find: ({ files, wrappers }) =>
+      files.filter((file) => !wrappers.has(file.path)).flatMap((file) =>
+        file.uses
+          .filter((use) => use.space === "module" && use.kind === "import" && SWR.has(use.path))
+          .map(({ path, line }) => ({
+            key: `${file.path} ${path}`,
+            line,
+            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerSeeded or useServerSeededInfinite from ${WRAPPER} of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts.`,
+          })),
+      ),
+  },
+];
+
+/**
+ * @param {Repo} repo
+ * @param {string} name
+ * @returns {string[]} The folders whose tracked package.json depends on the package.
+ */
+function dependents(repo, name) {
+  return repo.files("**/package.json").filter((path) => {
+    try {
+      const manifest = JSON.parse(repo.read(path));
+      return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some((deps) => deps?.[name] !== undefined);
+    } catch {
+      return false;
+    }
+  }).map(posix.dirname);
+}
+
+/** @type {(lines: readonly number[]) => string} */
+const linesText = (lines) => {
+  const sorted = [...new Set(lines)].sort((a, b) => a - b);
+  return `line${sorted.length > 1 ? "s" : ""} ${sorted.join(", ")}`;
+};
+
+/** @type {import("../registry.mjs").Check} */
+export default {
+  name: "react",
+  since: "0.12.0",
+  subject: "tree",
+  retired: [],
+  applies: (repo) => (dependents(repo, "react").length > 0 ? { on: true } : { on: false, because: "no tracked package.json declares react" }),
+  run(repo) {
+    const facts = sourceFacts(repo);
+    const scope = {
+      files: facts.flatMap((file) => ("error" in file ? [] : [file])),
+      wrappers: new Set(dependents(repo, "next").map((app) => posix.join(app, WRAPPER))),
+    };
+    const parseErrors = facts.flatMap((file) => ("error" in file ? [{ key: `${file.path} parse`, group: "react/parse", fix: `${file.path} does not parse, so react cannot read it: ${file.error}. Fix the syntax.` }] : []));
+    return [
+      ...parseErrors,
+      ...RULES.flatMap((rule) => {
+        const problems = rule.find(scope);
+        const lines = Map.groupBy(problems, (problem) => problem.key);
+        return problems.map(({ key, fix }) => ({ key, group: rule.name, fix: fix(linesText((lines.get(key) ?? []).map((problem) => problem.line))) }));
+      }),
+    ];
+  },
+};
