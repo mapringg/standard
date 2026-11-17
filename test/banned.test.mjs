@@ -506,6 +506,37 @@ test("banned fails a test, timer copy or wrapper that exports or passes on an ef
   assert.equal(status, 1);
 });
 
+test("banned follows TypeScript import aliases of react, its namespace and its hooks, in product code, namespaces and wrappers, and passes type-only aliases", (t) => {
+  const listed = ["hook", "exported", "namespace", "calls"].map((name) => ({ file: `src/w/${name}.ts`, reason: "Binds the map instance, which renders no element." }));
+  const cwd = tempRepo(t, { "effect-wrappers": listed });
+  write(cwd, {
+    "src/namespace.ts": 'import * as React from "react";\nimport R = React;\nexport function useApp() {\n  R.useEffect(() => {}, []);\n}\n',
+    "src/qualified.ts": 'import * as React from "react";\nimport layout = React.useLayoutEffect;\nexport function useApp() {\n  layout(() => {});\n}\n',
+    "src/inner.ts": 'import * as React from "react";\nexport namespace Hooks {\n  import insert = React.useInsertionEffect;\n  export const run = () => insert(() => {});\n}\n',
+    "src/types.ts": 'import * as React from "react";\nimport type Types = require("react");\nexport type Run = typeof React.useEffect | Types.EffectCallback;\nexport type Hooks = typeof React;\n',
+    "src/w/hook.ts": 'import * as React from "react";\nimport e = React.useEffect;\nexport { e as run };\n',
+    "src/w/exported.ts": 'import * as React from "react";\nexport import useMount = React.useLayoutEffect;\n',
+    "src/w/namespace.ts": 'import * as React from "react";\nimport R = React;\nexport { R };\n',
+    "src/w/calls.ts": 'import R = require("react");\nexport function useTick(run: () => void) {\n  R.useEffect(run, [run]);\n  R.useLayoutEffect(run);\n}\n',
+    "src/app.tsx": 'import { run } from "./w/hook";\nimport { useTick } from "./w/calls";\nexport function App() {\n  run(() => {});\n  useTick(() => {});\n}\n',
+  });
+  git(cwd, "add", "-A");
+  const { stdout, status } = standard(cwd, ["check", "banned"]);
+  assert.equal(
+    stdout,
+    [
+      `src/inner.ts react#useInsertionEffect: src/inner.ts uses react#useInsertionEffect on lines 3, 4. ${EFFECT_FIX}`,
+      `src/namespace.ts react#useEffect: src/namespace.ts uses react#useEffect on line 4. ${EFFECT_FIX}`,
+      `src/qualified.ts react#useLayoutEffect: src/qualified.ts uses react#useLayoutEffect on lines 2, 4. ${EFFECT_FIX}`,
+      passes("src/w/exported.ts", "react#useLayoutEffect", "2"),
+      passes("src/w/hook.ts", "react#useEffect", "2, 3"),
+      `src/w/namespace.ts export react: src/w/namespace.ts re-exports react, whose namespace holds its effect hooks, on line 3. ${REACT_EXPORT_FIX}`,
+      "",
+    ].map((line) => (line ? `banned: ${line}` : line)).join("\n"),
+  );
+  assert.equal(status, 1);
+});
+
 test("banned passes effect hooks in each React app's src/lib/timer.ts, Next or Vite, and fails them in a library's", (t) => {
   const effect = 'import { useEffect } from "react";\nexport function useTick() {\n  useEffect(() => {});\n}\n';
   fails(
