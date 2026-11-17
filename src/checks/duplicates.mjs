@@ -241,7 +241,7 @@ function normalizeUnit(unit) {
 
 /**
  * @param {Node} fn
- * @returns {boolean} Whether the body is one call that only passes parameters and literals, such as an event-to-action adapter.
+ * @returns {boolean} Whether the body is one call that only passes parameters, member reads on them and literals, such as an event-to-action adapter.
  */
 function isForwarder(fn) {
   /** @type {string[]} */
@@ -259,6 +259,7 @@ function isForwarder(fn) {
   const isForwarded = (node) => {
     node = unwrap(node);
     if (node?.type === "Identifier") return names.has(node.name);
+    if (node?.type === "MemberExpression") return !node.computed && !node.optional && isForwarded(node.object);
     if (node?.type === "Literal") return true;
     if (node?.type === "ArrayExpression") return node.elements.every(isForwarded);
     if (node?.type === "ObjectExpression") {
@@ -409,7 +410,7 @@ export default {
   name: "duplicates",
   since: "0.8.0",
   doc: {
-    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. A function whose body is one call passing only its parameters, literals, and arrays or objects of those is a forwarding adapter and never counts. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders.",
+    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. A function whose body is one call passing only its parameters, plain member reads on them, literals, and arrays or objects of those is a forwarding adapter and never counts. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders.",
     fix: "Move the shared logic to the module that owns it and import it everywhere.",
     config: [],
   },
