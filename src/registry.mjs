@@ -12,6 +12,7 @@ import prSize from "./checks/pr-size.mjs";
 import prTests from "./checks/pr-tests.mjs";
 import prTitle from "./checks/pr-title.mjs";
 import react from "./checks/react.mjs";
+import routeAwait from "./checks/route-await.mjs";
 import typecheck from "./checks/typecheck.mjs";
 import tests from "./checks/tests.mjs";
 import wiring from "./checks/wiring.mjs";
@@ -45,4 +46,4 @@ import wiring from "./checks/wiring.mjs";
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned, react, clientData, noComments];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned, react, clientData, routeAwait, noComments];

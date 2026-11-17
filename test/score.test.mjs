@@ -142,6 +142,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  banned           on",
       "  react            n/a",
       "  client-data      n/a",
+      "  route-await      n/a",
       "  no-comments      on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
@@ -150,6 +151,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       `typecheck in ${name}: n/a, git tracks no tsconfig.json`,
       `react in ${name}: n/a, no tracked package.json declares react`,
       `client-data in ${name}: n/a, no tracked package.json declares react`,
+      `route-await in ${name}: n/a, no tracked package.json declares next`,
       "",
       `${name}: 20 of 21 pass`,
       "",
@@ -196,7 +198,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, no-comments.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, no-comments.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -240,7 +242,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.14.13 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.14.14 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -280,6 +282,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     banned: "absent",
     react: "n/a",
     "client-data": "n/a",
+    "route-await": "n/a",
     "no-comments": "absent",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 18]);
@@ -573,7 +576,7 @@ test("--remote fails current when a newer release tag than the pin exists", (t) 
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.13."],
+    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.14."],
   });
   assert.equal(status, 1);
 });
