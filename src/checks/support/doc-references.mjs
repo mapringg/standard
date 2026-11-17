@@ -35,6 +35,8 @@ const NOT_PATH = /[\s<>$|=;'"\\]/;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SYMBOL = /^(?:[a-z][a-z0-9]*[A-Z]\w*|[A-Z][a-z0-9]+[A-Z]\w*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:\(\))?$/;
 const VALUE_FLAGS = new Set(["--filter", "-F", "-C", "--dir"]);
+const SHELL_WORD = /(?:[^\s'"\\]|\\.|'[^']*'|"(?:[^"\\]|\\.)*")+/g;
+const SHELL_QUOTE = /'([^']*)'|"((?:[^"\\]|\\.)*)"|\\(.)/g;
 const PNPM_COMMANDS = new Set(
   "add approve-builds audit bin cache config create dedupe deploy dlx env exec fetch help i import init install install-test it licenses link list ln ls outdated pack patch patch-commit patch-remove prune publish rb rebuild remove rm root run self-update server setup start store t test un uninstall unlink up update upgrade why".split(" "),
 );
@@ -127,9 +129,14 @@ function pathMiss(path, doc, index) {
   return index.tails.has(bare) ? null : { reason: "no tracked file ends with this path", ignorable: [path, posix.join(posix.dirname(doc.path), path)] };
 }
 
+/** @type {(text: string) => string[]} The words a shell splits the text into, with their quotes taken off. */
+function shellWords(text) {
+  return (text.match(SHELL_WORD) ?? []).map((word) => word.replace(SHELL_QUOTE, (_, single, double, escaped) => single ?? double?.replace(/\\(.)/g, "$1") ?? escaped));
+}
+
 /** @type {(text: string) => PnpmCall[]} Each `pnpm` command in code, with the package flags that pick where its script lives. */
 function pnpmCalls(text) {
-  const tokens = text.trim().split(/\s+/);
+  const tokens = shellWords(text);
   /** @type {PnpmCall[]} */
   const calls = [];
   tokens.forEach((token, at) => {
@@ -149,12 +156,19 @@ function pnpmCalls(text) {
   return calls;
 }
 
-/** @type {(call: PnpmCall, index: RepoIndex) => string | null} A script with no package flag may live in any package, since the doc can say which folder to run it from. */
-function scriptMiss(call, index) {
+/** @type {(call: PnpmCall, doc: Doc, index: RepoIndex) => string | null} A script with no package flag lives in the package nearest the doc or in the root. */
+function scriptMiss(call, doc, index) {
   if (PNPM_COMMANDS.has(call.name)) return null;
   const has = (/** @type {string} */ folder) => index.scripts.get(folder)?.has(call.name) ?? false;
   const named = call.dir ?? call.filter;
-  if (named === null || call.recursive || /[*{]/.test(named)) return [...index.scripts.keys()].some(has) ? null : `no package.json has the script ${call.name}`;
+  if (call.recursive || (named !== null && /[*{]/.test(named))) return [...index.scripts.keys()].some(has) ? null : `no package.json has the script ${call.name}`;
+  if (named === null) {
+    let nearest = posix.dirname(doc.path);
+    while (nearest !== "." && !index.scripts.has(nearest)) nearest = posix.dirname(nearest);
+    const folders = [...new Set([nearest, "."])].filter((folder) => index.scripts.has(folder));
+    if (folders.length === 0) return `no package.json has the script ${call.name}`;
+    return folders.some(has) ? null : `${folders.map((folder) => posix.join(folder, "package.json")).join(" and ")} ${folders.length === 1 ? "has" : "have"} no script ${call.name}`;
+  }
   const wanted = named.replace(/^\.{3}|\.{3}$/g, "");
   const folder = call.dir === null ? (index.packages.get(wanted) ?? posix.normalize(wanted)) : posix.normalize(wanted);
   if (!index.scripts.has(folder)) return `no package matches ${named}`;
@@ -172,7 +186,7 @@ function misses(doc, corpus, index) {
     const calls = pnpmCalls(text);
     if (calls.length > 0) {
       if (local) continue;
-      for (const reason of calls.map((call) => scriptMiss(call, index))) if (reason) found.push({ line, shown, reason, ignorable: [] });
+      for (const reason of calls.map((call) => scriptMiss(call, doc, index))) if (reason) found.push({ line, shown, reason, ignorable: [] });
       continue;
     }
     if (!span) continue;

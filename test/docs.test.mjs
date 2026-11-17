@@ -231,8 +231,39 @@ test("docs lists every reference in a doc that names nothing, and checks only li
       ].join("\n"),
       "docs/external/vendor.md": "# Vendor\n\nTheir `src/server/handler.go` calls `fetchVendorThing` through `pnpm vendor:sync`. Ours is `apps/api/src/gone.ts` and [x](missing.md).\n",
     },
-    "docs/broken.md reference: docs/broken.md names things that do not exist: line 3 `src/missing.ts` (no tracked file ends with this path), line 3 `./nope.md` (no tracked file at docs/nope.md or from a folder above it), line 3 `apps/*/src/*.go` (no tracked file matches this glob), line 4 `parseWidget` (no tracked source has this word), line 4 `MISSING_THING` (no tracked source has this word), line 5 `pnpm check:docs` (no package.json has the script check:docs), line 5 `pnpm --filter api build` (api has no script build), line 6 [setup `db`](conventions.md#setup) (docs/conventions.md has no heading #setup), line 6 [gone](gone.md) (docs/gone.md is not tracked), line 9 `pnpm lint` (no package.json has the script lint). Fix each name, or move facts about an outside system to docs/external/.",
+    "docs/broken.md reference: docs/broken.md names things that do not exist: line 3 `src/missing.ts` (no tracked file ends with this path), line 3 `./nope.md` (no tracked file at docs/nope.md or from a folder above it), line 3 `apps/*/src/*.go` (no tracked file matches this glob), line 4 `parseWidget` (no tracked source has this word), line 4 `MISSING_THING` (no tracked source has this word), line 5 `pnpm check:docs` (package.json has no script check:docs), line 5 `pnpm --filter api build` (api has no script build), line 6 [setup `db`](conventions.md#setup) (docs/conventions.md has no heading #setup), line 6 [gone](gone.md) (docs/gone.md is not tracked), line 9 `pnpm lint` (package.json has no script lint). Fix each name, or move facts about an outside system to docs/external/.",
     "docs/external/vendor.md reference: docs/external/vendor.md names things that do not exist: line 3 `apps/api/src/gone.ts` (no tracked file ends with this path), line 3 [x](missing.md) (docs/external/missing.md is not tracked). Fix each name.",
+  );
+});
+
+test("docs matches a percent-encoded anchor and one to a heading with inline HTML", (t) => {
+  passes(t, {
+    "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md#caf%C3%A9)\n",
+    "docs/guide.md": "# Café\n\n## Use <code>cache</code>\n\n[Jump](#caf%C3%A9) or [cache](#use-cache).\n",
+  });
+});
+
+test("docs reads quoted pnpm package flags as the shell does", (t) => {
+  passes(t, {
+    "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+    "apps/web/package.json": JSON.stringify({ name: "@scope/web", scripts: { build: "next build" } }),
+    "docs/guide.md": "# Guide\n\nRun `pnpm --filter='@scope/web' build`.\n\n```sh\npnpm --filter \"@scope/web\" build\npnpm -C 'apps/web' build\npnpm --dir=\"apps/web\" run build\n```\n",
+  });
+});
+
+test("docs resolves a pnpm script with no package flag against the doc's nearest package or the root", (t) => {
+  fails(
+    t,
+    {
+      "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md) and [web](apps/web/docs/deploy.md)\n",
+      "package.json": JSON.stringify({ scripts: { lint: "oxlint" } }),
+      "apps/web/package.json": JSON.stringify({ name: "web", scripts: { "deploy:prod": "deploy" } }),
+      "apps/api/package.json": JSON.stringify({ name: "api", scripts: { seed: "seed" } }),
+      "apps/web/docs/deploy.md": "# Deploy\n\nRun `pnpm deploy:prod`, `pnpm lint` and `pnpm seed`.\n",
+      "docs/guide.md": "# Guide\n\nRun `pnpm deploy:prod`, `pnpm lint` and `pnpm -r seed`.\n",
+    },
+    "apps/web/docs/deploy.md reference: apps/web/docs/deploy.md names things that do not exist: line 3 `pnpm seed` (apps/web/package.json and package.json have no script seed). Fix each name, or move facts about an outside system to docs/external/.",
+    "docs/guide.md reference: docs/guide.md names things that do not exist: line 3 `pnpm deploy:prod` (package.json has no script deploy:prod). Fix each name, or move facts about an outside system to docs/external/.",
   );
 });
 
