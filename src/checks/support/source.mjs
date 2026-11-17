@@ -9,8 +9,10 @@ import { parseSource, sourceFiles } from "./sources.mjs";
  * A "global" path is a dotted chain from an unshadowed global, such as `process.env.API_URL`. Kind "type" is a type-only import, which no rule counts.
  * A call adds `call`: the name and start offset of the nearest named function around it, the first name its result's
  * array pattern binds, and the UTF-16 offset where the call ends.
+ * Kind "bind" is a read whose value a local, a destructuring pattern or an export takes, so the walk follows it there. A "read" goes where
+ * the walk cannot follow, such as an argument, an object or a key only runtime knows, which reads the object before that key.
  * @typedef {{ owner: { name: string, at: number } | null, first: string | null, end: number }} Call
- * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read", line: number } | { space: "module" | "global", path: string, kind: "call", line: number, call: Call }} Use
+ * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read" | "bind", line: number } | { space: "module" | "global", path: string, kind: "call", line: number, call: Call }} Use
  *
  * `members` holds the lines of each static property name read on any object, by member access or destructuring.
  * `client` is true when the directive prologue holds "use client".
@@ -19,8 +21,9 @@ import { parseSource, sourceFiles } from "./sources.mjs";
  * @typedef {{ path: string, uses: readonly Use[], exports: readonly Export[], members: ReadonlyMap<string, readonly number[]>, client: boolean }} Parsed
  * @typedef {Parsed | { path: string, error: string }} FileFacts
  *
- * What a chain names so far, and what a binding holds: an import, or a local that a static chain initialized. Other locals hold null. A module ref with a `namespace` is a namespace or default binding, whose next key names an export.
- * @typedef {{ space: "global", path: string } | { space: "module", path: string, namespace: string | null }} Ref
+ * What a chain names so far, and what a binding holds: an import, a local that a static chain initialized, or a const that holds a constant
+ * string or number. Other locals hold null. A module ref with a `namespace` is a namespace or default binding, whose next key names an export.
+ * @typedef {{ space: "global", path: string } | { space: "module", path: string, namespace: string | null } | { space: "value", value: string | number }} Ref
  *
  * A ref read once the whole file is walked, so a function may use a local declared below it. A cycle reads as null.
  * @typedef {() => Ref | null} Later
@@ -35,12 +38,15 @@ const GLOBAL_MODULES = new Map([["import.meta.vitest", "vitest"]]);
 const WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "TSTypeAssertion", "ChainExpression"]);
 
 /** TypeScript nodes that hold a value expression. Every other TS node is a type, and the walk skips it. */
-const VALUE_TS = new Set([...WRAPPERS, "TSInstantiationExpression", "TSEnumDeclaration", "TSExportAssignment", "TSModuleDeclaration"]);
+const VALUE_TS = new Set([...WRAPPERS, "TSInstantiationExpression", "TSEnumDeclaration", "TSExportAssignment", "TSModuleDeclaration", "TSImportEqualsDeclaration"]);
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
 /** Nodes that hold no reference: imports, read once up front, labels, and a closing tag that repeats its opening tag. */
 const SKIPPED = new Set(["ImportDeclaration", "ExportAllDeclaration", "BreakStatement", "ContinueStatement", "JSXClosingElement"]);
+
+/** @type {(value: string | number | null) => Ref | null} */
+const valueRef = (value) => (value === null ? null : { space: "value", value });
 
 /** @type {(path: string) => Ref} */
 const moduleRef = (path) => ({ space: "module", path, namespace: null });
@@ -58,8 +64,17 @@ function later(read) {
 /** @type {(ref: Ref) => Later} */
 const now = (ref) => () => ref;
 
-/** @type {(ref: Later | null, key: string | null) => Later | null} */
-const at = (ref, key) => (ref && key !== null ? later(() => { const base = ref(); return base && extend(base, key); }) : null);
+/** @typedef {() => string | null} Key A property name, read once the whole file is walked. */
+
+/** @type {(ref: Later | null, key: Key) => Later | null} */
+const at = (ref, key) => ref && later(() => {
+  const base = ref();
+  const name = key();
+  return base && name !== null ? extend(base, name) : null;
+});
+
+/** @type {(ref: Later | null, key: Key) => Later | null} The object before a key only runtime knows, which the code reads whole. */
+const unknown = (ref, key) => ref && later(() => (key() === null ? ref() : null));
 
 /** @type {(statements: Node[]) => string[]} The names the statements declare in their own block. */
 function declared(statements) {
@@ -67,7 +82,7 @@ function declared(statements) {
     const node = statement.type.startsWith("Export") && statement.declaration ? statement.declaration : statement;
     if (node.declare) return [];
     if (node.type === "VariableDeclaration") return node.declarations.flatMap((/** @type {Node} */ item) => names(item.id));
-    const named = ["FunctionDeclaration", "ClassDeclaration", "TSEnumDeclaration", "TSModuleDeclaration"].includes(node.type);
+    const named = ["FunctionDeclaration", "ClassDeclaration", "TSEnumDeclaration", "TSModuleDeclaration", "TSImportEqualsDeclaration"].includes(node.type);
     return named && node.id?.type === "Identifier" ? [node.id.name] : [];
   });
 }
@@ -107,21 +122,23 @@ function keyOf(key, computed) {
   return null;
 }
 
-/** @type {(ref: Ref, key: string) => Ref} */
+/** @type {(ref: Ref, key: string) => Ref | null} A module namespace's default reads as the default binding, as interop makes it. */
 function extend(ref, key) {
+  if (ref.space === "value") return null;
   if (ref.space === "global") {
     const path = ref.path ? `${ref.path}.${key}` : key;
     const module = GLOBAL_MODULES.get(path);
     return module ? importRef({ module, imported: "*" }) : { space: "global", path };
   }
-  return moduleRef(ref.namespace === null ? `${ref.path}.${key}` : `${ref.namespace}#${key}`);
+  if (ref.namespace === null) return moduleRef(`${ref.path}.${key}`);
+  return key === "default" ? { space: "module", path: `${ref.namespace}#default`, namespace: ref.namespace } : moduleRef(`${ref.namespace}#${key}`);
 }
 
 /** @type {(binding: { module: string, imported: string }) => Ref} */
 function importRef({ module, imported }) {
   const global = MODULE_GLOBALS.get(module);
   const whole = imported === "*" || imported === "default";
-  if (global) return whole ? { space: "global", path: global } : extend({ space: "global", path: global }, imported);
+  if (global) return whole ? { space: "global", path: global } : { space: "global", path: `${global}.${imported}` };
   return whole ? { space: "module", path: imported === "*" ? module : `${module}#default`, namespace: module } : moduleRef(`${module}#${imported}`);
 }
 
@@ -172,15 +189,45 @@ function factsOf(path, text) {
     const source = required ? call.arguments[0] : call.type === "ImportExpression" && call !== node ? call.source : null;
     return typeof source?.value === "string" ? source.value : null;
   };
+  /** @type {(node: Node) => () => string | number | null} The string or number an expression always has: a literal, a template or a sum of them, or a const that holds one. */
+  const constant = (node) => {
+    if (WRAPPERS.has(node.type)) return constant(node.expression);
+    if (node.type === "Literal") return () => (typeof node.value === "string" || typeof node.value === "number" ? node.value : null);
+    if (node.type === "Identifier") {
+      const ref = resolve(node.name);
+      return () => {
+        const found = ref();
+        return found?.space === "value" ? found.value : null;
+      };
+    }
+    if (node.type === "TemplateLiteral") {
+      const parts = /** @type {(() => string | number | null)[]} */ (node.expressions.map(constant));
+      return () => {
+        const values = parts.map((part) => part());
+        return values.includes(null) ? null : node.quasis.map((/** @type {Node} */ quasi, /** @type {number} */ index) => quasi.value.cooked + (index < values.length ? String(values[index]) : "")).join("");
+      };
+    }
+    if (node.type === "BinaryExpression" && node.operator === "+") {
+      const [left, right] = [constant(node.left), constant(node.right)];
+      return () => {
+        const [a, b] = [left(), right()];
+        return a === null || b === null ? null : /** @type {string} */ (a) + /** @type {string} */ (b);
+      };
+    }
+    return () => null;
+  };
+  /** @type {(node: Node) => Key} */
+  const keyAt = (node) => {
+    const value = constant(node);
+    return () => {
+      const found = value();
+      return found === null ? null : String(found);
+    };
+  };
 
   const top = new Map(declared(program.body).concat(vars(program.body)).map((name) => [name, /** @type {Later | null} */ (null)]));
   for (const node of /** @type {Node[]} */ (program.body)) {
     const typeOnly = node.importKind === "type" || node.exportKind === "type";
-    if (node.type === "TSImportEqualsDeclaration") {
-      const module = node.moduleReference.expression?.value ?? null;
-      if (module !== null) emit(now(moduleRef(module)), typeOnly ? "type" : "import", node);
-      top.set(node.id.name, module === null || typeOnly ? null : now(importRef({ module, imported: "*" })));
-    }
     if (!node.source) continue;
     const module = node.source.value;
     const specifiers = node.specifiers ?? [];
@@ -206,15 +253,24 @@ function factsOf(path, text) {
       root = WRAPPERS.has(root.type) ? root.expression : root.object;
     }
     let ref = /** @type {Later | null} */ (null);
-    if (root.type === "Identifier" || root.type === "JSXIdentifier") ref = resolve(root.name);
+    const module = loaded(root);
+    if (module !== null) {
+      emit(now(moduleRef(module)), "import", root);
+      if (root.type === "CallExpression") refer(root.callee, "call", { owner: owners.at(-1) ?? null, first: firsts.get(root) ?? null, end: root.end });
+      ref = now(importRef({ module, imported: "*" }));
+    } else if (root.type === "Identifier" || root.type === "JSXIdentifier") ref = resolve(root.name);
     else if (root.type === "MetaProperty") ref = root.meta.name === "import" ? now({ space: "global", path: "import.meta" }) : null;
     else walk(root);
-    const module = loaded(root);
-    if (module !== null) ref = now(importRef({ module, imported: "*" }));
     for (const link of chain) {
-      const key = keyOf(link.property, link.computed ?? false);
-      if (key === null) walk(link.property);
-      else note(key, link.property);
+      const name = keyOf(link.property, link.computed ?? false);
+      if (name !== null) {
+        note(name, link.property);
+        ref = at(ref, () => name);
+        continue;
+      }
+      walk(link.property);
+      const key = keyAt(link.property);
+      emit(unknown(ref, key), "read", link.property);
       ref = at(ref, key);
     }
     emit(ref, kind, root, call);
@@ -227,12 +283,15 @@ function factsOf(path, text) {
       case "ObjectPattern":
         for (const prop of node.properties) {
           if (prop.type === "RestElement") {
+            emit(base, "read", prop);
             pattern(prop.argument, null);
             continue;
           }
-          const key = keyOf(prop.key, prop.computed);
-          if (key === null) walk(prop.key);
-          else note(key, prop.key);
+          const name = keyOf(prop.key, prop.computed);
+          if (name !== null) note(name, prop.key);
+          else walk(prop.key);
+          const key = name === null ? keyAt(prop.key) : () => name;
+          if (name === null) emit(unknown(base, key), "read", prop.key);
           const ref = at(base, key);
           if ((prop.value.type === "AssignmentPattern" ? prop.value.left : prop.value).type !== "ObjectPattern") emit(ref, "read", prop.key);
           pattern(prop.value, ref);
@@ -241,7 +300,7 @@ function factsOf(path, text) {
       case "AssignmentPattern":
         walk(node.right);
         return pattern(node.left, base);
-      case "ArrayPattern": return node.elements.forEach((/** @type {Node | null} */ element, /** @type {number} */ index) => pattern(element, element?.type !== "RestElement" ? at(base, String(index)) : null));
+      case "ArrayPattern": return node.elements.forEach((/** @type {Node | null} */ element, /** @type {number} */ index) => pattern(element, element?.type !== "RestElement" ? at(base, () => String(index)) : null));
       case "RestElement": return pattern(node.argument, null);
       case "TSParameterProperty": return pattern(node.parameter, null);
       case "Identifier":
@@ -266,32 +325,30 @@ function factsOf(path, text) {
       case "Identifier":
       case "MemberExpression":
       case "MetaProperty": return void refer(node, "read");
+      case "AwaitExpression": return loaded(node) === null ? walk(node.argument) : void refer(node, "read");
       case "CallExpression": {
-        const module = loaded(node);
-        if (module !== null) emit(now(moduleRef(module)), "import", node);
+        if (loaded(node) !== null) return void refer(node, "read");
         refer(node.callee, "call", { owner: owners.at(-1) ?? null, first: firsts.get(node) ?? null, end: node.end });
         return walk(node.arguments);
       }
       case "ImportExpression":
-        if (typeof node.source.value === "string") emit(now(moduleRef(node.source.value)), "import", node);
+        if (typeof node.source.value === "string") {
+          emit(now(moduleRef(node.source.value)), "import", node);
+          emit(now(importRef({ module: node.source.value, imported: "*" })), "read", node);
+        }
         return walk([node.source, node.options]);
       case "ExportNamedDeclaration":
         if (node.source || node.exportKind === "type") return;
         walk(node.declaration);
         for (const name of node.declaration ? declared([node.declaration]) : []) exportOf(resolve(name), node);
-        for (const specifier of node.specifiers) if (specifier.exportKind !== "type") exportOf(refer(specifier.local, "read"), specifier);
+        for (const specifier of node.specifiers) if (specifier.exportKind !== "type") exportOf(refer(specifier.local, "bind"), specifier);
         return;
-      case "VariableDeclarator": {
-        if (node.id.type === "Identifier") label(node.init, node.id.name);
-        const first = node.id.type === "ArrayPattern" ? node.id.elements[0] : null;
-        if (first?.type === "Identifier" && node.init) firsts.set(node.init, first.name);
-        return pattern(node.id, node.init ? refer(node.init, "read") : null);
-      }
+      case "VariableDeclaration": return node.declarations.forEach((/** @type {Node} */ item) => declare(item, node.kind === "const"));
       case "ExportDefaultDeclaration":
         label(node.declaration, "default");
-        return exportOf(refer(node.declaration, "read"), node);
+        return exportOf(refer(node.declaration, "bind"), node);
       case "AssignmentExpression": {
-        const base = refer(node.right, "read");
+        const base = refer(node.right, node.left.type.endsWith("Pattern") ? "bind" : "read");
         return node.left.type.endsWith("Pattern") ? pattern(node.left, base) : walk(node.left);
       }
       case "ClassDeclaration":
@@ -310,8 +367,34 @@ function factsOf(path, text) {
         return walk(node.attributes);
       case "TSEnumDeclaration": return walk(node.body.members.map((/** @type {Node} */ member) => member.initializer));
       case "TSModuleDeclaration": return walk(node.body?.body);
+      case "TSImportEqualsDeclaration": return void stack.findLast((scope) => scope.has(node.id.name))?.set(node.id.name, alias(node));
       default: return walk(Object.values(node));
     }
+  };
+
+  /** @type {(node: Node, fixed: boolean) => void} A const binds its constant value, so a computed key can read it. */
+  const declare = (node, fixed) => {
+    if (node.id.type === "Identifier") label(node.init, node.id.name);
+    const first = node.id.type === "ArrayPattern" ? node.id.elements[0] : null;
+    if (first?.type === "Identifier" && node.init) firsts.set(node.init, first.name);
+    const ref = node.init ? refer(node.init, "bind") : null;
+    const value = fixed && node.init && node.id.type === "Identifier" ? constant(node.init) : null;
+    pattern(node.id, value ? later(() => ref?.() ?? valueRef(value())) : ref);
+  };
+
+  /** @type {(node: Node) => Later | null} What `import x = require("m")`, `import x = React` or `import x = React.useEffect` binds. A type-only alias binds no value. */
+  const alias = (node) => {
+    const reference = node.moduleReference;
+    const typeOnly = node.importKind === "type";
+    if (reference.type === "TSExternalModuleReference") {
+      emit(now(moduleRef(reference.expression.value)), typeOnly ? "type" : "import", node);
+      return typeOnly ? null : now(importRef({ module: reference.expression.value, imported: "*" }));
+    }
+    /** @type {(name: Node) => Later | null} */
+    const entity = (name) => (name.type === "TSQualifiedName" ? at(entity(name.left), () => name.right.name) : resolve(name.name));
+    const ref = typeOnly ? null : entity(reference);
+    emit(ref, "bind", node);
+    return ref;
   };
 
   /** @type {(node: unknown) => void} */
@@ -329,11 +412,11 @@ function factsOf(path, text) {
   walk(program.body);
   const exports = exported.flatMap(({ ref, line }) => {
     const found = ref();
-    return found?.path ? [{ space: found.space, path: found.path, line }] : [];
+    return found && found.space !== "value" && found.path ? [{ space: found.space, path: found.path, line }] : [];
   });
   const uses = pending.flatMap(({ ref, kind, line, call }) => {
     const found = ref();
-    if (!found?.path) return [];
+    if (!found || found.space === "value" || !found.path) return [];
     const use = { space: found.space, path: found.path, line };
     return [call ? { ...use, kind: /** @type {const} */ ("call"), call } : { ...use, kind: /** @type {Exclude<Use["kind"], "call">} */ (kind) }];
   });

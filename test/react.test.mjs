@@ -11,7 +11,7 @@ const FLAG_FIX = 'Model the request as a status in a useReducer state union, suc
 const FETCH_FIX = "Fetch in a server component, or through useServerSeeded or useServerSeededInfinite from src/lib/swr.ts when the data needs pagination or revalidation.";
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
-const SWR_FIX = "Use useServerSeeded or useServerSeededInfinite from src/lib/swr.ts of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.";
+const SWR_FIX = "Use useServerSeeded or useServerSeededInfinite from src/lib/swr.ts of its app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.";
 
 function react(t, files, ...flags) {
   const cwd = tempRepo(t);
@@ -115,7 +115,7 @@ test("react fails fetch in a file whose directive prologue holds use client, in 
   );
 });
 
-test("react fails a value import of swr outside each Next app's src/lib/swr.ts, and passes type-only imports", (t) => {
+test("react fails a value import of swr outside each React app's src/lib/swr.ts, Next or Vite, and passes type-only imports", (t) => {
   fails(
     t,
     {
@@ -124,7 +124,11 @@ test("react fails a value import of swr outside each Next app's src/lib/swr.ts, 
       "apps/web/src/types.ts": 'import type { SWRConfiguration } from "swr";\nimport { type Key } from "swr";\nexport type T = [SWRConfiguration, Key];\n',
       "packages/ui/package.json": { dependencies: { react: "19.0.0" } },
       "packages/ui/src/lib/swr.ts": 'export { SWRConfig } from "swr";\n',
+      "apps/liff/package.json": { dependencies: { react: "19.0.0" }, devDependencies: { vite: "8.0.0" } },
+      "apps/liff/src/lib/swr.ts": 'export { default } from "swr";\n',
+      "apps/liff/src/app.tsx": 'import useSWR from "swr";\nexport { useSWR };\n',
     },
+    `apps/liff/src/app.tsx imports swr on line 1. ${SWR_FIX}`,
     `apps/web/src/feed.tsx imports swr on line 1. ${SWR_FIX}`,
     `apps/web/src/feed.tsx imports swr/infinite on line 2. ${SWR_FIX}`,
     `packages/ui/src/lib/swr.ts imports swr on line 1. ${SWR_FIX}`,

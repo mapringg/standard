@@ -32,5 +32,5 @@ test("files lists tracked paths, narrowed by a glob, and read returns their text
   assert.deepEqual(repo.files("src/*.mjs"), ["src/b.mjs"]);
   assert.deepEqual(repo.files("**/*.mjs"), ["src/b.mjs", "src/checks/a.mjs"]);
   assert.equal(repo.read("src/checks/a.mjs"), "export default 1;\n");
-  assert.deepEqual(repo.config, { hooks: { "pre-commit": [], "pre-push": [] }, pending: [], pr: {}, boundaries: { modules: [], forbid: [] }, banned: [] });
+  assert.deepEqual(repo.config, { hooks: { "pre-commit": [], "pre-push": [] }, pending: [], pr: {}, boundaries: { modules: [], forbid: [] }, banned: [], effectWrappers: [] });
 });

@@ -74,6 +74,19 @@ test("a client-keyed list seeded with fallbackData [] loads on mount", async (t)
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["list", "mine"]], data: ["fetched mine"] });
 });
 
+test("a client-only item seeded with fallbackData null shows it as loading until the mount request answers", async (t) => {
+  const requests = [];
+  let answer;
+  const load = (key) => {
+    requests.push(key);
+    return new Promise((resolve) => (answer = resolve));
+  };
+  const { result } = await mount(t, () => useServerSeeded(["item", "a"], load, { fallbackData: null }));
+  assert.deepEqual({ requests, data: result.current.data, validating: result.current.validating }, { requests: [["item", "a"]], data: null, validating: true });
+  await act(async () => answer({ id: "a", name: "fetched a" }));
+  assert.deepEqual({ data: result.current.data, validating: result.current.validating }, { data: { id: "a", name: "fetched a" }, validating: false });
+});
+
 test("a key that changes from null to a value loads", async (t) => {
   const api = server();
   const { result, rerender } = await mount(t, ({ id }) => useServerSeeded(id === null ? null : ["item", id], api.item, { fallbackData: null }), { id: null });
