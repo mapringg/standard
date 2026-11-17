@@ -91,16 +91,16 @@ Each finding's fix names the change, such as `Delete scripts/merge-pr.mjs, which
 | Nesting | A copy inside a larger reported copy is not reported again. |
 | Finding | Each copy is one finding, named by the file and the symbol path, such as `src/form.tsx#Form>submit`, with `@2` on the second copy that shares a path. Its fix names the other copies with their lines. |
 
-`typecheck` makes each TypeScript project build on the shared strict tsconfig and run its typecheck. A project is a tracked `tsconfig.json` or `tsconfig.*.json`, except a solution file, whose `files` is empty and which has no `include`. The check follows `extends` through tracked local files and treats any other package name as a preset it cannot read. It does not apply when git tracks no tsconfig.
+`typecheck` makes each TypeScript project build on the shared strict tsconfig and run its typecheck. A project is a tracked `tsconfig.json` or `tsconfig.*.json`, except a solution file, whose `files` is empty and which has no `include`. The check follows `extends` the way TypeScript does: a path names a file git tracks, and a package name resolves through `node_modules`, the package's `exports` and its `tsconfig` field. An entry that resolves to nothing fails. It does not apply when git tracks no tsconfig.
 
 | Rule | Fails when |
 | --- | --- |
 | Base | A project's `extends` chain never names `@mapringg/standard/tsconfig`. |
-| Order | A preset comes after the base, so it could turn a flag off. |
-| Flags | A local file applied after the base sets one of the base's `compilerOptions` to another value. The finding names that file. |
-| Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a `tsconfig.json` has none, which `turbo run typecheck` would skip. |
-| Hooks | No `hooks.pre-push` line runs `pnpm typecheck` or `pnpm run typecheck`. |
-| CI | No step of the Check job without `continue-on-error` runs it. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
+| Order | A package name comes after the base in the same `extends` list. |
+| Flags | A file applied after the base, local or from a package, sets one of the base's `compilerOptions` to another value. The finding names that file. |
+| Scripts | The root `package.json` has no `typecheck` script, or the `package.json` nearest a project has none, which `turbo run typecheck` would skip. |
+| Hooks | No `hooks.pre-push` line runs `pnpm typecheck` or `pnpm run typecheck` as a whole command, alone or joined to others with `&&`. Quotes, `;` and `\|\|` do not count, since they can hide a failure. |
+| CI | No step of the Check job without `continue-on-error` or `shell` has a `run` that passes the same command rule. A step may have an `if`, such as one that skips a draft. When the `ci` probe finds no Check job, this rule stays quiet. |
 
 Like `wiring`, `dead-code`, `duplicates` and `typecheck` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 
@@ -112,7 +112,7 @@ The package ships one oxlint config, one oxfmt config and one tsconfig. The lint
 | --- | --- | --- |
 | `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names and no `any`. |
 | `@mapringg/standard/oxfmt` | `config/oxfmt.json` | Type imports first, then grouped value imports; sorted `package.json` scripts; `.claude/**` ignored. |
-| `@mapringg/standard/tsconfig` | `config/tsconfig.json` | `strict` and each flag in its family, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax` and `isolatedModules`; unreachable code and unused labels as errors. |
+| `@mapringg/standard/tsconfig` | `config/tsconfig.json` | `strict` and each flag in its family, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` and `isolatedModules`; unreachable code and unused labels as errors. |
 
 `.oxlintrc.json` takes a path in `extends`, relative to the file that extends, and refuses a package name. A child's `plugins` adds to the shared list:
 

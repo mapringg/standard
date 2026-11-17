@@ -243,12 +243,20 @@ function workflowMiss(path, text) {
   return /** @type {Miss[]} */ (misses).reduce((best, miss) => (miss.stage > best.stage ? miss : best));
 }
 
-/** `pnpm typecheck` or `pnpm run typecheck` as a whole command inside a longer shell line. */
-export const RUNS_TYPECHECK = /(?:^|[;&|('"])\s*pnpm (?:run )?typecheck(?=$|[\s;&|)'"])/m;
+/**
+ * Like the standard check step, the command must run as written: one line of commands joined by &&,
+ * one of them exactly pnpm typecheck or pnpm run typecheck. Quotes, ; and || could keep a failure from failing the line.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function runsTypecheck(text) {
+  const commands = text.trim().split("&&").map((command) => command.trim());
+  return !/[\n;|&'"`$<>()#\\]/.test(commands.join(" ")) && commands.some((command) => /^pnpm (?:run )?typecheck$/.test(command));
+}
 
 /**
  * @param {Repo} repo
- * @returns {string[]} The run scripts of the steps without continue-on-error in every Check job the ci probe accepts.
+ * @returns {string[]} The run scripts of the steps without continue-on-error or shell in every Check job the ci probe accepts.
  * An if may skip a step on a draft or an already green commit, so only continue-on-error hides a failure.
  */
 export function checkJobScripts(repo) {
@@ -260,7 +268,7 @@ export function checkJobScripts(repo) {
       const job = record(value) ?? {};
       if ((job.name ?? id) !== "Check" || checkJobMiss(path, id, job) !== null) return [];
       const steps = Array.isArray(job.steps) ? job.steps.map(record) : [];
-      return steps.flatMap((step) => (step !== null && !("continue-on-error" in step) && typeof step.run === "string" ? [step.run] : []));
+      return steps.flatMap((step) => (step !== null && !("continue-on-error" in step) && !("shell" in step) && typeof step.run === "string" ? [step.run] : []));
     });
   });
 }
