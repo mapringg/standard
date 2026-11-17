@@ -93,6 +93,11 @@ function bodyNotes(body, prefix) {
 export default {
   name: "pr-body",
   since: "0.2.0",
+  doc: {
+    enforces: "The description follows the template: Summary, Evidence with a Before and After, and Merge Danger with Door and a one-word Blast Radius. It warns and never fails; `standard merge` enforces it.",
+    fix: "Fill in the section or line the warning names.",
+    config: ["pr.ticket-prefix"],
+  },
   subject: "pr",
   retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   run(pr, repo) {

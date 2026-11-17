@@ -212,6 +212,11 @@ function runs(repo, projects) {
 export default {
   name: "typecheck",
   since: "0.9.0",
+  doc: {
+    enforces: "Each TypeScript project extends the shared strict tsconfig, keeps its flags, has a typecheck script, and type-checks clean.",
+    fix: "Add the shared base to `extends`, remove the override, or fix the type errors.",
+    config: ["hooks.pre-push"],
+  },
   subject: "tree",
   baseline: false,
   retired: [],

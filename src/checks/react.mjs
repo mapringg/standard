@@ -149,6 +149,11 @@ const linesText = (lines) => {
 export default {
   name: "react",
   since: "0.12.0",
+  doc: {
+    enforces: "React state lives in one `useReducer` with a status union, client components do not fetch, and only the swr wrapper imports swr.",
+    fix: "Use `useReducer` with a status union, or the `src/lib/swr.ts` hooks.",
+    config: [],
+  },
   subject: "tree",
   retired: [],
   applies: (repo) => (dependents(repo, "react").length > 0 ? { on: true } : { on: false, because: "no tracked package.json declares react" }),

@@ -56,6 +56,11 @@ async function setLabel(github, number, size) {
 export default {
   name: "pr-size",
   since: "0.3.0",
+  doc: {
+    enforces: "Labels the pull request `size:XS` to `size:XXL` by changed lines, leaving out the lockfile, renames, binaries and tests. It never fails.",
+    fix: "Split a large pull request into a stack.",
+    config: [],
+  },
   subject: "pr",
   retired: [
     "scripts/pr-size-label.mjs",

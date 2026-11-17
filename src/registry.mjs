@@ -28,8 +28,12 @@ import wiring from "./checks/wiring.mjs";
  *
  * @typedef {{ on: true } | { on: false, because: string }} Applies
  *
+ * What a check enforces, the fix its findings name, and the `.standard/config.json` keys it reads. `standard explain` prints it.
+ * @typedef {{ enforces: string, fix: string, config: readonly string[] }} Doc
+ *
  * @typedef {object} Named
  * @property {string} name
+ * @property {Doc} doc
  * @property {string[]} retired Paths of the repo scripts this check replaces.
  * @property {string} since The package version that added this check.
  *

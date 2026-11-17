@@ -295,6 +295,11 @@ function net(group) {
 export default {
   name: "pr-tests",
   since: "0.10.0",
+  doc: {
+    enforces: "A pull request that adds logic to a package's source adds or changes a test in that package.",
+    fix: "Add or change a test in the package that covers the new logic.",
+    config: [],
+  },
   subject: "pr",
   retired: [],
   run(pr, repo) {

@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 
+import { explainAll, explainMarkdown, explainOne } from "../src/explain.mjs";
 import { HOOKS } from "../src/hook.mjs";
 import { install } from "../src/install.mjs";
 import { merge } from "../src/merge.mjs";
@@ -14,6 +15,7 @@ import { subjectsFromEvent, subjectsFromGh } from "../src/subjects.mjs";
 
 const USAGE = `Usage:
   standard check [<name>...] [--pr <number>] [--init | --write | --prune]
+  standard explain [<check> | --markdown]
   standard hook <${Object.keys(HOOKS).join(" | ")}> [<git args>...]
   standard install
   standard merge <number> [--admin]
@@ -51,6 +53,12 @@ const COMMANDS = {
     });
     for (const line of report(results, process.env.GITHUB_ACTIONS === "true")) console.log(line);
     return failed(results) ? 1 : 0;
+  },
+  explain(args) {
+    if (args.length > 1 || args[0]?.startsWith("--") && args[0] !== "--markdown") throw new Error(`explain takes one check name or --markdown.\n${USAGE}`);
+    const lines = args[0] === "--markdown" ? explainMarkdown(registry) : args[0] ? explainOne(registry, args[0]) : explainAll(registry);
+    for (const line of lines) console.log(line);
+    return 0;
   },
   hook([name, ...args]) {
     if (!Object.hasOwn(HOOKS, name)) throw new Error(`Unknown hook ${name}.\n${USAGE}`);

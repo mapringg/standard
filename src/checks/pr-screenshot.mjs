@@ -9,6 +9,11 @@ const CANNOT_RENDER = /(?:^|\/)(?:\.oxlintrc[^/]*|\.oxfmtrc[^/]*|tsconfig[^/]*\.
 export default {
   name: "pr-screenshot",
   since: "0.2.0",
+  doc: {
+    enforces: "A pull request that changes a file matching `pr.screenshots.when` has an image in Evidence. It warns; `standard merge` enforces it.",
+    fix: "Upload a screenshot with the `pr.screenshots.uploader` script and add it to Evidence.",
+    config: ["pr.screenshots"],
+  },
   subject: "pr",
   retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   applies(repo) {

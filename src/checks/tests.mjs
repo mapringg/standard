@@ -23,6 +23,11 @@ function hasScript(repo, path) {
 export default {
   name: "tests",
   since: "0.10.0",
+  doc: {
+    enforces: "The repository's test command exists, runs before a push, and runs in CI where a failure blocks the merge.",
+    fix: "Add the test script, the `pnpm test` pre-push line or the CI step the finding names.",
+    config: ["hooks.pre-push"],
+  },
   subject: "tree",
   baseline: false,
   retired: [],

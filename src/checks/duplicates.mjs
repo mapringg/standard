@@ -367,6 +367,11 @@ function sources(repo) {
 export default {
   name: "duplicates",
   since: "0.8.0",
+  doc: {
+    enforces: "No two TypeScript functions or blocks repeat the same normalized syntax tree.",
+    fix: "Move the shared logic to the module that owns it and import it everywhere.",
+    config: [],
+  },
   subject: "tree",
   baseline: false,
   retired: ["scripts/check-duplicates.mjs", "scripts/check-duplicates.test.mjs", "scripts/baselines/duplicates.json"],

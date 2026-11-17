@@ -4,6 +4,11 @@ import { subjectNotes } from "./support/subject-rules.mjs";
 export default {
   name: "pr-title",
   since: "0.2.0",
+  doc: {
+    enforces: "The pull request title follows the commit subject rules, counting the ` (#<number>)` the squash adds.",
+    fix: "Retitle the pull request, since the title becomes the squash commit's subject.",
+    config: [],
+  },
   subject: "pr",
   retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   run(pr) {

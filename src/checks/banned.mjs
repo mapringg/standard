@@ -92,6 +92,11 @@ function oxlintConflicts(repo) {
 export default {
   name: "banned",
   since: "0.12.0",
+  doc: {
+    enforces: "A file uses no API the repository bans, and no oxlint config bans APIs a second way.",
+    fix: "Use what the entry's `fix` names instead.",
+    config: ["banned"],
+  },
   subject: "tree",
   baseline: false,
   retired: ["no-process-env", "no-bare-json-parse", "no-module-mocking", "no-manual-memo"].flatMap((rule) => [`packages/oxlint-plugin-*/rules/${rule}.ts`, `packages/oxlint-plugin-*/rules/${rule}.test.ts`]),

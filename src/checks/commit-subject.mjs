@@ -47,6 +47,11 @@ function notesBySource(commit) {
 export default {
   name: "commit-subject",
   since: "0.1.0",
+  doc: {
+    enforces: "Each commit message is one subject line: a capital imperative verb, three or more words and at most 80 characters, with no prefix, trailing period, body or trailers. A pull request has no merge commit, and a push to develop or main ends with its pull request number.",
+    fix: "Reword the subject the finding names, drop the body and trailers, and rebase away merge commits.",
+    config: [],
+  },
   subject: "commit",
   retired: [
     "scripts/subject-convention.mjs",
