@@ -6,7 +6,6 @@ import { gfm } from "micromark-extension-gfm";
 import { posix } from "node:path";
 
 import { isDoc, place } from "../../doc-kinds.mjs";
-import { slug } from "./markdown.mjs";
 
 /**
  * @typedef {import("../../doc-kinds.mjs").Kind} Kind
@@ -26,7 +25,7 @@ const SCHEME = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 const MARKER = "<!-- check-docs: external -->";
 
 /** @type {(text: string) => import("mdast").Root} The tree GitHub renders a doc from, with YAML front matter as one node. */
-const markdownTree = (text) => fromMarkdown(text, { extensions: [gfm(), frontmatter()], mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown()] });
+export const markdownTree = (text) => fromMarkdown(text, { extensions: [gfm(), frontmatter()], mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown()] });
 
 /** @type {(node: Node) => number} */
 const lineOf = (node) => node.position?.start.line ?? 0;
@@ -39,6 +38,20 @@ function walk(node, visit) {
 
 /** @type {(node: Node) => string} The text a node renders, without its HTML. */
 const rendered = (node) => (node.type === "text" || node.type === "inlineCode" ? node.value : "children" in node ? node.children.map(rendered).join("") : "");
+
+/** @type {(tree: import("mdast").Root) => ReadonlySet<string>} The anchor GitHub gives each heading, with `-1`, `-2` after a repeat. */
+export function headingAnchors(tree) {
+  /** @type {Map<string, number>} */
+  const slugs = new Map();
+  walk(tree, (node) => {
+    if (node.type !== "heading") return;
+    const base = rendered(node).trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/gu, "-");
+    const seen = slugs.get(base) ?? 0;
+    slugs.set(base, seen + 1);
+    slugs.set(seen === 0 ? base : `${base}-${seen}`, 1);
+  });
+  return new Set(slugs.keys());
+}
 
 /** @type {(part: string) => string} */
 function decode(part) {
@@ -78,15 +91,14 @@ export function parseDoc(path, kind, text) {
   const definitions = [];
   /** @type {Code[]} */
   const code = [];
-  /** @type {Map<string, number>} */
-  const slugs = new Map();
   let marker = false;
   const add = (/** @type {number} */ line, /** @type {string} */ written, /** @type {string} */ url) => {
     const landed = land(path, url);
     if (landed) links.push({ line, text: written, ...landed });
   };
   const link = (/** @type {Node} */ node, /** @type {string} */ url) => add(lineOf(node), text.slice(node.position?.start.offset, node.position?.end.offset), url);
-  walk(markdownTree(text), (node) => {
+  const tree = markdownTree(text);
+  walk(tree, (node) => {
     if (node.type === "link" || node.type === "image") link(node, node.url);
     else if (node.type === "linkReference" || node.type === "imageReference") used.add(node.identifier);
     else if (node.type === "definition") definitions.push(node);
@@ -95,11 +107,6 @@ export function parseDoc(path, kind, text) {
     else if (node.type === "code") {
       const fenced = "`~".includes(text[node.position?.start.offset ?? 0] ?? "");
       node.value.split("\n").forEach((part, at) => code.push({ line: lineOf(node) + at + (fenced ? 1 : 0), text: part, span: false }));
-    } else if (node.type === "heading") {
-      const base = slug(rendered(node));
-      const seen = slugs.get(base) ?? 0;
-      slugs.set(base, seen + 1);
-      slugs.set(seen === 0 ? base : `${base}-${seen}`, 1);
     } else if (node.type === "text" && kind.name === "agents") {
       node.value.split("\n").forEach((part, at) => {
         const line = lineOf(node) + at;
@@ -109,7 +116,7 @@ export function parseDoc(path, kind, text) {
     }
   });
   for (const definition of definitions) if (used.has(definition.identifier)) link(definition, definition.url);
-  return { path, kind, links, code, anchors: new Set(slugs.keys()), marker };
+  return { path, kind, links, code, anchors: headingAnchors(tree), marker };
 }
 
 /** @type {(repo: import("../../repo.mjs").Repo) => Corpus} Every governed doc parsed once. */

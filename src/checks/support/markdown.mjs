@@ -3,9 +3,6 @@ const FENCE = /^\s*(```|~~~)/;
 const UNRENDERED_COMMENT = /<!--[\s\S]*?-->/g;
 const IMAGE = /!\[[^\]]*\]\([^)]+\)|<img\b/i;
 
-/** @type {(heading: string) => string} The anchor GitHub gives a heading. */
-export const slug = (heading) => heading.replace(/<\/?[a-z][^>]*>/gi, "").trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/gu, "-");
-
 /**
  * @param {string} body
  * @returns {string}

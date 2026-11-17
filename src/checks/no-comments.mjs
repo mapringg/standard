@@ -4,7 +4,7 @@ import { posix } from "node:path";
 
 import { parseSource, sourceFiles } from "./support/sources.mjs";
 
-import { slug } from "./support/markdown.mjs";
+import { headingAnchors, markdownTree } from "./support/docs.mjs";
 
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
@@ -201,10 +201,7 @@ function trackedDocs(repo) {
     repo.files().filter((path) => DOCS.some((glob) => posix.matchesGlob(path, glob))).map((path) => {
       /** @type {ReadonlySet<string> | undefined} */
       let anchors;
-      const read = () => (anchors ??= new Set(repo.read(path).split("\n").flatMap((line) => {
-        const heading = /^#{1,6}\s+(.+?)\s*#*$/.exec(line);
-        return heading ? [slug(heading[1] ?? "")] : [];
-      })));
+      const read = () => (anchors ??= headingAnchors(markdownTree(repo.read(path))));
       return [path, read];
     }),
   );
