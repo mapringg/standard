@@ -240,6 +240,47 @@ function normalizeUnit(unit) {
 }
 
 /**
+ * @param {Node} fn
+ * @returns {boolean} Whether the body is one call that only passes parameters and literals, such as an event-to-action adapter.
+ */
+function isForwarder(fn) {
+  /** @type {string[]} */
+  const params = [];
+  for (const param of fn.params) patternNames(param, params);
+  const names = new Set(params);
+  const unwrap = (/** @type {Node | null | undefined} */ node) => {
+    while (node && TYPE_WRAPPERS.has(node.type)) node = node.expression;
+    return node;
+  };
+  const isCallee = (/** @type {Node | undefined} */ node) =>
+    node?.type === "Identifier" ||
+    (node?.type === "MemberExpression" && !node.computed && isCallee(unwrap(node.object)));
+  /** @type {(node: Node | null | undefined) => boolean} */
+  const isForwarded = (node) => {
+    node = unwrap(node);
+    if (node?.type === "Identifier") return names.has(node.name);
+    if (node?.type === "Literal") return true;
+    if (node?.type === "ArrayExpression") return node.elements.every(isForwarded);
+    if (node?.type === "ObjectExpression") {
+      return node.properties.every(
+        (/** @type {Node} */ property) =>
+          property.type === "Property" && property.kind === "init" && !property.computed && !property.method && isForwarded(property.value),
+      );
+    }
+    return false;
+  };
+  let body = fn.body;
+  if (body?.type === "BlockStatement") {
+    const [only] = body.body;
+    if (body.body.length !== 1) return false;
+    body =
+      only.type === "ExpressionStatement" ? only.expression : only.type === "ReturnStatement" ? only.argument : undefined;
+  }
+  const call = unwrap(body);
+  return call?.type === "CallExpression" && isCallee(unwrap(call.callee)) && call.arguments.every(isForwarded);
+}
+
+/**
  * @param {Node} node
  * @param {Node | null} parent
  * @param {string | null} key
@@ -282,7 +323,7 @@ function candidatesIn(file, source) {
     if (FUNCTIONS.has(node.type) || node.type === "ConditionalExpression") {
       const named = enclosingName(node, parent, key);
       const { nodes, text } = normalizeUnit(node);
-      if (nodes >= MIN_NODES) {
+      if (nodes >= MIN_NODES && !(FUNCTIONS.has(node.type) && isForwarder(node))) {
         found.push({
           file,
           start: node.start,
@@ -368,7 +409,7 @@ export default {
   name: "duplicates",
   since: "0.8.0",
   doc: {
-    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders.",
+    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. A function whose body is one call passing only its parameters, literals, and arrays or objects of those is a forwarding adapter and never counts. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders.",
     fix: "Move the shared logic to the module that owns it and import it everywhere.",
     config: [],
   },
