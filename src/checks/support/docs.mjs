@@ -14,7 +14,7 @@ import { isDoc, place } from "../../doc-kinds.mjs";
  * A link as written, on the line it starts, and the repository path it lands on, which may not exist.
  * A reference link is its definition, once, however many references use it.
  * @typedef {{ line: number, text: string, path: string, anchor: string | null }} Link
- * Code a doc names things in: each code span, and each line of a code block, with `span` false.
+ * Code a doc names things in: each code span, and each code block from its first line, with `span` false.
  * @typedef {{ line: number, text: string, span: boolean }} Code
  * @typedef {{ path: string, kind: Kind, links: Link[], code: Code[], anchors: ReadonlySet<string>, marker: boolean }} Doc
  * @typedef {{ docs: ReadonlyMap<string, Doc>, misplaced: { path: string, refused: boolean }[] }} Corpus
@@ -39,18 +39,24 @@ function walk(node, visit) {
 /** @type {(node: Node) => string} The text a node renders, without its HTML. */
 const rendered = (node) => (node.type === "text" || node.type === "inlineCode" ? node.value : "children" in node ? node.children.map(rendered).join("") : "");
 
-/** @type {(tree: import("mdast").Root) => ReadonlySet<string>} The anchor GitHub gives each heading, with `-1`, `-2` after a repeat. */
+/** @type {(tree: import("mdast").Root) => ReadonlySet<string>} The anchor GitHub gives each heading, with the next free `-1`, `-2` after a repeat. */
 export function headingAnchors(tree) {
+  /** @type {Set<string>} */
+  const anchors = new Set();
   /** @type {Map<string, number>} */
-  const slugs = new Map();
+  const repeats = new Map();
   walk(tree, (node) => {
     if (node.type !== "heading") return;
     const base = rendered(node).trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/gu, "-");
-    const seen = slugs.get(base) ?? 0;
-    slugs.set(base, seen + 1);
-    slugs.set(seen === 0 ? base : `${base}-${seen}`, 1);
+    let anchor = base;
+    while (anchors.has(anchor)) {
+      const repeat = (repeats.get(base) ?? 0) + 1;
+      repeats.set(base, repeat);
+      anchor = `${base}-${repeat}`;
+    }
+    anchors.add(anchor);
   });
-  return new Set(slugs.keys());
+  return anchors;
 }
 
 /** @type {(part: string) => string} */
@@ -106,7 +112,7 @@ export function parseDoc(path, kind, text) {
     else if (node.type === "inlineCode") code.push({ line: lineOf(node), text: node.value.replaceAll("\n", " "), span: true });
     else if (node.type === "code") {
       const fenced = "`~".includes(text[node.position?.start.offset ?? 0] ?? "");
-      node.value.split("\n").forEach((part, at) => code.push({ line: lineOf(node) + at + (fenced ? 1 : 0), text: part, span: false }));
+      code.push({ line: lineOf(node) + (fenced ? 1 : 0), text: node.value, span: false });
     } else if (node.type === "text" && kind.name === "agents") {
       node.value.split("\n").forEach((part, at) => {
         const line = lineOf(node) + at;

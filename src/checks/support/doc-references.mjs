@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { lstatSync, statSync } from "node:fs";
 import { join, posix } from "node:path";
+import { forEachChild, parse } from "unbash";
 
 import { isDoc } from "../../doc-kinds.mjs";
 
@@ -21,13 +22,15 @@ import { isDoc } from "../../doc-kinds.mjs";
  * @property {ReadonlyMap<string, string>} packages Each package's name and folder basename to its folder.
  * @property {() => Source} source What tracked text says, read on first use.
  *
- * @typedef {{ words: ReadonlySet<string>, extensions: ReadonlySet<string> }} Source Identifier-shaped words in tracked files other than
- * docs, and the extensions of tracked text files, so an image name such as `logo-12.png` is not read as a path.
+ * @typedef {{ words: ReadonlySet<string>, names: ReadonlySet<string>, extensions: ReadonlySet<string> }} Source Identifier-shaped words
+ * and file names in tracked files other than docs, and the extensions of tracked text files, so an image name such as `logo-12.png`
+ * is not read as a path and a file a script writes, such as `result.json`, is not missing.
  *
  * A name that resolves to nothing. A path miss lists the paths that pass when git ignores one, since those exist at runtime.
  * @typedef {{ line: number, shown: string, reason: string, ignorable: readonly string[] }} Miss
  *
- * @typedef {{ name: string, filter: string | null, dir: string | null, recursive: boolean }} PnpmCall
+ * A `pnpm` command at an offset in its code, shown as the lines it spans.
+ * @typedef {{ name: string, filter: string | null, dir: string | null, recursive: boolean, at: number, shown: string }} PnpmCall
  */
 
 const MAX_BYTES = 2_000_000;
@@ -35,7 +38,6 @@ const NOT_PATH = /[\s<>$|=;'"\\]/;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SYMBOL = /^(?:[a-z][a-z0-9]*[A-Z]\w*|[A-Z][a-z0-9]+[A-Z]\w*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:\(\))?$/;
 const VALUE_FLAGS = new Set(["--filter", "-F", "-C", "--dir"]);
-const OPERATORS = ";&|()<>`";
 const UNCLOSED = "a quote is not closed, so no shell can run it; fix the quoting";
 const PNPM_COMMANDS = new Set(
   "add approve-builds audit bin cache config create dedupe deploy dlx env exec fetch help i import init install install-test it licenses link list ln ls outdated pack patch patch-commit patch-remove prune publish rb rebuild remove rm root run self-update server setup start store t test un uninstall unlink up update upgrade why".split(" "),
@@ -77,6 +79,7 @@ function repoIndex(repo) {
   let source;
   const readSource = () => {
     const words = new Set();
+    const names = new Set();
     const extensions = new Set(files.filter(isDoc).map((file) => posix.extname(file)));
     for (const path of files.filter((file) => !isDoc(file))) {
       try {
@@ -85,9 +88,10 @@ function repoIndex(repo) {
         if (text.includes("\0")) continue;
         extensions.add(posix.extname(posix.basename(path)));
         for (const word of text.match(/[A-Za-z_$][\w$]*/g) ?? []) words.add(word);
+        for (const name of text.match(/(?<![\w./-])[\w-]+(?:\.[\w-]+)+/g) ?? []) names.add(name);
       } catch {}
     }
-    return (source = { words, extensions });
+    return (source = { words, names, extensions });
   };
   return {
     files,
@@ -126,59 +130,29 @@ function pathMiss(path, doc, index) {
     }
   }
   if (/[*{]/.test(bare)) return index.files.some((file) => posix.matchesGlob(file, `**/${bare}`)) ? null : { reason: "no tracked file matches this glob", ignorable: [] };
-  return index.tails.has(bare) ? null : { reason: "no tracked file ends with this path", ignorable: [path, posix.join(posix.dirname(doc.path), path)] };
+  return index.tails.has(bare) || (!bare.includes("/") && index.source().names.has(bare)) ? null : { reason: "no tracked file ends with this path", ignorable: [path, posix.join(posix.dirname(doc.path), path)] };
 }
 
-/** @type {(text: string) => { commands: string[][], closed: boolean }} Each command a POSIX shell reads in the text, as its words with quotes and escapes resolved, up to a quote that never closes. A `#` that starts a word comments out the rest. */
-function shellCommands(text) {
-  /** @type {string[][]} */
-  const commands = [[]];
-  const read = (/** @type {boolean} */ closed) => ({ commands: commands.filter((words) => words.length > 0), closed });
-  /** @type {string | null} */
-  let word = null;
-  const end = () => {
-    if (word !== null) commands.at(-1)?.push(word);
-    word = null;
-  };
-  for (let at = 0; at < text.length; at++) {
-    const char = text[at] ?? "";
-    if (char === "'") {
-      const close = text.indexOf("'", at + 1);
-      if (close === -1) return read(false);
-      word = (word ?? "") + text.slice(at + 1, close);
-      at = close;
-    } else if (char === '"') {
-      word ??= "";
-      for (at++; text[at] !== '"'; at++) {
-        if (at >= text.length) return read(false);
-        const escaped = text[at] === "\\" && '$`"\\\n'.includes(text[at + 1] ?? "-");
-        if (escaped) at++;
-        if (!escaped || text[at] !== "\n") word += text[at];
-      }
-    } else if (char === "\\") {
-      at++;
-      if (at < text.length && text[at] !== "\n") word = (word ?? "") + text[at];
-    } else if (char === "#" && word === null) break;
-    else if (/\s/.test(char)) end();
-    else if (OPERATORS.includes(char)) {
-      end();
-      commands.push([]);
-    } else word = (word ?? "") + char;
-  }
-  end();
-  return read(true);
+/** @type {(text: string, from: number, to: number) => string} The source lines from one offset to another as one line, as the shell joins a line that ends in a backslash. */
+function linesOf(text, from, to) {
+  const end = text.indexOf("\n", to);
+  return text.slice(text.lastIndexOf("\n", from - 1) + 1, end === -1 ? text.length : end).replace(/\\\n[ \t]*/g, "").trim();
 }
 
-/** @type {(text: string) => PnpmCall[] | null} Each `pnpm` command in code, with the package flags that pick where its script lives, or null when a quote in a `pnpm` command never closes. */
+/** @type {(text: string) => { calls: PnpmCall[], unclosed: number | null }} Each command a POSIX shell runs in code whose command word is `pnpm`, with the package flags that pick where its script lives, and the offset of a quote that never closes in code that runs `pnpm`. */
 function pnpmCalls(text) {
-  const { commands, closed } = shellCommands(text);
-  if (!closed) return commands.some((words) => words.includes("pnpm")) ? null : [];
-  return commands.flatMap((words) =>
-    words.flatMap((word, at) => {
-      if (word !== "pnpm") return [];
+  const script = parse(text);
+  /** @type {PnpmCall[]} */
+  const calls = [];
+  let runs = false;
+  /** @type {(node: import("unbash").SyntaxNode) => void} */
+  const visit = (node) => {
+    if (node.type === "Command" && node.name?.value === "pnpm") {
+      runs = true;
+      const words = node.args.map((arg) => (arg.type === "Word" ? arg.value : ""));
       /** @type {PnpmCall} */
-      const call = { name: "", filter: null, dir: null, recursive: false };
-      let next = at + 1;
+      const call = { name: "", filter: null, dir: null, recursive: false, at: node.pos, shown: linesOf(text, node.pos, node.end) };
+      let next = 0;
       for (; words[next]?.startsWith("-"); next++) {
         const [flag = "", value] = (words[next] ?? "").split("=", 2);
         if (VALUE_FLAGS.has(flag)) call[flag === "-C" || flag === "--dir" ? "dir" : "filter"] = value ?? words[++next] ?? "";
@@ -186,9 +160,13 @@ function pnpmCalls(text) {
       }
       if (words[next] === "run") next++;
       call.name = words[next] ?? "";
-      return /^[\w:.@/][\w:.@/-]*$/.test(call.name) ? [call] : [];
-    }),
-  );
+      if (/^[\w:.@/][\w:.@/-]*$/.test(call.name)) calls.push(call);
+    }
+    forEachChild(node, visit);
+  };
+  visit(script);
+  const unclosed = script.errors?.find((error) => error.message.endsWith("quote"));
+  return { calls, unclosed: runs && unclosed ? unclosed.pos : null };
 }
 
 /** @type {(call: PnpmCall, doc: Doc, index: RepoIndex) => string | null} A script with no package flag lives in the package nearest the doc or in the root. */
@@ -217,14 +195,22 @@ function misses(doc, corpus, index) {
   /** @type {Miss[]} */
   const found = [];
   for (const { line, text, span } of doc.code) {
-    const shown = `\`${text.trim()}\``;
-    const calls = pnpmCalls(text);
-    if (calls === null || calls.length > 0) {
+    const { calls, unclosed } = pnpmCalls(text);
+    const at = (/** @type {number} */ offset) => line + (text.slice(0, offset).match(/\n/g)?.length ?? 0);
+    if (unclosed !== null) {
+      if (!local) found.push({ line: at(unclosed), shown: `\`${linesOf(text, unclosed, unclosed)}\``, reason: UNCLOSED, ignorable: [] });
+      continue;
+    }
+    if (calls.length > 0) {
       if (local) continue;
-      for (const reason of calls?.map((call) => scriptMiss(call, doc, index)) ?? [UNCLOSED]) if (reason) found.push({ line, shown, reason, ignorable: [] });
+      for (const call of calls) {
+        const reason = scriptMiss(call, doc, index);
+        if (reason) found.push({ line: at(call.at), shown: `\`${call.shown}\``, reason, ignorable: [] });
+      }
       continue;
     }
     if (!span) continue;
+    const shown = `\`${text.trim()}\``;
     const path = pathOf(text, index);
     if (path !== null) {
       const miss = local && !index.top.has(path.split("/")[0] ?? "") ? null : pathMiss(path, doc, index);
@@ -245,12 +231,23 @@ function misses(doc, corpus, index) {
   return found.sort((a, b) => a.line - b.line);
 }
 
+/** @type {(root: string, path: string) => string} The path up to its first symlink, since git refuses to look beyond one. */
+function beforeLink(root, path) {
+  const parts = path.split("/");
+  for (let at = 1; at < parts.length; at++) {
+    const prefix = parts.slice(0, at).join("/");
+    if (lstatSync(join(root, prefix), { throwIfNoEntry: false })?.isSymbolicLink()) return prefix;
+  }
+  return path;
+}
+
 /** @type {(repo: Repo, paths: readonly string[]) => ReadonlySet<string>} The paths git ignores, which exist only at runtime, such as `.env` or `logs/`. */
 function ignored(repo, paths) {
-  const unique = [...new Set(paths)].filter((path) => !path.startsWith("../"));
-  if (unique.length === 0) return new Set();
-  const { stdout } = spawnSync("git", ["check-ignore", "--no-index", "--stdin"], { cwd: repo.root, input: unique.join("\n"), encoding: "utf8" });
-  return new Set((stdout ?? "").split("\n").filter(Boolean));
+  const checked = new Map([...new Set(paths)].filter((path) => !path.startsWith("../")).map((path) => [path, beforeLink(repo.root, path)]));
+  if (checked.size === 0) return new Set();
+  const { stdout } = spawnSync("git", ["check-ignore", "--no-index", "--stdin"], { cwd: repo.root, input: [...new Set(checked.values())].join("\n"), encoding: "utf8" });
+  const hits = new Set((stdout ?? "").split("\n").filter(Boolean));
+  return new Set([...checked].filter(([, path]) => hits.has(path)).map(([path]) => path));
 }
 
 /** @type {(repo: Repo, corpus: Corpus) => Finding[]} One finding per doc, with every name that resolves to nothing. */
