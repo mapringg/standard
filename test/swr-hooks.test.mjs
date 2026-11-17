@@ -279,3 +279,14 @@ test("a page list never writes to an item whose key looks like its own", async (
   await settle(() => result.current.list.pages.length === 2);
   assert.deepEqual(result.current.item.data, { id: "a", name: "seed" });
 });
+
+test("restart while the next page loads ends with only the restarted first page", async (t) => {
+  const api = heldPages();
+  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  await act(async () => result.current.loadMore());
+  await act(async () => void result.current.restart());
+  await act(async () => api.finish(0, "restarted"));
+  await act(async () => api.finish(1, "fetched"));
+  await settle();
+  assert.deepEqual({ requests: api.requests, pages: firstItems(result), loadingMore: result.current.loadingMore }, { requests: [["items", 1], ["items", 0]], pages: ["restarted 0"], loadingMore: false });
+});
