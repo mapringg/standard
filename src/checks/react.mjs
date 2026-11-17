@@ -1,14 +1,14 @@
 import { posix } from "node:path";
 
+import { dependents, reactApps } from "./support/packages.mjs";
 import { reducerStates } from "./support/reducer-state.mjs";
 import { sourceFacts } from "./support/source.mjs";
 
 /**
- * @typedef {import("../repo.mjs").Repo} Repo
  * @typedef {import("./support/source.mjs").Parsed} Parsed
  * @typedef {import("./support/source.mjs").Use} Use
  *
- * What a rule sees: the repository root, every parsed source, and the one path in each Next app that may import swr.
+ * What a rule sees: the repository root, every parsed source, and the one path in each React app that may import swr.
  * @typedef {{ root: string, files: readonly Parsed[], wrappers: ReadonlySet<string> }} Scope
  *
  * One occurrence. Occurrences that share a key share one fix, which lists all their lines, because the baseline shows
@@ -117,27 +117,11 @@ const RULES = [
           .map(({ path, line }) => ({
             key: `${file.path} ${path}`,
             line,
-            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerSeeded or useServerSeededInfinite from ${WRAPPER} of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.`,
+            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerSeeded or useServerSeededInfinite from ${WRAPPER} of its app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.`,
           })),
       ),
   },
 ];
-
-/**
- * @param {Repo} repo
- * @param {string} name
- * @returns {string[]} The folders whose tracked package.json depends on the package.
- */
-function dependents(repo, name) {
-  return repo.files("**/package.json").filter((path) => {
-    try {
-      const manifest = JSON.parse(repo.read(path));
-      return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some((deps) => deps?.[name] !== undefined);
-    } catch {
-      return false;
-    }
-  }).map(posix.dirname);
-}
 
 /** @type {(lines: readonly number[]) => string} */
 const linesText = (lines) => {
@@ -150,7 +134,7 @@ export default {
   name: "react",
   since: "0.12.0",
   doc: {
-    enforces: "A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `\"use client\"` file does not read `fetch`, and only each Next app's `src/lib/swr.ts` imports swr.",
+    enforces: "A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `\"use client\"` file does not read `fetch`, and only each React app's `src/lib/swr.ts` imports swr.",
     fix: "Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr.",
     config: [],
   },
@@ -162,7 +146,7 @@ export default {
     const scope = {
       root: repo.root,
       files: facts.flatMap((file) => ("error" in file ? [] : [file])),
-      wrappers: new Set(dependents(repo, "next").map((app) => posix.join(app, WRAPPER))),
+      wrappers: new Set(reactApps(repo).map((app) => posix.join(app, WRAPPER))),
     };
     const parseErrors = facts.flatMap((file) => ("error" in file ? [{ key: `${file.path} parse`, group: "react/parse", fix: `${file.path} does not parse, so react cannot read it: ${file.error}. Fix the syntax.` }] : []));
     return [

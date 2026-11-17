@@ -3,6 +3,7 @@ import { posix } from "node:path";
 import { parseSync } from "oxc-parser";
 
 import { FILE } from "../config.mjs";
+import { reactApps, TEST_FILE } from "./support/packages.mjs";
 import { sourceFacts } from "./support/source.mjs";
 
 /**
@@ -44,6 +45,17 @@ const BUILT_IN = /** @type {readonly BannedRule[]} */ (MOCKING.flatMap(({ module
   fix: "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module.",
 })));
 
+const TIMER = "src/lib/timer.ts";
+
+/** React's effect hooks, banned outside test files, each React app's timer template copy and the wrappers effect-wrappers lists. */
+const EFFECTS = /** @type {BannedRule} */ ({
+  space: "module",
+  paths: ["react#useEffect", "react#useLayoutEffect", "react#useInsertionEffect"],
+  files: [],
+  except: [],
+  fix: `Replace the effect with what it does: read data with useServerSeeded or useServerSeededInfinite from src/lib/swr.ts or in a server component, compute derived state in render, act on an event in its handler, reset state on a prop change with a key, read an external store with useSyncExternalStore, measure or focus the DOM in a ref callback, read the latest props from a callback with useEffectEvent instead of copying them into a ref, and run a timer with useTimeout, useInterval or useAnimationFrame from ${TIMER}, copied from node_modules/@mapringg/standard/templates/timer.ts. A wrapper that must keep an effect goes in effect-wrappers in ${FILE} with its reason.`,
+});
+
 const OXLINT_CONFIG = /(?:^|\/)(?:[^/]*\.)?oxlintrc\.json$|(?:^|\/)oxlint\.config\.[cm]?[jt]s$/;
 
 /** @type {(rule: BannedRule, path: string) => boolean} */
@@ -58,7 +70,7 @@ const under = (rule, path, use) => use === path || use.startsWith(path + (rule.s
 /**
  * @param {import("./support/source.mjs").Parsed} file
  * @param {readonly BannedRule[]} rules The built-in bans, then config order. Each use counts once, for the first rule that covers the file and the use.
- * @returns {Finding[]} One per banned API the file uses or test runner object it re-exports, with every line in the fix.
+ * @returns {Finding[]} One per banned API the file uses, or test runner object or React namespace it re-exports, with every line in the fix.
  */
 function findings(file, rules) {
   /** @type {Map<string, { lines: Set<number>, fix: string, said: string }>} */
@@ -90,6 +102,11 @@ function findings(file, rules) {
     if (!runner) continue;
     const api = space === "module" ? `${runner.module}#${runner.object}` : runner.object;
     add(`export ${api}`, line, `Import ${runner.object} from ${runner.module} where you use it.`, `re-exports ${api}`);
+  }
+  if (rules.includes(EFFECTS)) {
+    for (const { space, path, line } of file.exports) {
+      if (space === "module" && (path === "react" || path === "react#default")) add("export react", line, "Import from react where you use it, so banned sees each effect hook.", "re-exports react, whose namespace holds its effect hooks,");
+    }
   }
   return [...found].map(([key, { lines, fix, said }]) => {
     const sorted = [...lines].sort((a, b) => a - b);
@@ -126,9 +143,9 @@ export default {
   name: "banned",
   since: "0.12.0",
   doc: {
-    enforces: "A file uses no API the repository bans, and no oxlint config bans APIs a second way.",
-    fix: "Use what the entry's `fix` names instead.",
-    config: ["banned"],
+    enforces: "A file uses no API the repository bans, no React effect hook outside tests, the timer template and listed wrappers, and no oxlint config bans APIs a second way.",
+    fix: "Use what the entry's `fix` names instead, and replace an effect with what it does.",
+    config: ["banned", "effect-wrappers"],
   },
   subject: "tree",
   baseline: false,
@@ -136,7 +153,9 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const rules = [...BUILT_IN, ...repo.config.banned];
+    const wrappers = new Set([...repo.config.effectWrappers.map((wrapper) => wrapper.file), ...reactApps(repo).map((app) => posix.join(app, TIMER))]);
+    const product = [...BUILT_IN, EFFECTS, ...repo.config.banned];
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
-    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, rules)))];
+    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, TEST_FILE.test(file.path) || wrappers.has(file.path) ? rules : product)))];
   },
 };

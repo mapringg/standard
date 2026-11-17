@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.9" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.10" }
 }
 ```
 
@@ -46,8 +46,8 @@ Add the package at a tag and install its hooks when the repository installs:
 | `tests` | The repository's test command exists, runs before a push, and runs in CI where a failure blocks the merge. | Add the test script, the `pnpm test` pre-push line or the CI step the finding names. | `hooks.pre-push` | 0.10.0 | yes |
 | `pr-tests` | A pull request that adds logic to a package's source adds or changes a test in that package. | Add or change a test in the package that covers the new logic. | none | 0.10.0 | yes |
 | `boundaries` | An import respects the package, module and forbid boundaries the repository draws. | Import through the module's entry or the package's exports, or move the code. | `boundaries` | 0.11.0 | yes |
-| `banned` | A file uses no API the repository bans, and no oxlint config bans APIs a second way. | Use what the entry's `fix` names instead. | `banned` | 0.12.0 | yes |
-| `react` | A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `"use client"` file does not read `fetch`, and only each Next app's `src/lib/swr.ts` imports swr. | Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr. | none | 0.12.0 | no |
+| `banned` | A file uses no API the repository bans, no React effect hook outside tests, the timer template and listed wrappers, and no oxlint config bans APIs a second way. | Use what the entry's `fix` names instead, and replace an effect with what it does. | `banned`, `effect-wrappers` | 0.12.0 | yes |
+| `react` | A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `"use client"` file does not read `fetch`, and only each React app's `src/lib/swr.ts` imports swr. | Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr. | none | 0.12.0 | no |
 | `no-comments` | Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. An `.astro` component's markup holds no HTML comment, and its expressions follow the same rules. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped. | Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`. | none | 0.13.0 | yes |
 <!-- explain:end -->
 
@@ -181,6 +181,35 @@ Globs are repository paths matched against the resolved file, extension included
 
 Every repository also bans module mocking, which no entry, `except` or config turns off: `vitest#vi` and `@jest/globals#jest` with `.mock`, `.doMock`, `.unmock` or `.unstable_mockModule`, and the same calls on the unbound globals `vi` and `jest` that vitest globals mode provides. Its fix says to pass the dependency in as an argument or prop, or run a fake of the service it calls.
 
+Every repository also bans React's effect hooks, `react#useEffect`, `react#useLayoutEffect` and `react#useInsertionEffect`, through every form the `import` rule follows, a named re-export included. A test file, `*.test.*` or `*.spec.*` as `tests` reads them, may use them. So may each React app's `src/lib/timer.ts`, and each file that `effect-wrappers` in `.standard/config.json` lists with its `reason`. `src/lib/swr.ts` calls no effect hook, so it needs no exemption. The reason is required, and the file is an exact repository path. A wrapper is rare, such as a seam to an imperative library that renders no element, or a DOM measurement hook. The fix names the replacement for each kind of effect:
+
+| The effect | Replacement |
+| --- | --- |
+| Reads data | `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`, or a server component |
+| Derives state from props or state | Compute it in render |
+| Responds to an event | The event handler |
+| Resets state when a prop changes | A `key` |
+| Subscribes to an external store | `useSyncExternalStore` |
+| Measures or focuses the DOM | A ref callback |
+| Runs a timer | `useTimeout`, `useInterval` or `useAnimationFrame` from `src/lib/timer.ts` |
+| Copies the latest props into a ref | `useEffectEvent`, which `banned` allows |
+
+```json
+{
+  "effect-wrappers": [
+    { "file": "apps/web/src/features/map/map-binding.tsx", "reason": "Binds props to the map instance, which renders no element." }
+  ]
+}
+```
+
+The timer hooks ship in the package. Copy them into each React app that runs a timer, then delete the hooks the app does not use:
+
+```sh
+cp node_modules/@mapringg/standard/templates/timer.ts apps/web/src/lib/timer.ts
+```
+
+`useTimeout(run, delay)` runs `run` once, `delay` milliseconds after mount, and `useInterval(run, delay)` runs it every `delay` milliseconds. A `null` delay waits, and a new delay starts the timer again. `useAnimationFrame(run, running)` runs `run` with the frame time once a frame while `running` is true. Each hook calls the latest `run` without restarting, keeps one timer under StrictMode's double mount, and stops on unmount. To start a timeout again when a value changes, such as a toast's message, give the component a `key`. The file passes oxfmt with the shared config and oxlint with the shared config and the `react` plugin.
+
 | Rule | Fails when |
 | --- | --- |
 | `import` | A file imports, re-exports, `import()`s or `require()`s the module by a literal name. With `#name`, a file imports that export or reads it through a named, default or namespace binding, an `import()` or `require()` result or a JSX tag, so `@base-ui/react#Dialog` matches `<BaseUI.Dialog>`. Static members after the export extend the path, and a path matches every longer one, so `vitest#vi.mock` matches `v.mock()` after `import { vi as v } from "vitest"` and `const { mock } = vi`, and `react#useMemo` matches `React.useMemo.call()`. `zod` does not match `zod/mini`, and a type-only import never matches. |
@@ -216,7 +245,7 @@ To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bum
 | `react/no-flag-state` | A `useState` call's first binding is `loading`, `isLoading`, `error` or `isError`. | Model the status in a `useReducer` state union, such as `{ status: "loading" } \| { status: "done", data }`. |
 | `react/reducer-status-union` | A `useReducer` state is not a union of two or more members that each have a different string literal `status`, such as `{ status: "idle" \| "done"; data?: Item[] }` or two members with `status: "ready"`. The check reads the state type with the TypeScript the file resolves, through the call's return type, so any binding of the state works. | Make the state a union with one member per status, such as `{ status: "idle" } \| { status: "done", items: Item[] }`. |
 | `react/no-client-fetch` | A file whose directive prologue holds `"use client"` reads the global `fetch`, also through `window` or `globalThis` or passed as a value. A local named `fetch` passes. | Fetch in a server component, or through `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts` when the data needs pagination or revalidation. |
-| `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a folder whose tracked `package.json` declares `next`. A type-only import passes. | Use `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`, copied from the package with the exports the app does not use deleted. |
+| `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a React app. A React app is a folder whose tracked `package.json` declares `react` and `next` or `vite`, so a library such as a UI package is not one. A type-only import passes. | Use `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`, copied from the package with the exports the app does not use deleted. |
 | Parse | A tracked source does not parse. | Fix the syntax. |
 
 `react/reducer-status-union` fails closed: a state it cannot read fails under the same key as a wrong one, and the fix names the cause.
@@ -231,7 +260,7 @@ To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bum
 | The state is a type parameter, as in a generic hook. | Call `useReducer` where the state type is concrete. |
 | TypeScript throws. | Run the typecheck and fix what it reports. |
 
-Each finding names the file, the owner and the API, such as `src/form.tsx Form useState`, with no line number, and a later owner of the same name in the file is `Form 2`. Its fix lists the lines. `react` keeps a baseline, one group per rule, so `standard check react --init` records today's findings and the check fails only new ones. The wrapper ships in the package. Copy it into each Next app and import its hooks instead of `swr`:
+Each finding names the file, the owner and the API, such as `src/form.tsx Form useState`, with no line number, and a later owner of the same name in the file is `Form 2`. Its fix lists the lines. `react` keeps a baseline, one group per rule, so `standard check react --init` records today's findings and the check fails only new ones. The wrapper ships in the package. Copy it into each React app and import its hooks instead of `swr`:
 
 ```sh
 cp node_modules/@mapringg/standard/templates/swr.ts apps/web/src/lib/swr.ts
@@ -239,7 +268,7 @@ cp node_modules/@mapringg/standard/templates/swr.ts apps/web/src/lib/swr.ts
 
 Then delete the exports the app does not use, so knip needs no ignore for the file. Delete a hook or `SwrScope` that the app never calls, with the code only it uses, and remove `export` from a type that the app never names. The file passes oxfmt with the shared config and oxlint with the shared config and the `react` plugin, `react/immutability` included, so it needs no format ignore or lint override.
 
-`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. Each hook refetches on mount, so a seed cached with the page does not go stale. Pass `fresh: true` when a server component fetched the seed for this request, and the hook skips that first request. Pass `reuseCache: true` for an expensive query. The first mount with nothing cached fetches, and a later mount that finds a cached result shows it and does not refetch. Focus, reconnect and interval refreshes, `revalidate` and a new key with nothing cached still fetch. A list whose key the client picks, or whose key starts as `null`, passes `fallbackData: []` and loads on mount or when the key arrives.
+`useServerSeeded` takes the data a server component fetched as `fallbackData`, so the first render has no loading state, and `useServerSeededInfinite` does the same for pages. Each hook refetches on mount, so a seed cached with the page does not go stale. Pass `fresh: true` when a server component fetched the seed for this request, and the hook skips that first request. Pass `reuseCache: true` for an expensive query. The first mount with nothing cached fetches, and a later mount that finds a cached result shows it and does not refetch. Focus, reconnect and interval refreshes, `revalidate` and a new key with nothing cached still fetch. A list whose key the client picks, or whose key starts as `null`, passes `fallbackData: []` and loads on mount or when the key arrives. A client-only app, such as a Vite app with no server render, has no seed. It passes `fallbackData: null` for an item or `[]` for a list, fetches on mount, and shows loading while `validating` is true and the data is still the fallback.
 
 `useServerSeededInfinite` keeps the pages of a list in one cache entry, so it has no per-page cache to keep in step. The refetch on mount and each focus, reconnect or interval refresh refetch every loaded page in order. `loadMore` fetches only the next page and appends it to the pages as they are when it arrives, after any refresh that is running. An edit made in the meantime stays, and so does the result of the refresh. Components that show the same list share one refresh and one `loadMore` request. After a page fails, `loadMore` or `revalidate` fetches only that page. With no failed page, `revalidate` refetches the loaded pages. `replace` edits the loaded pages at once, and the edit stays when more pages load. `revalidate` and `replace` act on the key of the render they came from, so an edit never reaches a list the user picks afterwards. `restart` drops to the first page and refetches it, and a page that `loadMore` was fetching is dropped. When that request ends, its result or error never changes `loadingMore` or `error` for a newer `loadMore`. `SwrScope` gives a test an empty cache in place of `SWRConfig`.
 

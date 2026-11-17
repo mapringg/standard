@@ -10,6 +10,7 @@ import { parseDocument } from "yaml";
  * @property {PullRequestConfig} pr
  * @property {Boundaries} boundaries
  * @property {readonly BannedRule[]} banned
+ * @property {readonly EffectWrapper[]} effectWrappers The `effect-wrappers` list: files that may call React's effect hooks, each with why.
  *
  * @typedef {object} Boundaries
  * @property {readonly ModuleRule[]} modules
@@ -25,6 +26,8 @@ import { parseDocument } from "yaml";
  * One API a set of files must not use, and what to use instead. "module" comes from `import`, "global" from `global` and
  * "property" from `property`, a name read on any object. Empty `files` means every tracked source.
  * @typedef {{ space: "module" | "global" | "property", paths: readonly string[], files: readonly string[], except: readonly string[], fix: string }} BannedRule
+ *
+ * @typedef {{ file: string, reason: string }} EffectWrapper
  *
  * @typedef {{ "ticket-prefix"?: string, screenshots?: { when: readonly string[], uploader: string } }} PullRequestConfig
  * `ticket-prefix` is the tracker's key, such as "ABC" in `Ticket: ABC-12`. Absent means the repo has no tickets.
@@ -114,6 +117,21 @@ function banned(value) {
       }
       if (typeof rule.fix !== "string" || rule.fix.trim() === "") throw new Error(`${at}.fix must say what to use instead, such as "Use the helpers in src/env.ts."`);
       return Object.freeze({ space, paths, files: rule.files === undefined ? Object.freeze([]) : globs(rule.files, `${at}.files`, true), except: globs(rule.except, `${at}.except`, false), fix: rule.fix });
+    }),
+  );
+}
+
+/** @type {(value: unknown) => readonly EffectWrapper[]} */
+function effectWrappers(value) {
+  if (!Array.isArray(value)) throw new Error(`${FILE} effect-wrappers must be a list.`);
+  return Object.freeze(
+    value.map((item, index) => {
+      const wrapper = section(item, `effect-wrappers[${index}]`, ["file", "reason"]);
+      const at = `${FILE} effect-wrappers[${index}]`;
+      const file = repoPath(wrapper.file, `${at}.file`);
+      if (/[*?[\]{}]/.test(file)) throw new Error(`${at}.file has "${file}", a glob. List each wrapper by its exact path.`);
+      if (typeof wrapper.reason !== "string" || wrapper.reason.trim() === "") throw new Error(`${at}.reason must say why the file keeps an effect, such as "Binds the map instance, which renders no element."`);
+      return Object.freeze({ file, reason: wrapper.reason });
     }),
   );
 }
@@ -263,7 +281,7 @@ export function parseConfig(text) {
     const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
     throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
-  const top = section(raw, "", ["banned", "boundaries", "hooks", "pending", "pr"]);
+  const top = section(raw, "", ["banned", "boundaries", "effect-wrappers", "hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
   return Object.freeze({
     hooks: Object.freeze({
@@ -274,6 +292,7 @@ export function parseConfig(text) {
     pr: pullRequest(top.pr ?? {}),
     boundaries: boundaries(top.boundaries ?? {}),
     banned: banned(top.banned ?? []),
+    effectWrappers: effectWrappers(top["effect-wrappers"] ?? []),
   });
 }
 

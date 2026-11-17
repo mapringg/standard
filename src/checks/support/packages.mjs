@@ -13,3 +13,28 @@ export function packageOf(manifests, path) {
     if (folder === ".") return null;
   }
 }
+
+/**
+ * @param {Pick<import("../../repo.mjs").Repo, "files" | "read">} repo
+ * @param {string} name
+ * @returns {string[]} The folders whose tracked package.json depends on the package.
+ */
+export function dependents(repo, name) {
+  return repo.files("**/package.json").filter((path) => {
+    try {
+      const manifest = JSON.parse(repo.read(path));
+      return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some((deps) => deps?.[name] !== undefined);
+    } catch {
+      return false;
+    }
+  }).map(posix.dirname);
+}
+
+/**
+ * @param {Pick<import("../../repo.mjs").Repo, "files" | "read">} repo
+ * @returns {string[]} The React apps: folders whose tracked package.json declares react and a bundler, next or vite. A library such as a UI package declares neither.
+ */
+export function reactApps(repo) {
+  const bundled = new Set([...dependents(repo, "next"), ...dependents(repo, "vite")]);
+  return dependents(repo, "react").filter((folder) => bundled.has(folder));
+}
