@@ -49,6 +49,12 @@ export function useItems(seed: readonly Page[]) {
   return { names, flags, failure, drop, more: list.loadMore, restart: list.restart, refresh: list.revalidate };
 }
 
+export function useExpensive(id: string) {
+  const item = useServerSeeded(["item", id] as const, loadItem, { fallbackData: null, reuseCache: true, revalidateOnFocus: false });
+  const list = useServerSeededInfinite(() => ["items", null] as const, loadPage, { fallbackData: [], reuseCache: true });
+  return [item, list];
+}
+
 export function useUnseeded(id: string) {
   // @ts-expect-error fallbackData is required.
   const item = useServerSeeded(["item", id] as const, loadItem, { refreshInterval: 5000 });
@@ -77,6 +83,31 @@ test("the swr template passes the strict base and requires fallbackData", (t) =>
   cpSync(join(PACKAGE, "templates/swr.ts"), join(root, "src/lib/swr.ts"));
   symlinkSync(join(PACKAGE, "node_modules"), join(root, "node_modules"));
   const { stdout, stderr, status } = spawnSync(process.execPath, [join(PACKAGE, "node_modules/typescript/bin/tsc"), "-p", root], { encoding: "utf8" });
+  assert.deepEqual({ stdout, stderr, status }, { stdout: "", stderr: "", status: 0 });
+});
+
+function binary(name) {
+  return join(PACKAGE, "node_modules/.bin", name);
+}
+
+test("oxfmt with the shared config leaves the swr template as shipped", () => {
+  const { stdout, stderr, status } = spawnSync(binary("oxfmt"), ["--config", join(PACKAGE, "config/oxfmt.json"), "--check", join(PACKAGE, "templates/swr.ts")], { encoding: "utf8" });
+  assert.equal(status, 0, stdout + stderr);
+});
+
+test("oxlint with the shared config and the react plugin finds nothing in the swr template", (t) => {
+  const root = tempDir(t, "swr-lint");
+  write(root, {
+    ".oxlintrc.json": { extends: [join(PACKAGE, "config/oxlint.json")], plugins: ["react"] },
+    "tsconfig.json": {
+      extends: join(PACKAGE, "config/tsconfig.json"),
+      compilerOptions: { noEmit: true, module: "preserve", target: "esnext", jsx: "preserve", lib: ["esnext", "dom"], types: [] },
+      include: ["src"],
+    },
+  });
+  cpSync(join(PACKAGE, "templates/swr.ts"), join(root, "src/lib/swr.ts"));
+  symlinkSync(join(PACKAGE, "node_modules"), join(root, "node_modules"));
+  const { stdout, stderr, status } = spawnSync(binary("oxlint"), ["src"], { cwd: root, encoding: "utf8" });
   assert.deepEqual({ stdout, stderr, status }, { stdout: "", stderr: "", status: 0 });
 });
 

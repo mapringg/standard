@@ -117,7 +117,7 @@ const RULES = [
           .map(({ path, line }) => ({
             key: `${file.path} ${path}`,
             line,
-            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerSeeded or useServerSeededInfinite from ${WRAPPER} of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts.`,
+            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerSeeded or useServerSeededInfinite from ${WRAPPER} of its Next app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.`,
           })),
       ),
   },

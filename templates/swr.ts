@@ -1,13 +1,24 @@
 "use client";
 
 import { createElement, useState, type ReactNode } from "react";
-import useSWR, { SWRConfig, unstable_serialize, useSWRConfig, type Cache, type SWRConfiguration } from "swr";
+import useSWR, {
+  SWRConfig,
+  unstable_serialize,
+  useSWRConfig,
+  type Cache,
+  type SWRConfiguration,
+} from "swr";
 
 export type SeedKey = readonly [resource: string, ...parts: readonly unknown[]];
 
-export type Revalidation = Pick<SWRConfiguration, "refreshInterval" | "revalidateOnFocus" | "revalidateOnReconnect" | "keepPreviousData">;
+export type Revalidation = Pick<
+  SWRConfiguration,
+  "refreshInterval" | "revalidateOnFocus" | "revalidateOnReconnect" | "keepPreviousData"
+>;
 
-export type SeededOptions<Data> = Revalidation & { fallbackData: Data; fresh?: boolean };
+type Mount = { fresh?: boolean; reuseCache?: boolean };
+
+export type SeededOptions<Data> = Revalidation & Mount & { fallbackData: Data };
 
 export type Seeded<Data> = {
   data: Data;
@@ -17,10 +28,29 @@ export type Seeded<Data> = {
   replace(change: (current: Data) => Data, options?: { revalidate?: boolean }): Promise<void>;
 };
 
-export function useServerSeeded<Key extends SeedKey, Data>(key: Key | null, fetcher: (key: Key) => Promise<Data>, options: SeededOptions<Data>): Seeded<Data> {
-  const { fallbackData, fresh = false, ...revalidation } = options;
-  const { mutate } = useSWRConfig();
-  const { data, error, isValidating } = useSWR<Data, Error>(key, (current: Key) => fetcher(current), { ...revalidation, revalidateOnMount: !fresh });
+function revalidateOnMount(
+  cache: Cache,
+  id: string,
+  { fresh, reuseCache }: Required<Mount>,
+): boolean {
+  return !fresh && !(reuseCache && cache.get(id)?.data !== undefined);
+}
+
+export function useServerSeeded<Key extends SeedKey, Data>(
+  key: Key | null,
+  fetcher: (key: Key) => Promise<Data>,
+  options: SeededOptions<Data>,
+): Seeded<Data> {
+  const { fallbackData, fresh = false, reuseCache = false, ...revalidation } = options;
+  const { cache, mutate } = useSWRConfig();
+  const { data, error, isValidating } = useSWR<Data, Error>(
+    key,
+    (current: Key) => fetcher(current),
+    {
+      ...revalidation,
+      revalidateOnMount: revalidateOnMount(cache, unstable_serialize(key), { fresh, reuseCache }),
+    },
+  );
   return {
     data: data === undefined ? fallbackData : data,
     error,
@@ -29,12 +59,14 @@ export function useServerSeeded<Key extends SeedKey, Data>(key: Key | null, fetc
       await mutate(key);
     },
     async replace(change, { revalidate = false } = {}) {
-      await mutate<Data>(key, (current) => change(current === undefined ? fallbackData : current), { revalidate });
+      await mutate<Data>(key, (current) => change(current === undefined ? fallbackData : current), {
+        revalidate,
+      });
     },
   };
 }
 
-export type SeededPagesOptions<Page> = Revalidation & { fallbackData: readonly Page[]; fresh?: boolean };
+export type SeededPagesOptions<Page> = Revalidation & Mount & { fallbackData: readonly Page[] };
 
 export type SeededPages<Page> = {
   pages: readonly Page[];
@@ -45,12 +77,21 @@ export type SeededPages<Page> = {
   loadMore(): void;
   restart(): Promise<void>;
   revalidate(): Promise<void>;
-  replace(change: (pages: readonly Page[]) => readonly Page[], options?: { revalidate?: boolean }): Promise<void>;
+  replace(
+    change: (pages: readonly Page[]) => readonly Page[],
+    options?: { revalidate?: boolean },
+  ): Promise<void>;
 };
 
-type NextPage = { list: string; status: "loading" } | { list: string; status: "failed"; error: Error };
+type NextPage =
+  | { list: string; status: "loading" }
+  | { list: string; status: "failed"; error: Error };
 
-type Flights = { refresh: Promise<unknown> | undefined; next: Promise<void> | undefined; restarts: number };
+type Flights = {
+  refresh: Promise<unknown> | undefined;
+  next: Promise<void> | undefined;
+  restarts: number;
+};
 
 const PAGES = Symbol("pages");
 const flightsByCache = new WeakMap<Cache, Map<string, Flights>>();
@@ -62,12 +103,30 @@ function flightsOf(cache: Cache, list: string): Flights {
   return flights;
 }
 
+function startRefresh<Pages>(flights: Flights, refresh: Promise<Pages>): Promise<Pages> {
+  flights.refresh = refresh;
+  return refresh;
+}
+
+function joinNext(flights: Flights, append: (restarts: number) => Promise<void>): Promise<void> {
+  const { restarts } = flights;
+  flights.next ??= append(restarts).finally(() => {
+    if (flights.restarts === restarts) flights.next = undefined;
+  });
+  return flights.next;
+}
+
+function dropNext(flights: Flights): void {
+  flights.restarts += 1;
+  flights.next = undefined;
+}
+
 export function useServerSeededInfinite<Key extends SeedKey, Page>(
   pageKey: (index: number, previous: Page | null) => Key | null,
   fetchPage: (key: Key) => Promise<Page>,
   options: SeededPagesOptions<Page>,
 ): SeededPages<Page> {
-  const { fallbackData, fresh = false, ...revalidation } = options;
+  const { fallbackData, fresh = false, reuseCache = false, ...revalidation } = options;
   const { cache, mutate } = useSWRConfig();
   const first = pageKey(0, null);
   const list = first === null ? null : ([PAGES, first] as const);
@@ -79,21 +138,31 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
   const refetchLoaded = async () => {
     const count = Math.max(1, cached().length);
     const pages: Page[] = [];
-    for (let key = first; key !== null && pages.length < count; key = keyAfter(pages)) pages.push(await fetchPage(key));
+    for (let key = first; key !== null && pages.length < count; key = keyAfter(pages))
+      pages.push(await fetchPage(key));
     return pages;
   };
-  const { data, error, isValidating } = useSWR<readonly Page[], Error>(list, () => (flights.refresh = refetchLoaded()), { ...revalidation, revalidateOnMount: !fresh });
+  const { data, error, isValidating } = useSWR<readonly Page[], Error>(
+    list,
+    () => startRefresh(flights, refetchLoaded()),
+    {
+      ...revalidation,
+      revalidateOnMount: revalidateOnMount(cache, id, { fresh, reuseCache }),
+    },
+  );
   const pages = data ?? fallbackData;
   const next = requested?.list === id ? requested : null;
   const loadingMore = next?.status === "loading";
   const failure = next?.status === "failed" ? next.error : undefined;
-  const settle = (after: NextPage | null) => setRequested((now) => (now?.list === id ? after : now));
+  const settle = (after: NextPage | null) =>
+    setRequested((now) => (now?.list === id ? after : now));
   const appendNext = async (restarts: number) => {
-    for (let appended = false; !appended; ) {
+    for (let appended = false; !appended;) {
       const key = keyAfter(cached());
       if (key === null) return;
       const page = await fetchPage(key);
-      for (let settled; settled !== flights.refresh; ) await (settled = flights.refresh)?.catch(() => undefined);
+      for (let settled; settled !== flights.refresh;)
+        await (settled = flights.refresh)?.catch(() => undefined);
       if (flights.restarts !== restarts) return;
       await mutate<readonly Page[]>(
         list,
@@ -108,15 +177,17 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
   };
   const fetchNext = async () => {
     if (list === null) return;
-    setRequested({ list: id, status: "loading" });
+    const loading: NextPage = { list: id, status: "loading" };
+    const finish = (after: NextPage | null) =>
+      setRequested((now) => (now === loading ? after : now));
+    const { restarts } = flights;
+    setRequested(loading);
     try {
-      const { restarts } = flights;
-      await (flights.next ??= appendNext(restarts).finally(() => {
-        if (flights.restarts === restarts) flights.next = undefined;
-      }));
-      settle(null);
+      await joinNext(flights, appendNext);
+      finish(null);
     } catch (thrown) {
-      settle({ list: id, status: "failed", error: thrown instanceof Error ? thrown : new Error(String(thrown)) });
+      const error = thrown instanceof Error ? thrown : new Error(String(thrown));
+      finish(flights.restarts === restarts ? { list: id, status: "failed", error } : null);
     }
   };
   return {
@@ -130,15 +201,18 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
     },
     async restart() {
       settle(null);
-      flights.restarts += 1;
-      flights.next = undefined;
-      await mutate<readonly Page[]>(list, (current) => (current ?? fallbackData).slice(0, 1), { revalidate: true });
+      dropNext(flights);
+      await mutate<readonly Page[]>(list, (current) => (current ?? fallbackData).slice(0, 1), {
+        revalidate: true,
+      });
     },
     async revalidate() {
       await (failure ? fetchNext() : mutate(list));
     },
     async replace(change, { revalidate = false } = {}) {
-      await mutate<readonly Page[]>(list, (current) => change(current ?? fallbackData), { revalidate });
+      await mutate<readonly Page[]>(list, (current) => change(current ?? fallbackData), {
+        revalidate,
+      });
     },
   };
 }
