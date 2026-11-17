@@ -246,7 +246,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.14.15 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.14.16 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -582,7 +582,7 @@ test("--remote fails current when a newer release tag than the pin exists", (t) 
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.15."],
+    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.16."],
   });
   assert.equal(status, 1);
 });
