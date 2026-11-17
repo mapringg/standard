@@ -213,7 +213,6 @@ test("pr-screenshot does not ask for a screenshot for a UI file no page renders"
     "apps/web/.oxfmtrc.jsonc",
     "apps/web/tsconfig.json",
     "apps/web/tsconfig.build.json",
-    "apps/web/package.json",
     "apps/web/src/page.test.tsx",
     "packages/ui/scripts/build.mjs",
     "apps/web/src/test/setup.ts",
@@ -221,7 +220,7 @@ test("pr-screenshot does not ask for a screenshot for a UI file no page renders"
     "packages/ui/src/__tests__/button.tsx",
   ];
   for (const changed of unrendered) assert.equal(checkScreenshot(t, changed, PAIR).stdout.trim(), "pr-screenshot: OK (#123)", changed);
-  for (const changed of ["apps/web/src/tsconfig-panel.tsx", "apps/web/src/scripts.tsx", "apps/web/src/testimonials/card.tsx"]) {
+  for (const changed of ["apps/web/package.json", "apps/web/src/tsconfig-panel.tsx", "apps/web/src/scripts.tsx", "apps/web/src/testimonials/card.tsx"]) {
     assert.match(checkScreenshot(t, changed, PAIR).stdout, /::warning title=pr-screenshot::/, changed);
   }
   const repo = pullRequestRepo(t, { base: { ".standard/config.json": SCREENSHOTS }, head: { "apps/web/.oxlintrc.json": "x", "apps/web/src/page.tsx": "x" } });
