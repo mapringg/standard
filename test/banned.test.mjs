@@ -135,6 +135,37 @@ test("banned fails a tracked oxlint config that sets a restricted rule anywhere,
   );
 });
 
+const MOCK_FIX = "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module.";
+
+test("banned fails module mocking in every repository through aliases, namespaces, destructuring and globals, and passes a local vi", (t) => {
+  fails(
+    t,
+    [],
+    {
+      "src/aliased.test.ts": 'import { vi as v } from "vitest";\nv.mock("./db");\n',
+      "src/namespace.test.ts": 'import * as V from "vitest";\nV.vi.doMock("./db");\n',
+      "src/destructured.test.ts": 'import { vi } from "vitest";\nconst { mock } = vi;\nmock("./db");\n',
+      "src/global.test.ts": 'vi.mock("./db");\n',
+      "src/jest.test.ts": 'import { jest } from "@jest/globals";\njest.unmock("./db");\n',
+      "src/local.test.ts": 'const vi = { mock() {} };\nvi.mock("./db");\n',
+    },
+    `src/aliased.test.ts vitest#vi.mock: src/aliased.test.ts uses vitest#vi.mock on line 2. ${MOCK_FIX}`,
+    `src/destructured.test.ts vitest#vi.mock: src/destructured.test.ts uses vitest#vi.mock on lines 2, 3. ${MOCK_FIX}`,
+    `src/global.test.ts vi.mock: src/global.test.ts uses vi.mock on line 1. ${MOCK_FIX}`,
+    `src/jest.test.ts @jest/globals#jest.unmock: src/jest.test.ts uses @jest/globals#jest.unmock on line 2. ${MOCK_FIX}`,
+    `src/namespace.test.ts vitest#vi.doMock: src/namespace.test.ts uses vitest#vi.doMock on line 2. ${MOCK_FIX}`,
+  );
+});
+
+test("banned catches a banned export through a longer chain such as .call", (t) => {
+  fails(
+    t,
+    [{ import: "react#useMemo", fix: "Let the React Compiler memoize." }],
+    { "src/view.tsx": 'import React from "react";\nexport const value = React.useMemo.call(null, () => 1, []);\n' },
+    "src/view.tsx react#useMemo: src/view.tsx uses react#useMemo on line 2. Let the React Compiler memoize.",
+  );
+});
+
 test("banned passes a repository with no banned uses and no restricted oxlint rules", (t) => {
   const { stdout, status } = banned(t, [ZOD, ENV], { "src/env.ts": "export const url = process.env.API_URL;\n", "src/a.ts": "export const a = 1;\n" });
   assert.deepEqual([stdout, status], ["banned: OK\n", 0]);
