@@ -9,6 +9,7 @@ import { parseDocument } from "yaml";
  * @property {readonly string[]} pending Checks this repo has not adopted yet. They do not run.
  * @property {PullRequestConfig} pr
  * @property {Boundaries} boundaries
+ * @property {readonly BannedRule[]} banned
  *
  * @typedef {object} Boundaries
  * @property {readonly ModuleRule[]} modules
@@ -20,6 +21,10 @@ import { parseDocument } from "yaml";
  *
  * A file that matches `files` and no `except` glob must not import a file that matches `imports`. `fix` says what to do instead.
  * @typedef {{ files: readonly string[], except: readonly string[], imports: readonly string[], fix: string }} ForbidRule
+ *
+ * One API a set of files must not use, and what to use instead. "module" comes from `import`, "global" from `global` and
+ * "property" from `property`, a name read on any object. Empty `files` means every tracked source.
+ * @typedef {{ space: "module" | "global" | "property", paths: readonly string[], files: readonly string[], except: readonly string[], fix: string }} BannedRule
  *
  * @typedef {{ "ticket-prefix"?: string, screenshots?: { when: readonly string[], uploader: string } }} PullRequestConfig
  * `ticket-prefix` is the tracker's key, such as "ABC" in `Ticket: ABC-12`. Absent means the repo has no tickets.
@@ -83,6 +88,35 @@ function strings(value, at) {
 
 /** These names alias the global object, so a chain through them names the global after them: `window.JSON.parse` is `JSON.parse`. */
 export const GLOBAL_OBJECTS = new Set(["globalThis", "window", "self", "global"]);
+
+const BANNED_KEYS = /** @type {const} */ ({
+  import: { space: "module", shape: /^[^#\s]+(?:#[^#\s]+)?$/, example: '"zod" for the whole module or "zod#z" for one export' },
+  global: { space: "global", shape: /^(?:import\.meta|[A-Za-z_$][\w$]*)(?:\.[A-Za-z_$][\w$]*)*$/, example: 'a dotted name such as "process.env" or "import.meta.env"' },
+  property: { space: "property", shape: /^[A-Za-z_$][\w$]*$/, example: 'one property name such as "toLocaleDateString"' },
+});
+
+/** @type {(value: unknown) => readonly BannedRule[]} */
+function banned(value) {
+  if (!Array.isArray(value)) throw new Error(`${FILE} banned must be a list.`);
+  return Object.freeze(
+    value.map((item, index) => {
+      const rule = section(item, `banned[${index}]`, ["import", "global", "property", "files", "except", "fix"]);
+      const at = `${FILE} banned[${index}]`;
+      const named = /** @type {(keyof typeof BANNED_KEYS)[]} */ (Object.keys(BANNED_KEYS)).filter((key) => key in rule);
+      if (named.length !== 1) throw new Error(`${at} names what it bans with import, global or property; give it exactly one.`);
+      const [key] = named, { space, shape, example } = BANNED_KEYS[key], raw = rule[key];
+      if (Array.isArray(raw) && raw.length === 0) throw new Error(`${at}.${key} must name at least one API. Write ${example}.`);
+      const paths = strings(Array.isArray(raw) ? raw : [raw], `${at}.${key}`);
+      for (const path of paths) {
+        const root = path.split(".")[0];
+        if (key === "global" && GLOBAL_OBJECTS.has(root)) throw new Error(`${at}.global has "${path}", and ${root} aliases the global object. Write the name after it, such as "fetch", which also matches ${root}.fetch and globalThis.fetch.`);
+        if (!shape.test(path)) throw new Error(`${at}.${key} has "${path}". Write ${example}.`);
+      }
+      if (typeof rule.fix !== "string" || rule.fix.trim() === "") throw new Error(`${at}.fix must say what to use instead, such as "Use the helpers in src/env.ts."`);
+      return Object.freeze({ space, paths, files: rule.files === undefined ? Object.freeze([]) : globs(rule.files, `${at}.files`, true), except: globs(rule.except, `${at}.except`, false), fix: rule.fix });
+    }),
+  );
+}
 
 const TICKET_PREFIX = /^[A-Z][A-Z0-9]*$/;
 
@@ -229,7 +263,7 @@ export function parseConfig(text) {
     const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
     throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
-  const top = section(raw, "", ["boundaries", "hooks", "pending", "pr"]);
+  const top = section(raw, "", ["banned", "boundaries", "hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
   return Object.freeze({
     hooks: Object.freeze({
@@ -239,6 +273,7 @@ export function parseConfig(text) {
     pending: strings(top.pending ?? [], `${FILE} pending`),
     pr: pullRequest(top.pr ?? {}),
     boundaries: boundaries(top.boundaries ?? {}),
+    banned: banned(top.banned ?? []),
   });
 }
 
