@@ -183,3 +183,16 @@ test("client-data does not apply when no tracked package.json declares react", (
   git(cwd, "add", "-A");
   assert.equal(standard(cwd, ["check", "client-data"]).stdout, "client-data: skipped, no tracked package.json declares react\n");
 });
+
+test("client-data fails a dynamic import of an API module in a use client file", (t) => {
+  fails(
+    t,
+    API,
+    {
+      "apps/web/src/lazy.tsx": '"use client";\nexport const load = async () => (await import("@/api/users")).getUser();\n',
+      "apps/web/src/then.tsx": '"use client";\nexport const load = () => import("../src/api/users").then((api) => api.getUser());\n',
+    },
+    `apps/web/src/lazy.tsx imports @/api/users on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/then.tsx imports ../src/api/users on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+  );
+});
