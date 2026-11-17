@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 import { parse } from "yaml";
 
 import { FILE } from "./config.mjs";
@@ -303,9 +305,10 @@ export const PROBES = [
         !owner.command && repo.config.pending.includes(owner.name);
       const owners = [...checks, ...COMMANDS];
       const files = new Set(repo.files());
-      const paths = [...new Set(owners.flatMap((owner) => owner.retired))].filter((path) => files.has(path));
-      return paths.flatMap((path) => {
-        const listing = owners.filter((owner) => owner.retired.includes(path));
+      const replaces = (/** @type {Owner} */ owner, /** @type {string} */ path) => owner.retired.some((glob) => posix.matchesGlob(path, glob));
+      const paths = new Set(owners.flatMap((owner) => owner.retired.flatMap((glob) => [...files].filter((path) => posix.matchesGlob(path, glob)))));
+      return [...paths].flatMap((path) => {
+        const listing = owners.filter((owner) => replaces(owner, path));
         if (listing.some(pending)) return [];
         const names = listing.map(ownerName);
         return [{ key: path, fix: `Delete ${path}, which ${list(names)} ${names.length === 1 ? "replaces" : "replace"}.` }];
