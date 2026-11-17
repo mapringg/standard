@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.12" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.13" }
 }
 ```
 
@@ -47,7 +47,8 @@ Add the package at a tag and install its hooks when the repository installs:
 | `pr-tests` | A pull request that adds logic to a package's source adds or changes a test in that package. | Add or change a test in the package that covers the new logic. | none | 0.10.0 | yes |
 | `boundaries` | An import respects the package, module and forbid boundaries the repository draws. | Import through the module's entry or the package's exports, or move the code. | `boundaries` | 0.11.0 | yes |
 | `banned` | A file uses no API the repository bans, no file outside tests imports the swr template's SWRTestCache, and no React effect hook outside tests, the timer template and listed wrappers, which call one but never pass it on. No file reads React's namespace whole or at a key that is not a constant, and no oxlint config bans APIs a second way. | Use what the entry's `fix` names instead, replace an effect with what it does, export only hooks that call an effect hook, and name each React export you read. | `banned`, `effect-wrappers` | 0.12.0 | yes |
-| `react` | A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. A `"use client"` file does not read `fetch`, and only each React app's `src/lib/swr.ts` imports swr. | Hold more than one value in a `useReducer` with a status union, fetch on the server, and use the `src/lib/swr.ts` hooks instead of swr. | none | 0.12.0 | no |
+| `react` | A component or hook calls `useState` at most once and never for a `loading`, `isLoading`, `error` or `isError` flag. Each `useReducer` state is a union whose members have different `status` literals. Only each React app's `src/lib/swr.ts` imports swr. | Hold more than one value in a `useReducer` with a status union, and use the `src/lib/swr.ts` hooks instead of swr. | none | 0.12.0 | no |
+| `client-data` | Only a file that `client-data` lists, with its reason, calls `useSWR`, from the app's `src/lib/swr.ts` under any of its names or from swr itself. A `"use client"` file that it does not list reads no `fetch` or `XMLHttpRequest`, imports no `ky` or `axios`, and imports no module that `api-modules` matches, directly or through modules without a directive. Tests, stories and fixtures are exempt. | Read data in a Server Component and pass it as props, and write through a Server Action, or list the file in `client-data` with why the browser must load it. | `client-data`, `api-modules` | 0.14.13 | no |
 | `no-comments` | Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. An `.astro` component's markup holds no HTML comment, and its expressions follow the same rules. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped. | Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`. | none | 0.13.0 | yes |
 <!-- explain:end -->
 
@@ -252,8 +253,7 @@ To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bum
 | `react/single-use-state` | An owner calls `useState` a second time. Each call after the first is one finding. A single `useState` that holds one value, an object included, passes. | Hold the owner's state in one `useReducer`. |
 | `react/no-flag-state` | A `useState` call's first binding is `loading`, `isLoading`, `error` or `isError`. | Model the status in a `useReducer` state union, such as `{ status: "loading" } \| { status: "done", data }`. |
 | `react/reducer-status-union` | A `useReducer` state is not a union of two or more members that each have a different string literal `status`, such as `{ status: "idle" \| "done"; data?: Item[] }` or two members with `status: "ready"`. The check reads the state type with the TypeScript the file resolves, through the call's return type, so any binding of the state works. | Make the state a union with one member per status, such as `{ status: "idle" } \| { status: "done", items: Item[] }`. |
-| `react/no-client-fetch` | A file whose directive prologue holds `"use client"` reads the global `fetch`, also through `window` or `globalThis` or passed as a value. A local named `fetch` passes. | Fetch in a server component, or through `useSWR` or `useSWRInfinite` from `src/lib/swr.ts` when the data must load in the client. |
-| `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a React app. A React app is a folder whose tracked `package.json` declares `react` and `next` or `vite`, so a library such as a UI package is not one. A type-only import passes. | Import `useSWR` or `useSWRInfinite` from `src/lib/swr.ts`, copied from the package, which turns off focus and reconnect revalidation. |
+| `react/no-direct-swr` | A file imports `swr`, `swr/infinite` or `swr/immutable`, other than `<app>/src/lib/swr.ts` of a React app. A React app is a folder whose tracked `package.json` declares `react` and `next` or `vite`, so a library such as a UI package is not one. A type-only import passes. | Import `useSWR` or `useSWRInfinite` from `src/lib/swr.ts`, copied from the package, which turns off focus and reconnect revalidation. |
 | Parse | A tracked source does not parse. | Fix the syntax. |
 
 `react/reducer-status-union` fails closed: a state it cannot read fails under the same key as a wrong one, and the fix names the cause.
@@ -277,6 +277,64 @@ cp node_modules/@mapringg/standard/templates/swr.ts apps/web/src/lib/swr.ts
 Then delete the exports the app does not use, so knip needs no ignore for the file. The file passes oxfmt with the shared config and oxlint with the shared config and the `react` plugin, so it needs no format ignore or lint override.
 
 `useSWR` and `useSWRInfinite` take the arguments of swr's hooks and return what they return, with `data`, `error`, `isLoading`, `isValidating` and `mutate`, and `size` and `setSize` for pages. The wrapper only changes two defaults. `revalidateOnFocus` and `revalidateOnReconnect` are off, and a hook that passes either one as `true` turns it back on. An `SWRConfig` value for them does not reach the hook, so pass them on the hook. To use another swr export, such as `useSWRConfig`, re-export it from the same file. `SWRTestCache` isolates the SWR cache of each test.
+
+`client-data` keeps data loading on the server. A Server Component reads the data and passes it down as props, and a write goes through a Server Action that refreshes the cache with `revalidatePath` or `revalidateTag`. A file that loads data in the browser is the exception, and `client-data` lists it with its reason. The check does not apply when no tracked `package.json` declares `react`. Tests, stories and fixtures are exempt: `*.test.*`, `*.spec.*` and `*.stories.*` files, and anything under a `test/`, `tests/`, `__tests__/`, `fixture/`, `fixtures/` or `__fixtures__/` folder.
+
+| Rule | Fails when | Fix |
+| --- | --- | --- |
+| `client-data/listed` | A file that `client-data` does not list uses `useSWR` from its app's `src/lib/swr.ts`, through a named, namespace or aliased import, a re-export or a local that holds it. The template's former names `useServerData` and `useServerSeeded` count too, and so do `useSWR` imported from `swr` itself and the hook of `swr/immutable`. The check resolves each import to its file, so a different hook that is also named `useSWR` passes. `useSWRInfinite` needs no entry. | Read the data in a Server Component, and write through a Server Action that refreshes the cache. List the file only when the browser must load the data. |
+| `client-data/no-client-fetch` | A file whose directive prologue holds `"use client"`, and that `client-data` does not list, reads the global `fetch` or `XMLHttpRequest`, also through `window` or `globalThis`, a destructured or aliased local, or passed as a value, or imports a value from `ky` or `axios`. It also fails when that file imports, statically or with `import()`, a module that an `api-modules` glob matches, or a module without a directive that uses one of these transports or imports one of these modules at any depth, such as a `*.browser.ts` wrapper. The walk stops at a `"use server"` file, whose Server Actions a client may call, at a `"use client"` file, which the check reads on its own, and at a listed file. Imports resolve as `boundaries` resolves them, tsconfig `paths` included. A type-only import and a local named `fetch` pass. | Pass the data down as props from a Server Component, and send writes through a Server Action. |
+| `client-data/config` | A `client-data` entry names a file that git does not track or an app folder that holds no tracked file, or `api-modules` is empty while the repository has a Next app. | Remove or fix the entry, and list the app's API modules in `api-modules`. |
+
+Each entry in `client-data` gives one reason:
+
+| Reason | When |
+| --- | --- |
+| `pages` | The user pages through the data in the browser. |
+| `live` | The data changes without navigation: polling, a live status, search as you type. |
+| `client-state` | The request depends on client-only state that does not belong in the URL. |
+| `unreachable` | The Next server cannot reach the data, such as a session whose cookie lives on another host. |
+
+```json
+{
+  "api-modules": ["apps/web/src/api/**"],
+  "client-data": [
+    { "file": "apps/web/src/search/results.tsx", "reason": "live" },
+    { "app": "apps/admin", "reason": "unreachable" }
+  ]
+}
+```
+
+Load data on the server this way:
+
+1. A page or layout never awaits data at its top. It starts each request early, in parallel, without `await`.
+2. A Server Component that needs data is a small async component. It awaits its own data, and its parent renders it inside `<Suspense fallback>` where the data shows.
+3. A Client Component that needs data takes the unawaited promise as a prop from the server and reads it with React's `use()` inside `<Suspense>`. The promise must come from the server or a cached function. A promise created in a client render is new on every render, so the component suspends forever.
+4. Each `<Suspense>` boundary sits inside an error boundary, such as the segment's `error.tsx`.
+5. Under Next 16 `cacheComponents`, uncached data outside `<Suspense>` already fails the build.
+
+```tsx
+export default function Page({ params }: { params: Promise<{ id: string }> }) {
+  const orders = params.then(({ id }) => getOrders(id));
+  return (
+    <Suspense fallback={<OrdersSkeleton />}>
+      <Orders orders={orders} />
+    </Suspense>
+  );
+}
+```
+
+An entry names one `file` by its exact path, or a whole `app` folder. Only an app with no Server Components, such as a Vite app, goes in whole, and its reason must be `unreachable`. Any other reason, or a glob, fails every command.
+
+The check cannot verify these, so review must:
+
+- A listed reason is true. The reviewer reads the entry and judges it.
+- A `use cache` function keys per-user data by the user. Review requires a test in which two users call it and neither sees the other's data.
+- Two independent requests run one after the other, such as two `await`s in one async component where neither needs the other. Review asks to start both before awaiting either.
+
+A module that imports an API module counts as one, so a client file that imports any export from it fails, even one that loads nothing. Import the other export from its own file.
+
+`client-data` keeps a baseline, one group per rule. To adopt it, add `client-data` to `pending` in the pull request that bumps the pin to 0.14.13. That bump moves `react/no-client-fetch` out of `react`, so the run rewrites `.standard/baselines/react.json` without those entries and reports each as moved to `client-data`; commit it. In a later pull request, set `api-modules`, list the files that must load data in the browser, remove `client-data` from `pending` and run `standard check client-data --init`. `baseline-growth` then keeps the baseline from growing. As each area moves to the server its entries leave the baseline, and the run deletes the file once the last one goes.
 
 `no-comments` fails a comment in source. A name, a test name or a type carries the why. A decision that an agent would otherwise undo goes under a heading in a doc, and a comment points at the doc. The check reads every `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs` and `.astro` file that git tracks outside `node_modules`, `.d.ts` files included. It reads an `.astro` component's frontmatter and scripts as `banned` does, and the code in its markup expressions and attribute expressions through the Astro compiler, so a comment in any of them is judged like a comment in a `.ts` file. An HTML comment in the markup always fails, since it ships to every visitor; that includes conditional and bogus comments such as `<?x?>`. Markup text, `is:raw` content and a decoded quoted `set:html` value reach the browser as written, so the check parses each with the parse5 HTML parser inside the elements around it, as a browser without JavaScript does, and fails each comment the parser finds. So `<![CDATA[ ]]>` in SVG or MathML is text and passes, a comment in an SVG `<title>` or `<style>` fails, and `<!--` in an HTML `<title>`, `<textarea>` or `<style>` is text and passes. Text in a script a browser does not run, such as `application/ld+json`, and in an attribute string is not markup, so a comment-like run of characters there passes. It has no settings. These comments pass:
 
@@ -438,4 +496,4 @@ mkdir -p .standard && git mv standard.json .standard/config.json
 }
 ```
 
-`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticket-prefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one. `boundaries` holds the `modules` and `forbid` rules of the `boundaries` check.
+`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticket-prefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one. `boundaries` holds the `modules` and `forbid` rules of the `boundaries` check. `client-data` and `api-modules` configure the `client-data` check.

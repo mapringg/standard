@@ -74,7 +74,7 @@ async function runCheck(check, repo, scope, mode, checks) {
         return { check: name, outcome: "ran", failed: findings.length > 0, findings, message: findings.length === 0 ? "OK" : "" };
       }
       const shown = `${BASELINES}/${name}.json`;
-      const verdict = ratchet({ check: name, path: join(repo.root, shown), shown, findings, mode });
+      const verdict = ratchet({ check: name, path: join(repo.root, shown), shown, findings, mode, moved: check.moved ?? {} });
       return { check: name, outcome: "ran", findings: [], ...verdict };
     }
   }

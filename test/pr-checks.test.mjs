@@ -280,6 +280,15 @@ test("baseline-growth lets a version bump stage only the checks that version add
   assert.equal(status, 1);
 });
 
+test("baseline-growth lets the bump to 0.14.13 stage client-data, so a repo can start its baseline in a later PR", (t) => {
+  const { stdout, status } = checkGrowth(t, {
+    base: pinned("0.14.12"),
+    head: { ...pinned("0.14.13"), ".standard/config.json": { pending: ["client-data"] } },
+  });
+  assert.equal(stdout.trim(), "baseline-growth: OK (#123)");
+  assert.equal(status, 0);
+});
+
 test("baseline-growth lets the PR that first installs the standard list anything as pending", (t) => {
   const { stdout, status } = checkGrowth(t, {
     head: { ...pinned("0.2.0"), ".standard/config.json": { pending: ["commit-subject", "pr-body"] } },
@@ -412,6 +421,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "boundaries: skipped, git tracks no JavaScript or TypeScript source",
       "banned: OK",
       "react: skipped, no tracked package.json declares react",
+      "client-data: skipped, no tracked package.json declares react",
       "no-comments: OK",
     ].join("\n"),
   );

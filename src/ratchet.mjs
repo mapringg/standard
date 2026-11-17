@@ -92,9 +92,10 @@ function total(counts) {
  * @param {Finding[]} input.findings
  * @param {Baseline | null} input.baseline Null when the file does not exist.
  * @param {Mode} input.mode
+ * @param {Readonly<Record<string, string>>} input.moved The check that now finds each moved group.
  * @returns {{ failed: boolean, lines: string[], write?: Baseline | null }} `write` is the baseline to store; null deletes the file.
  */
-function verdict({ check, shown, findings, baseline, mode }) {
+function verdict({ check, shown, findings, baseline, mode, moved }) {
   const fixes = new Map();
   const groups = new Map();
   for (const finding of findings) {
@@ -173,7 +174,7 @@ function verdict({ check, shown, findings, baseline, mode }) {
   if (stale.length > 0) {
     const staleLines = stale.map(
       ({ key, found: count }) =>
-        `  ${groups.get(key)} ${key}: ${count === 0 ? "fixed" : `${count} left`}`,
+        `  ${groups.get(key)} ${key}: ${count > 0 ? `${count} left` : Object.hasOwn(moved, groups.get(key)) ? `moved to ${moved[groups.get(key)]}` : "fixed"}`,
     );
     const next = toBaseline(kept, groups);
     return {
@@ -181,7 +182,7 @@ function verdict({ check, shown, findings, baseline, mode }) {
       lines: [
         next
           ? `${stale.length} baseline entries were fixed or moved, so this run rewrote ${shown} to match the code. Commit it with this change:`
-          : `every finding in ${shown} is fixed, so this run deleted it. Commit the deletion with this change; the check now allows none:`,
+          : `every finding in ${shown} is ${staleLines.some((line) => line.includes(": moved to ")) ? "fixed or moved to another check" : "fixed"}, so this run deleted it. Commit the deletion with this change; the check now allows none:`,
         ...staleLines,
       ],
       write: next,
@@ -197,11 +198,12 @@ function verdict({ check, shown, findings, baseline, mode }) {
  * @param {string} input.shown
  * @param {Finding[]} input.findings
  * @param {Mode} input.mode
+ * @param {Readonly<Record<string, string>>} [input.moved]
  * @returns {{ failed: boolean, message: string }}
  */
-export function ratchet({ check, path, shown, findings, mode }) {
+export function ratchet({ check, path, shown, findings, mode, moved = {} }) {
   const baseline = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
-  const { failed, lines, write } = verdict({ check, shown, findings, baseline, mode });
+  const { failed, lines, write } = verdict({ check, shown, findings, baseline, mode, moved });
   if (write === null) rmSync(path, { force: true });
   else if (write) {
     mkdirSync(dirname(path), { recursive: true });

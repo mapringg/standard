@@ -15,10 +15,10 @@ import { parseSource, sourceFiles } from "./sources.mjs";
  * @typedef {{ space: "module" | "global", path: string, kind: "import" | "type" | "read" | "bind", line: number } | { space: "module" | "global", path: string, kind: "call", line: number, call: Call }} Use
  *
  * `members` holds the lines of each static property name read on any object, by member access or destructuring.
- * `client` is true when the directive prologue holds "use client".
+ * `client` is true when the directive prologue holds "use client", and `server` when it holds "use server".
  * `exports` holds each value the file exports that comes from outside it: `vitest#vi` for `export { vi } from "vitest"` or a local that holds vi, and the module itself for `export * from "vitest"`.
  * @typedef {{ space: "module" | "global", path: string, line: number }} Export
- * @typedef {{ path: string, uses: readonly Use[], exports: readonly Export[], members: ReadonlyMap<string, readonly number[]>, client: boolean }} Parsed
+ * @typedef {{ path: string, uses: readonly Use[], exports: readonly Export[], members: ReadonlyMap<string, readonly number[]>, client: boolean, server: boolean }} Parsed
  * @typedef {Parsed | { path: string, error: string }} FileFacts
  *
  * What a chain names so far, and what a binding holds: an import, a local that a static chain initialized, or a const that holds a constant
@@ -420,7 +420,8 @@ function factsOf(path, text) {
     const use = { space: found.space, path: found.path, line };
     return [call ? { ...use, kind: /** @type {const} */ ("call"), call } : { ...use, kind: /** @type {Exclude<Use["kind"], "call">} */ (kind) }];
   });
-  return { path, uses, exports, members, client: program.body.some((/** @type {Node} */ node) => node.directive === "use client") };
+  const directive = (/** @type {string} */ name) => program.body.some((/** @type {Node} */ node) => node.directive === name);
+  return { path, uses, exports, members, client: directive("use client"), server: directive("use server") };
 }
 
 /** banned and react read the same repo in one run, so each parses it once. */

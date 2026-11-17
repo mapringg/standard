@@ -235,27 +235,38 @@ test("banned catches a banned export through a longer chain such as .call", (t) 
 
 const TEST_CACHE_FIX = "SWRTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useSWR from src/lib/swr.ts on the global cache when the data must load in the client.";
 
-test("banned fails SWRTestCache and its former names outside test files, and passes them in tests", (t) => {
-  fails(
-    t,
-    [],
-    {
-      "apps/web/src/app/layout.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const Layout = SWRTestCache;\n',
-      "apps/web/src/app/page.tsx": 'import * as data from "../lib/swr.ts";\nexport const page = <data.SwrScope />;\n',
-      "apps/web/src/lib/index.ts": 'export { ServerDataTestCache } from "./swr";\n',
-      "apps/web/src/lib/swr.ts": "export function SWRTestCache() {\n  return null;\n}\n",
-      "apps/web/src/app/session.tsx": 'import { useSWR } from "@/lib/swr";\nexport const use = useSWR;\n',
-      "apps/web/src/app/page.test.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const a = SWRTestCache;\n',
-      "apps/web/src/app/dialog.chromium.test.tsx": 'import { SwrScope } from "@/lib/swr";\nexport const a = SwrScope;\n',
-      "apps/web/src/app/page.stories.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const a = SWRTestCache;\n',
-      "apps/web/test/render.tsx": 'import { SWRTestCache } from "../src/lib/swr";\nexport const a = SWRTestCache;\n',
-      "apps/web/src/__tests__/render.tsx": 'import { SWRTestCache } from "../lib/swr";\nexport const a = SWRTestCache;\n',
-      "apps/web/src/fixtures/render.tsx": 'import { SWRTestCache } from "../lib/swr";\nexport const a = SWRTestCache;\n',
-    },
-    `apps/web/src/app/layout.tsx SWRTestCache: apps/web/src/app/layout.tsx uses SWRTestCache on lines 1, 2. ${TEST_CACHE_FIX}`,
-    `apps/web/src/app/page.tsx SwrScope: apps/web/src/app/page.tsx uses SwrScope on line 2. ${TEST_CACHE_FIX}`,
-    `apps/web/src/lib/index.ts ServerDataTestCache: apps/web/src/lib/index.ts uses ServerDataTestCache on line 1. ${TEST_CACHE_FIX}`,
+test("banned fails SWRTestCache and its former names outside test files, wrappers and the timer template included, and passes them in tests", (t) => {
+  const cwd = tempRepo(t, { "effect-wrappers": [{ file: "apps/web/src/app/use-session.ts", reason: "Subscribes to the session store." }] });
+  write(cwd, {
+    "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } },
+    "apps/web/src/app/use-session.ts": 'import { SWRTestCache } from "@/lib/swr";\nexport const Session = SWRTestCache;\n',
+    "apps/web/src/lib/timer.ts": 'import { SwrScope } from "./swr";\nexport const Timer = SwrScope;\n',
+    "apps/web/src/app/layout.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const Layout = SWRTestCache;\n',
+    "apps/web/src/app/page.tsx": 'import * as data from "../lib/swr.ts";\nexport const page = <data.SwrScope />;\n',
+    "apps/web/src/lib/index.ts": 'export { ServerDataTestCache } from "./swr";\n',
+    "apps/web/src/lib/swr.ts": "export function SWRTestCache() {\n  return null;\n}\n",
+    "apps/web/src/app/session.tsx": 'import { useSWR } from "@/lib/swr";\nexport const use = useSWR;\n',
+    "apps/web/src/app/page.test.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const a = SWRTestCache;\n',
+    "apps/web/src/app/dialog.chromium.test.tsx": 'import { SwrScope } from "@/lib/swr";\nexport const a = SwrScope;\n',
+    "apps/web/src/app/page.stories.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const a = SWRTestCache;\n',
+    "apps/web/test/render.tsx": 'import { SWRTestCache } from "../src/lib/swr";\nexport const a = SWRTestCache;\n',
+    "apps/web/src/__tests__/render.tsx": 'import { SWRTestCache } from "../lib/swr";\nexport const a = SWRTestCache;\n',
+    "apps/web/src/fixtures/render.tsx": 'import { SWRTestCache } from "../lib/swr";\nexport const a = SWRTestCache;\n',
+  });
+  git(cwd, "add", "-A");
+  const { stdout, stderr, status } = standard(cwd, ["check", "banned"]);
+  assert.equal(stderr, "");
+  assert.equal(
+    stdout,
+    [
+      `apps/web/src/app/layout.tsx SWRTestCache: apps/web/src/app/layout.tsx uses SWRTestCache on lines 1, 2. ${TEST_CACHE_FIX}`,
+      `apps/web/src/app/page.tsx SwrScope: apps/web/src/app/page.tsx uses SwrScope on line 2. ${TEST_CACHE_FIX}`,
+      `apps/web/src/app/use-session.ts SWRTestCache: apps/web/src/app/use-session.ts uses SWRTestCache on lines 1, 2. ${TEST_CACHE_FIX}`,
+      `apps/web/src/lib/index.ts ServerDataTestCache: apps/web/src/lib/index.ts uses ServerDataTestCache on line 1. ${TEST_CACHE_FIX}`,
+      `apps/web/src/lib/timer.ts SwrScope: apps/web/src/lib/timer.ts uses SwrScope on lines 1, 2. ${TEST_CACHE_FIX}`,
+    ].map((line) => `banned: ${line}\n`).join(""),
   );
+  assert.equal(status, 1);
 });
 
 test("banned passes a repository with no banned uses and no restricted oxlint rules", (t) => {

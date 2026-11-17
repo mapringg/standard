@@ -8,7 +8,6 @@ import { git, standard, tempRepo, write } from "./helpers.mjs";
 const NEXT_APP = { "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } } };
 const STATE_FIX = "Hold its state in one useReducer whose state is a union with a status field.";
 const FLAG_FIX = 'Model the request as a status in a useReducer state union, such as { status: "loading" } | { status: "done", data }.';
-const FETCH_FIX = "Fetch in a server component, or through useSWR or useSWRInfinite from src/lib/swr.ts when the data must load in the client.";
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
 const SWR_FIX = "Import useSWR or useSWRInfinite from src/lib/swr.ts of its app, copied from node_modules/@mapringg/standard/templates/swr.ts, which turns off focus and reconnect revalidation.";
@@ -102,17 +101,8 @@ test("react fails a useState that holds a loading or error flag", (t) => {
   );
 });
 
-test("react fails fetch in a file whose directive prologue holds use client, in any form", (t) => {
-  fails(
-    t,
-    {
-      "apps/web/src/client.tsx": '"use client";\nexport async function load() {\n  await fetch("/a");\n  await globalThis.fetch("/b");\n  return useSWR("/c", fetch);\n}\n',
-      "apps/web/src/server.tsx": 'export const load = () => fetch("/a");\n',
-      "apps/web/src/late.tsx": 'export const load = () => fetch("/a");\n"use client";\n',
-      "apps/web/src/param.tsx": '"use client";\nexport const load = (fetch: (url: string) => Promise<unknown>) => fetch("/a");\n',
-    },
-    `apps/web/src/client.tsx uses fetch on lines 3, 4, 5, and "use client" runs it in the browser. ${FETCH_FIX}`,
-  );
+test("react leaves fetch in a use client file to client-data", (t) => {
+  passes(t, { "apps/web/src/client.tsx": '"use client";\nexport async function load() {\n  await fetch("/a");\n  await globalThis.fetch("/b");\n}\n' });
 });
 
 test("react fails a value import of swr outside each React app's src/lib/swr.ts, Next or Vite, and passes type-only imports", (t) => {
@@ -120,7 +110,7 @@ test("react fails a value import of swr outside each React app's src/lib/swr.ts,
     t,
     {
       "apps/web/src/lib/swr.ts": 'import useSWR from "swr";\nimport useSWRInfinite from "swr/infinite";\nexport { useSWR, useSWRInfinite };\n',
-      "apps/web/src/feed.tsx": 'import useSWR from "swr";\nimport useSWRInfinite from "swr/infinite";\nexport { useSWR, useSWRInfinite };\n',
+      "apps/web/src/feed.tsx": 'import useSWR from "swr";\nimport useSWRInfinite from "swr/infinite";\nimport useSWRImmutable from "swr/immutable";\nexport { useSWR, useSWRInfinite, useSWRImmutable };\n',
       "apps/web/src/types.ts": 'import type { SWRConfiguration } from "swr";\nimport { type Key } from "swr";\nexport type T = [SWRConfiguration, Key];\n',
       "packages/ui/package.json": { dependencies: { react: "19.0.0" } },
       "packages/ui/src/lib/swr.ts": 'export { SWRConfig } from "swr";\n',
@@ -130,6 +120,7 @@ test("react fails a value import of swr outside each React app's src/lib/swr.ts,
     },
     `apps/liff/src/app.tsx imports swr on line 1. ${SWR_FIX}`,
     `apps/web/src/feed.tsx imports swr on line 1. ${SWR_FIX}`,
+    `apps/web/src/feed.tsx imports swr/immutable on line 3. ${SWR_FIX}`,
     `apps/web/src/feed.tsx imports swr/infinite on line 2. ${SWR_FIX}`,
     `packages/ui/src/lib/swr.ts imports swr on line 1. ${SWR_FIX}`,
   );
@@ -210,5 +201,15 @@ test("react fails a useReducer state whose members share a status", (t) => {
   });
   const members = '{ status: "ready"; a: string; } | { status: "ready"; b: number; } | { status: "idle"; }';
   assert.equal(stdout, `react: 1 new findings.\n  src/twins.tsx: A's useReducer on line 5 holds ${members}, whose members share status "ready". ${UNION_FIX}\n${NO_BASELINE}\n`);
+  assert.equal(status, 1);
+});
+
+test("react reports a baseline entry whose rule moved to another check as moved, not fixed", (t) => {
+  const { stdout, status } = react(t, {
+    ".standard/config.json": { pending: ["client-data"] },
+    "apps/web/src/a.tsx": '"use client";\nexport const a = () => fetch("/x");\n',
+    ".standard/baselines/react.json": { "react/no-client-fetch": ["apps/web/src/a.tsx fetch"] },
+  });
+  assert.equal(stdout, "react: every finding in .standard/baselines/react.json is fixed or moved to another check, so this run deleted it. Commit the deletion with this change; the check now allows none:\n  react/no-client-fetch apps/web/src/a.tsx fetch: moved to client-data\n");
   assert.equal(status, 1);
 });
