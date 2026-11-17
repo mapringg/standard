@@ -312,3 +312,27 @@ test("banned skips Astro markup, comments, styles and data scripts, and reads an
     "src/components/Card.astro console: src/components/Card.astro uses console on line 7. Use the logger.",
   );
 });
+
+test("banned reads Astro frontmatter past a fence line in a string, skips script text in markup strings, and reads define:vars scripts with escaped quotes", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/fence.astro": ["---", "const example = `one", "---", "two`;", "console.log(example);", "---", "<p>{example}</p>", ""].join("\n"),
+      "src/pages/strings.astro": [
+        '<p>{"<script>not javascript</script>"}</p>',
+        '<div data-example="<script>not javascript</script>">hi</div>',
+        "{Astro.props.debug && <script>console.debug(\"nested\")</script>}",
+        "",
+      ].join("\n"),
+      "src/pages/vars.astro": [
+        "<script define:vars={{ label: 'It\\'s ready' }}>console.log(label);</script>",
+        '<script define:vars={{ label: "Say \\"hi\\"" }}>console.log(label);</script>',
+        "",
+      ].join("\n"),
+    },
+    "src/pages/fence.astro console: src/pages/fence.astro uses console on line 5. Use the logger.",
+    "src/pages/strings.astro console: src/pages/strings.astro uses console on line 3. Use the logger.",
+    "src/pages/vars.astro console: src/pages/vars.astro uses console on lines 1, 2. Use the logger.",
+  );
+});

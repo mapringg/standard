@@ -183,3 +183,23 @@ test("no-comments fails comments in an Astro component's frontmatter and scripts
     `src/pages/index.astro comment: src/pages/index.astro has comments on lines 2, 8. ${COMMENT}`,
   );
 });
+
+test("no-comments reads Astro frontmatter past a fence line in a string, and skips script text in markup strings", (t) => {
+  fails(
+    t,
+    {
+      "src/pages/index.astro": [
+        "---",
+        "const example = `one",
+        "---",
+        "two`;",
+        "// after the string",
+        "---",
+        '<p>{"<script>not javascript</script>"}</p>',
+        '<div data-example="<script>not javascript</script>">{example}</div>',
+        "",
+      ].join("\n"),
+    },
+    `src/pages/index.astro comment: src/pages/index.astro has a comment on line 5. ${COMMENT}`,
+  );
+});
