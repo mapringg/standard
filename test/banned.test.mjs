@@ -233,26 +233,26 @@ test("banned catches a banned export through a longer chain such as .call", (t) 
   );
 });
 
-const TEST_CACHE_FIX = "ServerDataTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useServerData on the global cache when the data must load in the client.";
+const TEST_CACHE_FIX = "SWRTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useSWR from src/lib/swr.ts on the global cache when the data must load in the client.";
 
-test("banned fails ServerDataTestCache and SwrScope outside test files, and passes them in tests", (t) => {
+test("banned fails SWRTestCache and its former names outside test files, and passes them in tests", (t) => {
   fails(
     t,
     [],
     {
-      "apps/web/src/app/layout.tsx": 'import { ServerDataTestCache } from "@/lib/swr";\nexport const Layout = ServerDataTestCache;\n',
+      "apps/web/src/app/layout.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const Layout = SWRTestCache;\n',
       "apps/web/src/app/page.tsx": 'import * as data from "../lib/swr.ts";\nexport const page = <data.SwrScope />;\n',
       "apps/web/src/lib/index.ts": 'export { ServerDataTestCache } from "./swr";\n',
-      "apps/web/src/lib/swr.ts": "export function ServerDataTestCache() {\n  return null;\n}\n",
-      "apps/web/src/app/session.tsx": 'import { useServerData } from "@/lib/swr";\nexport const use = useServerData;\n',
-      "apps/web/src/app/page.test.tsx": 'import { ServerDataTestCache } from "@/lib/swr";\nexport const a = ServerDataTestCache;\n',
+      "apps/web/src/lib/swr.ts": "export function SWRTestCache() {\n  return null;\n}\n",
+      "apps/web/src/app/session.tsx": 'import { useSWR } from "@/lib/swr";\nexport const use = useSWR;\n',
+      "apps/web/src/app/page.test.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const a = SWRTestCache;\n',
       "apps/web/src/app/dialog.chromium.test.tsx": 'import { SwrScope } from "@/lib/swr";\nexport const a = SwrScope;\n',
-      "apps/web/src/app/page.stories.tsx": 'import { ServerDataTestCache } from "@/lib/swr";\nexport const a = ServerDataTestCache;\n',
-      "apps/web/test/render.tsx": 'import { ServerDataTestCache } from "../src/lib/swr";\nexport const a = ServerDataTestCache;\n',
-      "apps/web/src/__tests__/render.tsx": 'import { ServerDataTestCache } from "../lib/swr";\nexport const a = ServerDataTestCache;\n',
-      "apps/web/src/fixtures/render.tsx": 'import { ServerDataTestCache } from "../lib/swr";\nexport const a = ServerDataTestCache;\n',
+      "apps/web/src/app/page.stories.tsx": 'import { SWRTestCache } from "@/lib/swr";\nexport const a = SWRTestCache;\n',
+      "apps/web/test/render.tsx": 'import { SWRTestCache } from "../src/lib/swr";\nexport const a = SWRTestCache;\n',
+      "apps/web/src/__tests__/render.tsx": 'import { SWRTestCache } from "../lib/swr";\nexport const a = SWRTestCache;\n',
+      "apps/web/src/fixtures/render.tsx": 'import { SWRTestCache } from "../lib/swr";\nexport const a = SWRTestCache;\n',
     },
-    `apps/web/src/app/layout.tsx ServerDataTestCache: apps/web/src/app/layout.tsx uses ServerDataTestCache on lines 1, 2. ${TEST_CACHE_FIX}`,
+    `apps/web/src/app/layout.tsx SWRTestCache: apps/web/src/app/layout.tsx uses SWRTestCache on lines 1, 2. ${TEST_CACHE_FIX}`,
     `apps/web/src/app/page.tsx SwrScope: apps/web/src/app/page.tsx uses SwrScope on line 2. ${TEST_CACHE_FIX}`,
     `apps/web/src/lib/index.ts ServerDataTestCache: apps/web/src/lib/index.ts uses ServerDataTestCache on line 1. ${TEST_CACHE_FIX}`,
   );

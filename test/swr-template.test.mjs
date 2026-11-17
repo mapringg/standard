@@ -11,8 +11,14 @@ const PACKAGE = join(import.meta.dirname, "..");
 const USAGE = `"use client";
 
 import type { ReactNode } from "react";
+import useSWRBase, { type SWRResponse } from "swr";
+import useSWRInfiniteBase, { type SWRInfiniteResponse } from "swr/infinite";
 
-import { ServerDataTestCache, useServerData, useServerDataPages } from "./lib/swr.ts";
+import { SWRTestCache, useSWR, useSWRInfinite } from "./lib/swr.ts";
+
+type Same<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+export const signatures: [Same<typeof useSWR, typeof useSWRBase>, Same<typeof useSWRInfinite, typeof useSWRInfiniteBase>] = [true, true];
 
 type Item = { id: string; name: string };
 type Page = { items: readonly Item[]; next: string | null };
@@ -21,56 +27,24 @@ declare function loadItem(key: readonly ["item", string]): Promise<Item>;
 declare function loadPage(key: readonly ["items", string | null]): Promise<Page>;
 
 export function useItem(id: string | null, seed: Item) {
-  const item = useServerData(id === null ? null : (["item", id] as const), loadItem, {
-    fallbackData: seed,
-    refreshInterval: 5000,
-    revalidateOnFocus: false,
-    revalidateOnReconnect: true,
-    keepPreviousData: true,
-  });
-  const name: string = item.data.name;
-  const failure: Error | undefined = item.error;
-  const busy: boolean = item.validating;
-  const rename = (next: string) => item.replace((current) => ({ ...current, name: next }), { revalidate: true });
-  return { name, failure, busy, rename, refresh: item.revalidate };
+  const item: SWRResponse<Item, Error> = useSWR<Item, Error>(id === null ? null : (["item", id] as const), loadItem, { fallbackData: seed, keepPreviousData: true });
+  const { data, error, isLoading, isValidating, mutate } = item;
+  const rename = (name: string) => mutate((current) => (current ? { ...current, name } : current), { revalidate: false });
+  return { data, error, busy: isLoading || isValidating, rename };
 }
 
-export function useItems(seed: readonly Page[]) {
-  const list = useServerDataPages((index, previous: Page | null) => (index > 0 && previous?.next == null ? null : (["items", previous?.next ?? null] as const)), loadPage, {
-    fallbackData: seed,
-    fresh: true,
-    refreshInterval: 30_000,
-    revalidateOnFocus: true,
-  });
-  const names: string[] = list.pages.flatMap((page) => page.items.map((item) => item.name));
-  const flags: boolean[] = [list.validating, list.loadingMore, list.done];
-  const failure: Error | undefined = list.error;
-  const drop = (id: string) => list.replace((pages) => pages.map((page) => ({ ...page, items: page.items.filter((item) => item.id !== id) })));
-  return { names, flags, failure, drop, more: list.loadMore, restart: list.restart, refresh: list.revalidate };
-}
-
-export function useExpensive(id: string) {
-  const item = useServerData(["item", id] as const, loadItem, { fallbackData: null, reuseCache: true, revalidateOnFocus: false });
-  const list = useServerDataPages(() => ["items", null] as const, loadPage, { fallbackData: [], reuseCache: true });
-  return [item, list];
-}
-
-export function useUnseeded(id: string) {
-  // @ts-expect-error fallbackData is required.
-  const item = useServerData(["item", id] as const, loadItem, { refreshInterval: 5000 });
-  // @ts-expect-error fallbackData is required.
-  const list = useServerDataPages(() => ["items", null] as const, loadPage, {});
-  // @ts-expect-error The wrapper fixes every setting outside Revalidation.
-  const eager = useServerData(["item", id] as const, loadItem, { fallbackData: { id, name: "" }, revalidateOnMount: true });
-  return [item, list, eager];
+export function useItems(seed: Page) {
+  const list: SWRInfiniteResponse<Page, Error> = useSWRInfinite<Page, Error>((index, previous: Page | null) => (index > 0 && previous?.next == null ? null : (["items", previous?.next ?? null] as const)), loadPage, { fallbackData: [seed], revalidateOnFocus: true });
+  const { data, size, setSize, mutate } = list;
+  return { pages: data ?? [seed], more: () => setSize(size + 1), restart: () => setSize(1), refresh: () => mutate() };
 }
 
 export function Scope({ children }: { children: ReactNode }) {
-  return <ServerDataTestCache>{children}</ServerDataTestCache>;
+  return <SWRTestCache>{children}</SWRTestCache>;
 }
 `;
 
-test("the swr template passes the strict base and requires fallbackData", (t) => {
+test("the swr template passes the strict base and keeps the signatures of swr", (t) => {
   const root = tempDir(t, "swr");
   write(root, {
     "tsconfig.json": {

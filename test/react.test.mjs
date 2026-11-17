@@ -8,10 +8,10 @@ import { git, standard, tempRepo, write } from "./helpers.mjs";
 const NEXT_APP = { "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } } };
 const STATE_FIX = "Hold its state in one useReducer whose state is a union with a status field.";
 const FLAG_FIX = 'Model the request as a status in a useReducer state union, such as { status: "loading" } | { status: "done", data }.';
-const FETCH_FIX = "Fetch in a server component, or through useServerData or useServerDataPages from src/lib/swr.ts when the data needs pagination or revalidation.";
+const FETCH_FIX = "Fetch in a server component, or through useSWR or useSWRInfinite from src/lib/swr.ts when the data must load in the client.";
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
-const SWR_FIX = "Use useServerData or useServerDataPages from src/lib/swr.ts of its app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.";
+const SWR_FIX = "Import useSWR or useSWRInfinite from src/lib/swr.ts of its app, copied from node_modules/@mapringg/standard/templates/swr.ts, which turns off focus and reconnect revalidation.";
 
 function react(t, files, ...flags) {
   const cwd = tempRepo(t);
