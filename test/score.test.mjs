@@ -144,6 +144,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  client-data      n/a",
       "  route-await      n/a",
       "  use-promise      n/a",
+      "  suspense-errors  n/a",
       "  no-comments      on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
@@ -154,6 +155,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       `client-data in ${name}: n/a, no tracked package.json declares react`,
       `route-await in ${name}: n/a, no tracked package.json declares next`,
       `use-promise in ${name}: n/a, no tracked package.json declares react`,
+      `suspense-errors in ${name}: n/a, no tracked package.json declares next`,
       "",
       `${name}: 20 of 21 pass`,
       "",
@@ -200,7 +202,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, no-comments.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, suspense-errors, no-comments.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -286,6 +288,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     "client-data": "n/a",
     "route-await": "n/a",
     "use-promise": "n/a",
+    "suspense-errors": "n/a",
     "no-comments": "absent",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 18]);

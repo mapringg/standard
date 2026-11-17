@@ -70,7 +70,7 @@ test("a pending check does not run, in a hook or in CI", (t) => {
 
 test("the config fails on a key or a check this version does not know", (t) => {
   const cases = [
-    [{ lint: {} }, /\.standard\/config\.json has an unknown key "lint"\. Known keys: api-modules, banned, boundaries, cached-modules, client-data, effect-wrappers, hooks, pending, pr\./],
+    [{ lint: {} }, /\.standard\/config\.json has an unknown key "lint"\. Known keys: api-modules, banned, boundaries, cached-modules, client-data, effect-wrappers, error-boundaries, hooks, pending, pr\./],
     [{ hooks: { "post-merge": [] } }, /unknown key "hooks\.post-merge"\. Known keys: hooks\.pre-commit, hooks\.pre-push\./],
     [{ hooks: { "pre-push": "pnpm test" } }, /hooks\.pre-push must be a list of non-empty strings/],
     [{ pending: ["commit-subjects"] }, /pending names "commit-subjects", which is not a check in this version/],
@@ -85,7 +85,7 @@ test("the config fails on a key or a check this version does not know", (t) => {
 test("check refuses an unknown name, an unknown flag, and a ratchet flag on a commit check", (t) => {
   const cwd = tempRepo(t);
   const cases = [
-    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, no-comments\./],
+    [["nope"], /standard check names "nope", which is not a check in this version\. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, suspense-errors, no-comments\./],
     [["--nope"], /Unexpected argument --nope\. Use --pr <number> or one of --init, --write, --prune\./],
     [["commit-subject", "--write"], /--write changes one baseline, so name exactly one tree check/],
   ];
