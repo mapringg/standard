@@ -38,7 +38,7 @@ const GLOBAL_MODULES = new Map([["import.meta.vitest", "vitest"]]);
 const WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "TSTypeAssertion", "ChainExpression"]);
 
 /** TypeScript nodes that hold a value expression. Every other TS node is a type, and the walk skips it. */
-const VALUE_TS = new Set([...WRAPPERS, "TSInstantiationExpression", "TSEnumDeclaration", "TSExportAssignment", "TSModuleDeclaration"]);
+const VALUE_TS = new Set([...WRAPPERS, "TSInstantiationExpression", "TSEnumDeclaration", "TSExportAssignment", "TSModuleDeclaration", "TSImportEqualsDeclaration"]);
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
@@ -82,7 +82,7 @@ function declared(statements) {
     const node = statement.type.startsWith("Export") && statement.declaration ? statement.declaration : statement;
     if (node.declare) return [];
     if (node.type === "VariableDeclaration") return node.declarations.flatMap((/** @type {Node} */ item) => names(item.id));
-    const named = ["FunctionDeclaration", "ClassDeclaration", "TSEnumDeclaration", "TSModuleDeclaration"].includes(node.type);
+    const named = ["FunctionDeclaration", "ClassDeclaration", "TSEnumDeclaration", "TSModuleDeclaration", "TSImportEqualsDeclaration"].includes(node.type);
     return named && node.id?.type === "Identifier" ? [node.id.name] : [];
   });
 }
@@ -228,11 +228,6 @@ function factsOf(path, text) {
   const top = new Map(declared(program.body).concat(vars(program.body)).map((name) => [name, /** @type {Later | null} */ (null)]));
   for (const node of /** @type {Node[]} */ (program.body)) {
     const typeOnly = node.importKind === "type" || node.exportKind === "type";
-    if (node.type === "TSImportEqualsDeclaration") {
-      const module = node.moduleReference.expression?.value ?? null;
-      if (module !== null) emit(now(moduleRef(module)), typeOnly ? "type" : "import", node);
-      top.set(node.id.name, module === null || typeOnly ? null : now(importRef({ module, imported: "*" })));
-    }
     if (!node.source) continue;
     const module = node.source.value;
     const specifiers = node.specifiers ?? [];
@@ -372,6 +367,7 @@ function factsOf(path, text) {
         return walk(node.attributes);
       case "TSEnumDeclaration": return walk(node.body.members.map((/** @type {Node} */ member) => member.initializer));
       case "TSModuleDeclaration": return walk(node.body?.body);
+      case "TSImportEqualsDeclaration": return void stack.findLast((scope) => scope.has(node.id.name))?.set(node.id.name, alias(node));
       default: return walk(Object.values(node));
     }
   };
@@ -384,6 +380,21 @@ function factsOf(path, text) {
     const ref = node.init ? refer(node.init, "bind") : null;
     const value = fixed && node.init && node.id.type === "Identifier" ? constant(node.init) : null;
     pattern(node.id, value ? later(() => ref?.() ?? valueRef(value())) : ref);
+  };
+
+  /** @type {(node: Node) => Later | null} What `import x = require("m")`, `import x = React` or `import x = React.useEffect` binds. A type-only alias binds no value. */
+  const alias = (node) => {
+    const reference = node.moduleReference;
+    const typeOnly = node.importKind === "type";
+    if (reference.type === "TSExternalModuleReference") {
+      emit(now(moduleRef(reference.expression.value)), typeOnly ? "type" : "import", node);
+      return typeOnly ? null : now(importRef({ module: reference.expression.value, imported: "*" }));
+    }
+    /** @type {(name: Node) => Later | null} */
+    const entity = (name) => (name.type === "TSQualifiedName" ? at(entity(name.left), () => name.right.name) : resolve(name.name));
+    const ref = typeOnly ? null : entity(reference);
+    emit(ref, "bind", node);
+    return ref;
   };
 
   /** @type {(node: unknown) => void} */
