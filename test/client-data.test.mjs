@@ -124,9 +124,9 @@ test("client-data fails fetch in any form and an API module import, direct, alia
     API,
     { "apps/web/src/save.tsx": CLIENT_FETCH, "apps/web/src/format.tsx": '"use client";\nimport { format } from "@/data/format";\nexport const View = () => format(1);\n' },
     `apps/web/src/save.tsx uses fetch on lines 6, 7, 9, 10, 11, 12, and "use client" runs it in the browser. ${FETCH_FIX}`,
-    `apps/web/src/save.tsx imports ./data on line 4, which reaches the API module apps/web/src/data/index.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/save.tsx imports ./data on line 4, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
     `apps/web/src/save.tsx imports @/api/users on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
-    `apps/web/src/save.tsx imports @/data/named on line 3, which reaches the API module apps/web/src/data/named.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/save.tsx imports @/data/named on line 3, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
   );
 });
 
@@ -194,5 +194,31 @@ test("client-data fails a dynamic import of an API module in a use client file",
     },
     `apps/web/src/lazy.tsx imports @/api/users on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
     `apps/web/src/then.tsx imports ../src/api/users on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+  );
+});
+
+test("client-data follows a use client file's imports through plain modules to an API module or fetch, and stops at use server, use client and listed files", (t) => {
+  const view = (from) => `"use client";\nimport { load } from "${from}";\nexport const View = () => load();\n`;
+  fails(
+    t,
+    { ...API, "client-data": [{ file: "apps/web/src/lib/listed.ts", reason: "live" }] },
+    {
+      "apps/web/src/features/users.browser.ts": 'import { getUser } from "@/api/users";\nexport const load = () => getUser();\n',
+      "apps/web/src/features/deep.ts": 'import { load as inner } from "./users.browser";\nexport const load = () => inner();\n',
+      "apps/web/src/lib/load.ts": 'export const load = () => fetch("/a");\n',
+      "apps/web/src/lib/actions.ts": '"use server";\nimport { getUser } from "@/api/users";\nexport async function load() {\n  await getUser();\n}\n',
+      "apps/web/src/lib/listed.ts": 'import { getUser } from "@/api/users";\nexport const load = () => getUser();\n',
+      "apps/web/src/lib/panel.tsx": '"use client";\nexport const load = () => fetch("/a");\n',
+      "apps/web/src/wrapped.tsx": view("@/features/users.browser"),
+      "apps/web/src/deep.tsx": view("./features/deep"),
+      "apps/web/src/fetched.tsx": view("@/lib/load"),
+      "apps/web/src/action.tsx": view("@/lib/actions"),
+      "apps/web/src/listed.tsx": view("@/lib/listed"),
+      "apps/web/src/nested.tsx": view("@/lib/panel"),
+    },
+    `apps/web/src/deep.tsx imports ./features/deep on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/fetched.tsx imports @/lib/load on line 2, which reaches fetch in apps/web/src/lib/load.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/lib/panel.tsx uses fetch on line 2, and "use client" runs it in the browser. ${FETCH_FIX}`,
+    `apps/web/src/wrapped.tsx imports @/features/users.browser on line 2, which reaches the API module apps/web/src/api/users.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
   );
 });
