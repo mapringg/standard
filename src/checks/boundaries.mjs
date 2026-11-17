@@ -8,6 +8,8 @@ import { projects, resolveAsset } from "./support/resolve.mjs";
 
 /**
  * @typedef {import("../repo.mjs").Repo} Repo
+ * @typedef {import("../config.mjs").Boundaries} Boundaries
+ * @typedef {import("../config.mjs").ModuleRule} ModuleRule
  * @typedef {import("./support/resolve.mjs").Mode} Mode
  *
  * @typedef {object} Workspace A folder with a tracked package.json, "." for the root.
@@ -27,13 +29,22 @@ import { projects, resolveAsset } from "./support/resolve.mjs";
  * @property {() => string | null} unaliased The repo file the specifier resolves to without tsconfig paths, as a package name resolves outside the project.
  *
  * @typedef {{ file: string, specifier: string, rule: string, fix: string }} Problem
- * @typedef {{ workspaces: readonly Workspace[] }} Context
+ * @typedef {{ workspaces: readonly Workspace[], boundaries: Boundaries }} Context
  * @typedef {{ name: string, check(edge: Edge, context: Context): string | null }} Rule
  */
 
 const SOURCE = /\.[cm]?[jt]sx?$/;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const DEPENDENCIES = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
+/**
+ * @param {string} path
+ * @param {readonly string[]} globs
+ * @returns {boolean}
+ */
+function matches(path, globs) {
+  return globs.some((glob) => posix.matchesGlob(path, glob));
+}
 
 /**
  * @param {string} path
@@ -92,6 +103,21 @@ function workspacesOf(repo) {
   return found.sort((a, b) => b.dir.split("/").length - a.dir.split("/").length);
 }
 
+/**
+ * @param {readonly ModuleRule[]} modules
+ * @param {string} path
+ * @returns {{ dir: string, rule: ModuleRule, open: boolean } | null} The innermost module that holds the path.
+ */
+function moduleOf(modules, path) {
+  for (const dir of folders(path)) {
+    for (const rule of modules) {
+      if (matches(dir, rule.open)) return { dir, rule, open: true };
+      if (matches(dir, rule.folders)) return { dir, rule, open: false };
+    }
+  }
+  return null;
+}
+
 /** @type {readonly Rule[]} */
 const RULES = [
   {
@@ -113,6 +139,28 @@ const RULES = [
         return `"${specifier}" reaches ${target} through tsconfig paths, but the exports of ${to.name} ${through}. Import a subpath its exports list, or add this one there.`;
       }
       return null;
+    },
+  },
+  {
+    name: "modules",
+    check({ file, target }, { workspaces, boundaries }) {
+      if (workspaceOf(workspaces, target) !== workspaceOf(workspaces, file)) return null;
+      const owner = moduleOf(boundaries.modules, target);
+      if (owner === null || owner.open || matches(file, owner.rule.except)) return null;
+      if (moduleOf(boundaries.modules, file)?.dir === owner.dir) return null;
+      const name = posix.basename(target, posix.extname(target));
+      if (posix.dirname(target) === owner.dir && owner.rule.entries.includes(name)) return null;
+      const entries = owner.rule.entries.map((entry) => `${owner.dir}/${entry}`).join(" or ");
+      return `${target} is inside the module ${owner.dir}. Import it through ${entries}, and export what you need there.`;
+    },
+  },
+  {
+    name: "forbid",
+    check({ file, target }, { boundaries }) {
+      const rule = boundaries.forbid.find(
+        (rule) => matches(file, rule.files) && !matches(file, rule.except) && matches(target, rule.imports),
+      );
+      return rule ? `${target} matches boundaries.forbid ${JSON.stringify(rule.imports.join(", "))}. ${rule.fix}` : null;
     },
   },
 ];
@@ -398,7 +446,7 @@ export async function scan(repo) {
   const root = realpathSync(repo.root);
   const files = sources(repo);
   const resolvers = await projects(root, repo.files("**/tsconfig.json").filter((path) => !path.split("/").includes("node_modules")), files);
-  const context = { workspaces: workspacesOf(repo) };
+  const context = { workspaces: workspacesOf(repo), boundaries: repo.config.boundaries };
   const workspaceNames = new Set(context.workspaces.flatMap(({ name }) => (name ? [name] : [])));
   const inRepo = (/** @type {string | null} */ path) => {
     if (path === null) return null;
@@ -471,7 +519,12 @@ export default {
   since: "0.11.0",
   subject: "tree",
   baseline: false,
-  retired: [],
+  retired: [
+    "packages/oxlint-plugin-*/rules/module-boundaries.ts",
+    "packages/oxlint-plugin-*/rules/module-boundaries.test.ts",
+    "packages/oxlint-plugin-*/rules/no-restricted-import-paths.ts",
+    "packages/oxlint-plugin-*/rules/no-restricted-import-paths.test.ts",
+  ],
   applies: (repo) =>
     sources(repo).length > 0 ? { on: true } : { on: false, because: "git tracks no JavaScript or TypeScript source" },
   async run(repo) {

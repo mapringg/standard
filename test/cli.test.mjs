@@ -70,7 +70,7 @@ test("a pending check does not run, in a hook or in CI", (t) => {
 
 test("the config fails on a key or a check this version does not know", (t) => {
   const cases = [
-    [{ lint: {} }, /\.standard\/config\.json has an unknown key "lint"\. Known keys: hooks, pending, pr\./],
+    [{ lint: {} }, /\.standard\/config\.json has an unknown key "lint"\. Known keys: boundaries, hooks, pending, pr\./],
     [{ hooks: { "post-merge": [] } }, /unknown key "hooks\.post-merge"\. Known keys: hooks\.pre-commit, hooks\.pre-push\./],
     [{ hooks: { "pre-push": "pnpm test" } }, /hooks\.pre-push must be a list of non-empty strings/],
     [{ pending: ["commit-subjects"] }, /pending names "commit-subjects", which is not a check in this version/],
@@ -317,7 +317,9 @@ test("the config names the kebab-case key for a camelCase key and lists the know
     [{ pr: { ticketPrefix: "ABC" } }, '"ticketPrefix" in .standard/config.json is camelCase; name it "ticket-prefix".\n'],
     [{ hooks: { preCommit: [] } }, '"preCommit" in .standard/config.json is camelCase; name it "pre-commit".\n'],
     [{ pr: { screenshots: { whenChanged: [] } } }, '"whenChanged" in .standard/config.json is camelCase; name it "when-changed". Known keys: pr.screenshots.when, pr.screenshots.uploader.\n'],
-    [{ boundaries: {} }, '.standard/config.json has an unknown key "boundaries". Known keys: hooks, pending, pr.\n'],
+    [{ boundaries: { zones: [] } }, '.standard/config.json has an unknown key "boundaries.zones". Known keys: boundaries.modules, boundaries.forbid.\n'],
+    [{ boundaries: { modules: [{ folders: ["src/*"], entries: ["index"], openFolders: [] }] } }, '"openFolders" in .standard/config.json is camelCase; name it "open-folders". Known keys: boundaries.modules[0].folders, boundaries.modules[0].entries, boundaries.modules[0].open, boundaries.modules[0].except.\n'],
+    [{ boundaries: { forbid: [{ files: ["a/**"], imports: ["b/**"], fix: "Do it." }], Modules: [] } }, '"Modules" in .standard/config.json is camelCase; name it "modules".\n'],
     [{ pr: { ticket_prefix: "ABC" } }, '.standard/config.json has an unknown key "pr.ticket_prefix". Known keys: pr.ticket-prefix, pr.screenshots.\n'],
   ];
   for (const [config, message] of cases) {

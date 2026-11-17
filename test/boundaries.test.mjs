@@ -25,8 +25,11 @@ const WORKSPACE = {
   "packages/tokens/colors.ts": "export const red = 1;\n",
 };
 
-function repoWith(t, files) {
-  const cwd = tempRepo(t, {});
+const MODULES = { folders: ["apps/api/src/*", "apps/api/src/features/*"], entries: ["index", "routes"], open: ["apps/api/src/db"], except: ["**/*.test.ts"] };
+const FORBID = { files: ["apps/web/src/features/**"], imports: ["apps/web/src/app/**"], fix: "Let the route compose the feature." };
+
+function repoWith(t, files, boundaries = { modules: [MODULES], forbid: [FORBID] }) {
+  const cwd = tempRepo(t, { boundaries });
   write(cwd, { ...WORKSPACE, ...files });
   mkdirSync(join(cwd, "node_modules"), { recursive: true });
   symlinkSync(join(import.meta.dirname, "../node_modules/typescript"), join(cwd, "node_modules/typescript"));
@@ -44,7 +47,7 @@ function findings(cwd) {
   return { lines: stdout.trimEnd().split("\n"), status };
 }
 
-test("boundaries passes imports inside a package, through a package's exports, of a declared package and of a builtin", (t) => {
+test("boundaries passes imports through a module entry, inside one module, into an open module, and through a package's exports", (t) => {
   const cwd = repoWith(t, {
     "apps/api/src/features/b/index.ts": [
       'import { a } from "../a/index.ts";',
@@ -169,7 +172,6 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
     });
   });
 }
-
 
 test("boundaries resolves a createRequire require from its anchor, under any name, and skips one with a computed anchor", (t) => {
   const cwd = repoWith(t, {
@@ -357,6 +359,151 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
     const path = (name, target) => `boundaries: apps/node/src/${name}.mts imports ${name}-alias: packages/${name}/${target} belongs to packages/${name}, so import it as "${name}" or a subpath its exports list, not by path.`;
     assert.deepEqual(findings(cwd), {
       lines: [path("js-first", "types.d.ts"), path("routed", "modern/index.d.ts"), path("versioned", "modern/index.d.ts")],
+      status: 1,
+    });
+  });
+}
+
+test("boundaries fails a deep import into another module, resolved through the file's own folder, and names its entries", (t) => {
+  const cwd = repoWith(t, {
+    "apps/api/src/features/b/index.ts": 'import type { store } from "../a/store.ts";\nexport type B = typeof store;\n',
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      "boundaries: apps/api/src/features/b/index.ts imports ../a/store.ts: apps/api/src/features/a/store.ts is inside the module apps/api/src/features/a. Import it through apps/api/src/features/a/index or apps/api/src/features/a/routes, and export what you need there.",
+    ],
+    status: 1,
+  });
+});
+
+test("boundaries resolves a tsconfig paths alias before it matches a forbid rule, and prints the rule's fix", (t) => {
+  const cwd = repoWith(t, { "apps/web/src/features/x.ts": 'export { page } from "@/app/page";\n' });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/src/features/x.ts imports @/app/page: apps/web/src/app/page.tsx matches boundaries.forbid "apps/web/src/app/**". Let the route compose the feature.',
+    ],
+    status: 1,
+  });
+});
+
+test("the config rejects a boundaries rule without what it needs, and names the field", (t) => {
+  const cases = [
+    [{ modules: [{ folders: ["src/*"] }] }, ".standard/config.json boundaries.modules[0].entries must be a list of one or more non-empty strings.\n"],
+    [{ modules: [{ folders: ["src/*"], entries: ["index.ts"] }] }, '.standard/config.json boundaries.modules[0].entries names files without folder or extension, such as "index".\n'],
+    [{ forbid: [{ files: ["a/**"], imports: ["b/**"] }] }, '.standard/config.json boundaries.forbid[0].fix must say what to do instead, such as "Let the route compose the feature."\n'],
+  ];
+  for (const [boundaries, message] of cases) {
+    const { stderr, status } = standard(tempRepo(t, { boundaries }), ["check"]);
+    assert.equal(stderr, `standard: ${message}`);
+    assert.equal(status, 1);
+  }
+});
+
+test("wiring retires each plugin's boundary rules once boundaries is on", (t) => {
+  const retired = [
+    "packages/oxlint-plugin-web/rules/module-boundaries.ts",
+    "packages/oxlint-plugin-web/rules/module-boundaries.test.ts",
+    "packages/oxlint-plugin-web/rules/no-restricted-import-paths.ts",
+    "packages/oxlint-plugin-web/rules/no-restricted-import-paths.test.ts",
+  ];
+  const wiring = (config) => {
+    const cwd = tempRepo(t);
+    write(cwd, { ...WIRED, ".standard/config.json": config, ...Object.fromEntries(retired.map((path) => [path, "export {};\n"])) });
+    git(cwd, "add", "-A");
+    return standard(cwd, ["check", "wiring"]).stdout;
+  };
+  assert.deepEqual(
+    wiring({}).split("\n").filter((line) => line.includes("boundaries")),
+    retired.map((path) => `wiring: ${path}: Delete ${path}, which the boundaries check replaces.`),
+  );
+  assert.doesNotMatch(wiring({ pending: ["boundaries"] }), /boundaries/);
+});
+
+test("the config rejects a malformed or escaping glob and names it", (t) => {
+  const cases = [
+    [{ forbid: [{ files: ["src/["], imports: ["b/**"], fix: "Do it." }] }, '.standard/config.json boundaries.forbid[0].files has the glob "src/[", which opens a [ it never closes. Fix it so it matches the files you mean.\n'],
+    [{ modules: [{ folders: ["src/{a,b"], entries: ["index"] }] }, '.standard/config.json boundaries.modules[0].folders has the glob "src/{a,b", which opens a { it never closes. Fix it so it matches the files you mean.\n'],
+    [{ modules: [{ folders: ["src/*"], entries: ["index"], except: ["../other/**"] }] }, '.standard/config.json boundaries.modules[0].except has the glob "../other/**", which is not a path relative to the repository root. Fix it so it matches the files you mean.\n'],
+  ];
+  for (const [boundaries, message] of cases) {
+    const { stderr, status } = standard(tempRepo(t, { boundaries }), ["check"]);
+    assert.equal(stderr, `standard: ${message}`);
+    assert.equal(status, 1);
+  }
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries resolves as TypeScript ${major} does: the require condition in a .cts file and node under nodenext pick the targets forbid matches`, (t) => {
+    const forbid = [{ files: ["apps/node/**"], imports: ["apps/api/src/{required,node}.ts"], fix: "Use the other build." }];
+    const cwd = repoWith(t, {
+      "apps/api/package.json": { name: "api", exports: { "./condition": { require: "./src/required.ts", import: "./src/imported.ts" }, "./runtime": { node: "./src/node.ts", default: "./src/default.ts" }, "./logo.png": "./logo.png" } },
+      "apps/api/logo.png": "png",
+      "apps/api/src/required.ts": "export const value = 1;\n",
+      "apps/api/src/imported.ts": "export const value = 1;\n",
+      "apps/api/src/node.ts": "export const value = 1;\n",
+      "apps/api/src/default.ts": "export const value = 1;\n",
+      "apps/node/package.json": { name: "node-app", dependencies: { api: "workspace:*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/condition.cts": 'import { value } from "api/condition";\nexport const a = value;\n',
+      "apps/node/src/runtime.mts": 'import { value } from "api/runtime";\nexport const b = value;\n',
+      "apps/node/src/declaration.d.ts": "export declare const value: number;\n",
+      "apps/node/src/uses-declaration.mts": 'import type { value } from "./declaration.js";\nexport type V = typeof value;\n',
+      "apps/node/src/logo.mts": 'import logo from "api/logo.png";\nexport const src = logo;\n',
+    }, { forbid });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    assert.deepEqual(findings(cwd), {
+      lines: [
+        'boundaries: apps/node/src/condition.cts imports api/condition: apps/api/src/required.ts matches boundaries.forbid "apps/api/src/{required,node}.ts". Use the other build.',
+        'boundaries: apps/node/src/runtime.mts imports api/runtime: apps/api/src/node.ts matches boundaries.forbid "apps/api/src/{required,node}.ts". Use the other build.',
+      ],
+      status: 1,
+    });
+  });
+}
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries matches forbid against the nested exports target TypeScript ${major} takes past a missing one`, (t) => {
+    const forbid = [{ files: ["apps/node/**"], imports: ["apps/api/src/required.ts"], fix: "Use the public entry." }];
+    const cwd = repoWith(t, {
+      "apps/api/package.json": { name: "api", type: "module", exports: { "./nested": { types: { import: "./missing.d.ts", default: "./src/required.ts" }, import: "./src/other.ts" } } },
+      "apps/api/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/api/src/other.ts": 'export const value: "other" = "other";\n',
+      "apps/node/package.json": { name: "node-app", dependencies: { api: "workspace:*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/nested.mts": 'import { value } from "api/nested";\nexport const a: "required" = value;\n',
+    }, { forbid });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    assert.deepEqual(findings(cwd), {
+      lines: ['boundaries: apps/node/src/nested.mts imports api/nested: apps/api/src/required.ts matches boundaries.forbid "apps/api/src/required.ts". Use the public entry.'],
+      status: 1,
+    });
+  });
+}
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries matches forbid against the declaration TypeScript ${major} routes to by version`, (t) => {
+    const forbid = [{ files: ["apps/node/**"], imports: ["packages/*/legacy/**", "packages/routed/modern/**"], fix: "Use the supported entry." }];
+    const cwd = repoWith(t, {
+      "packages/versioned/package.json": { name: "versioned", type: "module", exports: { "types@>=5.2": "./modern/index.d.ts", types: "./legacy/index.d.ts", default: "./index.js" } },
+      "packages/versioned/modern/index.d.ts": 'export declare const value: "modern";\n',
+      "packages/versioned/legacy/index.d.ts": 'export declare const value: "legacy";\n',
+      "packages/routed/package.json": { name: "routed", type: "module", types: "./index.d.ts", typesVersions: { ">=5.2": { "*": ["modern/*"] } } },
+      "packages/routed/index.d.ts": 'export declare const value: "legacy";\n',
+      "packages/routed/modern/index.d.ts": 'export declare const value: "modern";\n',
+      "apps/node/package.json": { name: "node-app", type: "module", dependencies: { versioned: "workspace:*", routed: "workspace:*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/versioned.mts": 'import { value } from "versioned";\nexport const v: "modern" = value;\n',
+      "apps/node/src/routed.mts": 'import { value } from "routed";\nexport const v: "modern" = value;\n',
+    }, { forbid });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    for (const name of ["versioned", "routed"]) symlinkSync(join(cwd, "packages", name), join(cwd, `apps/node/node_modules/${name}`));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    assert.deepEqual(findings(cwd), {
+      lines: ['boundaries: apps/node/src/routed.mts imports routed: packages/routed/modern/index.d.ts matches boundaries.forbid "packages/*/legacy/**, packages/routed/modern/**". Use the supported entry.'],
       status: 1,
     });
   });
