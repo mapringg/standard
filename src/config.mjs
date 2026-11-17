@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { parseDocument } from "yaml";
 
+import { KINDS } from "./doc-kinds.mjs";
+
 /**
  * @typedef {object} Config
  * @property {{ "pre-commit": readonly string[], "pre-push": readonly string[] }} hooks Shell lines each hook runs after its built-in rule.
@@ -15,6 +17,10 @@ import { parseDocument } from "yaml";
  * @property {readonly string[]} apiModules Globs of the app's API modules, which a `"use client"` file may not import.
  * @property {readonly string[]} errorBoundaries Error boundary components as `<package or repo file>#<export>`, which cover a `<Suspense>` inside them.
  * @property {readonly string[]} cachedModules Globs of the modules whose functions return a cached promise, which React's `use` may read.
+ * @property {Budgets} budgets
+ *
+ * The most lines each kind of doc may total. A kind with no entry has no budget yet.
+ * @typedef {Readonly<Partial<Record<import("./doc-kinds.mjs").KindName, number>>>} Budgets
  *
  * @typedef {object} Boundaries
  * @property {readonly ModuleRule[]} modules
@@ -174,6 +180,15 @@ function errorBoundaries(value) {
   return entries;
 }
 
+/** @type {(value: unknown) => Budgets} */
+function budgets(value) {
+  const entries = Object.entries(section(value, "budgets", KINDS.map((kind) => kind.name)));
+  for (const [kind, lines] of entries) {
+    if (!Number.isSafeInteger(lines) || /** @type {number} */ (lines) < 0) throw new Error(`${FILE} budgets.${kind} must be a whole number of lines, 0 or more.`);
+  }
+  return Object.freeze(Object.fromEntries(entries));
+}
+
 const TICKET_PREFIX = /^[A-Z][A-Z0-9]*$/;
 
 /**
@@ -319,7 +334,7 @@ export function parseConfig(text) {
     const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
     throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
   }
-  const top = section(raw, "", ["api-modules", "banned", "boundaries", "cached-modules", "client-data", "effect-wrappers", "error-boundaries", "hooks", "pending", "pr"]);
+  const top = section(raw, "", ["api-modules", "banned", "boundaries", "budgets", "cached-modules", "client-data", "effect-wrappers", "error-boundaries", "hooks", "pending", "pr"]);
   const hooks = section(top.hooks ?? {}, "hooks", ["pre-commit", "pre-push"]);
   return Object.freeze({
     hooks: Object.freeze({
@@ -335,6 +350,7 @@ export function parseConfig(text) {
     apiModules: strings(top["api-modules"] ?? [], `${FILE} api-modules`),
     cachedModules: strings(top["cached-modules"] ?? [], `${FILE} cached-modules`),
     errorBoundaries: errorBoundaries(top["error-boundaries"] ?? []),
+    budgets: budgets(top.budgets ?? {}),
   });
 }
 

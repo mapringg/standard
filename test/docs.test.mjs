@@ -5,7 +5,9 @@ import { test } from "node:test";
 
 import { git, standard, tempRepo, write } from "./helpers.mjs";
 
-function check(t, files, config = {}) {
+const BUDGETS = { budgets: { verify: 99, skills: 99, agents: 99, external: 99, conventions: 99, readme: 99, template: 99 } };
+
+function check(t, files, config = BUDGETS) {
   const cwd = tempRepo(t, config);
   write(cwd, files);
   git(cwd, "add", "-A");
@@ -312,7 +314,7 @@ for (const [name, command, miss, shown = command] of [
 }
 
 test("docs passes a path git ignores beside a symlink git cannot look through", (t) => {
-  const cwd = tempRepo(t);
+  const cwd = tempRepo(t, BUDGETS);
   write(cwd, {
     "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
     ".gitignore": "node_modules/\ngenerated/\n",

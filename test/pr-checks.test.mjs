@@ -437,7 +437,7 @@ test("baseline-growth passes a baseline that shrinks, keeps its size, or is dele
 });
 
 test("a pull_request event runs commit, pull request and tree checks in one process", (t) => {
-  const repo = pullRequestRepo(t, { base: WIRED });
+  const repo = pullRequestRepo(t, { base: { ...WIRED, ".standard/config.json": { ...WIRED[".standard/config.json"], budgets: { readme: 1 } } } });
   const { stdout, status } = checkPullRequest(t, repo, { body: GOOD_BODY });
   assert.equal(
     stdout.trim(),
@@ -470,7 +470,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
 });
 
 test("a push event skips the pull request checks", (t) => {
-  const repo = pullRequestRepo(t, { base: WIRED });
+  const repo = pullRequestRepo(t, { base: { ...WIRED, ".standard/config.json": { ...WIRED[".standard/config.json"], budgets: { readme: 1 } } } });
   const { stdout, status } = checkEvent(t, repo.cwd, { ref: "refs/heads/feature", before: repo.base, after: repo.head });
   assert.match(stdout, /^pr-title: skipped, this run has no pull request to check$/m);
   assert.match(stdout, /^baseline-growth: skipped, this run has no pull request to check$/m);
