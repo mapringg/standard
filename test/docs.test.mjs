@@ -142,6 +142,31 @@ test("docs reads a link target with balanced parentheses whole", (t) => {
   });
 });
 
+const GUIDE = { "docs/guide.md": "# Guide\n" };
+const ORPHAN = [orphan("docs/guide.md", "AGENTS.md")];
+
+for (const [name, agents, files, found] of [
+  ["an unclosed comment opener inside a paragraph is text", "Use <!-- as the delimiter.\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["an escaped comment opener is text", "Use \\<!-- as text.\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["a comment opener in a code span over two lines is code", "Use `a\nb <!--` as a delimiter.\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["a comment opener in a code span is code", "Use `<!--` as a delimiter.\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["a comment opener in a double backtick span is code", "Use ``a ` <!--`` as a delimiter.\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["a comment opener in a fence is code", "```html\n<!--\n```\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["a fence inside a comment opens no code", "<!--\n```\n-->\n\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["a backtick inside a comment opens no code span", "<!-- ` -->\n[Guide](docs/guide.md)\n", GUIDE, []],
+  ["an unclosed comment on its own line hides the rest of the doc", "<!--\n[hidden](docs/guide.md)\n", GUIDE, ORPHAN],
+  ["a link in a fence nested in a longer fence is code", "````md\n```sh\necho example\n```\n[not rendered](docs/guide.md)\n````\n", GUIDE, ORPHAN],
+  ["a definition no reference uses links nothing", "[guide]: docs/guide.md\n", GUIDE, ORPHAN],
+  ["escaped parentheses in a link target are the parentheses", "[Guide](docs/guide\\(old\\).md)\n", { "docs/guide(old).md": "# Guide\n" }, []],
+  ["nested balanced parentheses in a link target are part of it", "[Guide](docs/guide(old(v2)).md)\n", { "docs/guide(old(v2)).md": "# Guide\n" }, []],
+]) {
+  test(`docs reads links as CommonMark renders them: ${name}`, (t) => {
+    const all = { "AGENTS.md": agents, ...files };
+    if (found.length === 0) passes(t, all);
+    else fails(t, all, ...found);
+  });
+}
+
 test("docs passes a repository with no Markdown", (t) => {
   passes(t, { "src/a.ts": "export const a = 1;\n" });
 });
