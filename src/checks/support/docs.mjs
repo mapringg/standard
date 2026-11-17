@@ -33,7 +33,7 @@ const SCHEME = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 const MARKER = "<!-- check-docs: external -->";
 const TOOL_BEGIN = /<!--\s*BEGIN:\S+\s*-->/;
 const TOOL_END = /<!--\s*END:\S+\s*-->/;
-const SENTENCE_END = /(?<=[.?!][)"']*)\s+(?=[\p{Lu}"'(])|(?<=\.[)"']*)\s+(?=\p{Ll})/u;
+const SENTENCE_END = /(?<=[.?!][)"']*)\s+(?=[\p{Lu}\p{N}"'(])|(?<=\.[)"']*)\s+(?=\p{Ll})/u;
 const LINKS = new Set(["link", "linkReference", "image", "imageReference"]);
 
 /** @type {(text: string) => import("mdast").Root} The tree GitHub renders a doc from, with YAML front matter as one node. */
