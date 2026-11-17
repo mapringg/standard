@@ -39,7 +39,7 @@ export function parseSource(path, text, options = {}) {
     const { program, comments, errors } = parseSync(path, text, options);
     return { program, comments, errors, text };
   }
-  const { frontmatter, scripts } = astroRegions(text);
+  const { frontmatter, scripts, problems } = astroRegions(text);
   const regions = frontmatter ? [frontmatter, ...scripts] : scripts;
   const parsed = regions.map((region) => {
     const { program, comments, errors } = parseSync(path, blank(text, [region]), { ...options, lang: "ts", sourceType: "module" });
@@ -49,7 +49,7 @@ export function parseSource(path, text, options = {}) {
   return {
     program: /** @type {any} */ (program),
     comments: parsed.flatMap((result) => result.comments),
-    errors: parsed.flatMap((result) => result.errors),
+    errors: [...problems.map((message) => /** @type {any} */ ({ severity: "Error", message, labels: [], helpMessage: null, codeframe: null })), ...parsed.flatMap((result) => result.errors)],
     text: blank(text, regions),
   };
 }
@@ -67,8 +67,9 @@ function blank(text, regions) {
 
 /**
  * @param {string} text
- * @returns {{ frontmatter: Region | null, scripts: Region[] }} The frontmatter's code, and the body of each script a
- * browser runs, is:inline and define:vars ones included, as the Astro compiler reads them.
+ * @returns {{ frontmatter: Region | null, scripts: Region[], problems: string[] }} The frontmatter's code, and the body
+ * of each script a browser runs, is:inline and define:vars ones included, as the Astro compiler reads them. A quoted
+ * set:html or set:text replaces a script's body, so its value is the body. `problems` are what the checks cannot read.
  */
 function astroRegions(text) {
   const { ast } = parseAstro(text, { position: true });
@@ -79,22 +80,34 @@ function astroRegions(text) {
   let frontmatter = null;
   /** @type {Region[]} */
   const scripts = [];
+  /** @type {string[]} */
+  const problems = [];
   /** @param {import("@astrojs/compiler/types").Node} node */
   const visit = (node) => {
     if (node.type === "frontmatter" && node.position) {
       const start = node.position.start.offset + "---".length;
       frontmatter = { start: index(start), end: index(start + Buffer.byteLength(node.value)) };
+      if (!text.startsWith("---", frontmatter.end)) problems.push("the frontmatter has no closing --- fence");
     }
+    if (node.type === "element" && node.name === "noscript") return;
     if (node.type === "element" && node.name === "script") {
+      if (!runs(node.attributes)) return;
+      const replaced = node.attributes.find((attribute) => attribute.name === "set:html" || attribute.name === "set:text");
+      if (replaced) {
+        const at = replaced.position && replaced.raw ? text.indexOf(replaced.raw, index(replaced.position.start.offset)) : -1;
+        if (replaced.kind === "quoted" && replaced.raw && at >= 0) scripts.push({ start: at + 1, end: at + replaced.raw.length - 1 });
+        else if (replaced.kind !== "empty") problems.push(`a script on line ${replaced.position?.start.line} sets its body with a ${replaced.name} expression, which no check can read. Write the code as the script's body`);
+        return;
+      }
       const body = node.children.flatMap((child) => (child.type === "text" && child.position?.end ? [child.position] : []));
       const [first, last] = [body[0], body.at(-1)];
-      if (runs(node.attributes) && first && last?.end) scripts.push({ start: index(first.start.offset), end: index(last.end.offset) });
+      if (first && last?.end) scripts.push({ start: index(first.start.offset), end: index(last.end.offset) });
       return;
     }
     if ("children" in node) node.children.forEach(visit);
   };
   visit(ast);
-  return { frontmatter, scripts };
+  return { frontmatter, scripts, problems };
 }
 
 /** @type {(attributes: import("@astrojs/compiler/types").AttributeNode[]) => boolean} Whether a script's type is one a browser runs. An expression type is unknown, so it is not. */
