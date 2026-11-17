@@ -111,6 +111,45 @@ test("useInterval runs on every tick with one interval under StrictMode, and sto
   assert.deepEqual({ ticks, timers: clock.size }, { ticks: 3, timers: 0 });
 });
 
+test("useInterval calls the latest callback on the next tick without restarting the interval", async (t) => {
+  clock.clear();
+  const calls = [];
+  const render = await mount(t, ({ label }) => useInterval(() => calls.push(label), DELAY), { label: "first" });
+  const started = [...clock.keys()];
+  await elapse(DELAY);
+  await render({ label: "second" });
+  await elapse(DELAY);
+  assert.deepEqual({ calls, timers: [...clock.keys()] }, { calls: ["first", "second"], timers: started });
+});
+
+test("useInterval restarts on a new delay", async (t) => {
+  clock.clear();
+  const render = await mount(t, ({ delay }) => useInterval(() => {}, delay), { delay: DELAY });
+  await render({ delay: LONGER });
+  assert.deepEqual([...clock.values()].map((timer) => timer.delay), [LONGER]);
+});
+
+test("useInterval waits while its delay is null and never runs then", async (t) => {
+  clock.clear();
+  const calls = [];
+  const render = await mount(t, ({ delay }) => useInterval(() => calls.push(delay), delay), { delay: null });
+  assert.deepEqual({ calls, timers: clock.size }, { calls: [], timers: 0 });
+  await render({ delay: DELAY });
+  await elapse(DELAY);
+  await render({ delay: null });
+  assert.deepEqual({ calls, timers: clock.size }, { calls: [DELAY], timers: 0 });
+});
+
+test("useAnimationFrame calls the latest callback on the next frame without restarting", async (t) => {
+  frames.clear();
+  const calls = [];
+  const render = await mount(t, ({ label }) => useAnimationFrame(() => calls.push(label), true), { label: "first" });
+  await frame(16);
+  await render({ label: "second" });
+  await frame(32);
+  assert.deepEqual(calls, ["first", "second"]);
+});
+
 test("useAnimationFrame runs once a frame with its time while running, and stops when it stops or unmounts", async (t) => {
   frames.clear();
   const times = [];
