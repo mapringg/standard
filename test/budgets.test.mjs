@@ -88,10 +88,13 @@ test("baseline-growth lets a budget start only when docs leaves pending, arrives
     const { stdout, status } = growth(t, each);
     assert.deepEqual([stdout, status], ["baseline-growth: OK (#123)\n", 0]);
   }
-  const { stdout, status } = growth(t, { base: config({}), head: added });
-  assert.equal(
-    stdout,
-    "::error title=baseline-growth::budget conventions: This PR adds budgets.conventions (50) to .standard/config.json, while conventions docs existed at the base and docs ran there. A budget starts only in the pull request that removes docs from pending, in a pin bump that brings docs, or with the first doc of its kind.\n",
-  );
-  assert.equal(status, 1);
+  const early = config({ pending: ["docs"], budgets: { conventions: 50 } });
+  for (const each of [{ base: config({}), head: added }, { base: config({ pending: ["docs"] }), head: early }]) {
+    const { stdout, status } = growth(t, each);
+    assert.equal(
+      stdout,
+      "::error title=baseline-growth::budget conventions: This PR adds budgets.conventions (50) to .standard/config.json, while conventions docs existed at the base. A budget starts only in the pull request that removes docs from pending, in a pin bump that brings docs, or with the first doc of its kind.\n",
+    );
+    assert.equal(status, 1);
+  }
 });
