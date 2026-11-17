@@ -1,7 +1,6 @@
-import { parseSync } from "oxc-parser";
-
 import { GLOBAL_OBJECTS } from "../../config.mjs";
 import { namesOf as names } from "../boundaries.mjs";
+import { parseSource, sourceFiles } from "./sources.mjs";
 
 /**
  * @typedef {{ type: string, [key: string]: any }} Node
@@ -42,8 +41,6 @@ const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFu
 
 /** Nodes that hold no reference: imports, read once up front, labels, and a closing tag that repeats its opening tag. */
 const SKIPPED = new Set(["ImportDeclaration", "ExportAllDeclaration", "BreakStatement", "ContinueStatement", "JSXClosingElement"]);
-
-const SOURCE = /\.[cm]?[jt]sx?$/;
 
 /** @type {(path: string) => Ref} */
 const moduleRef = (path) => ({ space: "module", path, namespace: null });
@@ -130,7 +127,7 @@ function importRef({ module, imported }) {
 
 /** @type {(path: string, text: string) => FileFacts} */
 function factsOf(path, text) {
-  const { program, errors } = parseSync(path, text, { preserveParens: false });
+  const { program, errors } = parseSource(path, text, { preserveParens: false });
   if (errors.length > 0) return { path, error: errors[0].message };
   const starts = [0];
   for (let index = text.indexOf("\n"); index !== -1; index = text.indexOf("\n", index + 1)) starts.push(index + 1);
@@ -353,9 +350,8 @@ const parsed = /** @type {WeakMap<object, FileFacts[]>} */ (new WeakMap());
 export function sourceFacts(repo) {
   const cached = parsed.get(repo);
   if (cached) return cached;
-  const facts = repo
-    .files()
-    .filter((path) => SOURCE.test(path) && !path.endsWith(".d.ts") && !path.split("/").includes("node_modules"))
+  const facts = sourceFiles(repo)
+    .filter((path) => !path.endsWith(".d.ts"))
     .map((path) => factsOf(path, repo.read(path)));
   parsed.set(repo, facts);
   return facts;

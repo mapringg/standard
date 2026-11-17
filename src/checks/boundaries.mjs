@@ -2,9 +2,8 @@ import { existsSync, realpathSync } from "node:fs";
 import { posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { parseSync } from "oxc-parser";
-
 import { projects, resolveAsset } from "./support/resolve.mjs";
+import { parseSource, sourceFiles } from "./support/sources.mjs";
 
 /**
  * @typedef {import("../repo.mjs").Repo} Repo
@@ -33,7 +32,6 @@ import { projects, resolveAsset } from "./support/resolve.mjs";
  * @typedef {{ name: string, check(edge: Edge, context: Context): string | null }} Rule
  */
 
-const SOURCE = /\.[cm]?[jt]sx?$/;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const DEPENDENCIES = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
@@ -408,7 +406,7 @@ function requestsOf(program, file) {
  * @returns {{ requests: Request[] } | { error: string }} Every import with a fixed specifier. An import() or require() of a computed value has none, as for TypeScript, and neither has a require that createRequire makes from a computed path.
  */
 function importsOf(file, text, absolute) {
-  const { errors, program } = parseSync(file, text);
+  const { errors, program } = parseSource(file, text);
   if (errors.length > 0) return { error: errors[0].message };
   /** @type {Map<string, Request>} */
   const requests = new Map();
@@ -435,7 +433,7 @@ function modeOf(file, kind, workspace, moduleResolution) {
  * @returns {string[]}
  */
 function sources(repo) {
-  return repo.files().filter((path) => SOURCE.test(path) && !path.split("/").includes("node_modules"));
+  return sourceFiles(repo);
 }
 
 /**

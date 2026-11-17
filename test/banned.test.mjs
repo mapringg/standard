@@ -265,3 +265,110 @@ test("wiring fails a repo plugin rule that banned replaces, in any plugin packag
   assert.match(stdout, /^wiring: packages\/oxlint-plugin-app\/rules\/no-process-env\.ts: Delete packages\/oxlint-plugin-app\/rules\/no-process-env\.ts, which the banned check replaces\.$/m);
   assert.doesNotMatch(stdout, /no-naive-time/);
 });
+
+const CONSOLE = { global: "console", fix: "Use the logger." };
+
+test("banned reads an Astro component's frontmatter and scripts on their own lines, and a frontmatter return, but not a capitalized SCRIPT component", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/index.astro": [
+        "---",
+        'import Layout from "../layouts/Layout.astro";',
+        "if (!Astro.locals.user) return Astro.redirect(\"/login\");",
+        'console.log("frontmatter");',
+        "---",
+        "<Layout>",
+        '  <script>',
+        '    console.warn("module");',
+        "  </script>",
+        "</Layout>",
+        '<script TYPE="module">console.error("upper")</script >',
+        '<SCRIPT>console.error("a component, as Astro reads a capitalized tag")</SCRIPT>',
+        "",
+      ].join("\n"),
+    },
+    "src/pages/index.astro console: src/pages/index.astro uses console on lines 4, 8, 11. Use the logger.",
+  );
+});
+
+test("banned skips Astro markup, comments, styles and data scripts, and reads an is:inline script after a self-closing one", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/components/Card.astro": [
+        "<p>console.log()</p>",
+        "<!-- <script>console.log(\"commented\")</script> -->",
+        '<script type="application/ld+json">{"@context": "https://schema.org", "name": "console.log"}</script>',
+        "<style>p::after { content: \"<script>console.log()</script>\"; }</style>",
+        '<script src="/analytics.js" />',
+        '<script is:inline data-label="a > b">',
+        '  console.info("inline");',
+        "</script>",
+        "",
+      ].join("\n"),
+    },
+    "src/components/Card.astro console: src/components/Card.astro uses console on line 7. Use the logger.",
+  );
+});
+
+test("banned reads Astro frontmatter past a fence line in a string, skips script text in markup strings, and reads define:vars scripts with escaped quotes", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/fence.astro": ["---", "const example = `one", "---", "two`;", "console.log(example);", "---", "<p>{example}</p>", ""].join("\n"),
+      "src/pages/strings.astro": [
+        '<p>{"<script>not javascript</script>"}</p>',
+        '<div data-example="<script>not javascript</script>">hi</div>',
+        "{Astro.props.debug && <script>console.debug(\"nested\")</script>}",
+        "",
+      ].join("\n"),
+      "src/pages/vars.astro": [
+        "<script define:vars={{ label: 'It\\'s ready' }}>console.log(label);</script>",
+        '<script define:vars={{ label: "Say \\"hi\\"" }}>console.log(label);</script>',
+        "",
+      ].join("\n"),
+    },
+    "src/pages/fence.astro console: src/pages/fence.astro uses console on line 5. Use the logger.",
+    "src/pages/strings.astro console: src/pages/strings.astro uses console on line 3. Use the logger.",
+    "src/pages/vars.astro console: src/pages/vars.astro uses console on lines 1, 2. Use the logger.",
+  );
+});
+
+test("banned reads a script's set:html value as its body, skips noscript, and refuses a set:html expression and an unclosed frontmatter", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/html.astro": [
+        "<script set:html=\"console.log('ran');\"></script>",
+        '<script set:html="globalThis.ran = 1;">not javascript</script>',
+        "<noscript><script>not javascript</script></noscript>",
+        "",
+      ].join("\n"),
+      "src/pages/expression.astro": ["<script set:html={\"console.log('ran');\"}></script>", ""].join("\n"),
+      "src/pages/open.astro": ["---", "const x = 1;", ""].join("\n"),
+    },
+    "src/pages/expression.astro parse: src/pages/expression.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:html expression, which no check can read. Write the code as the script's body. Fix the syntax.",
+    "src/pages/html.astro console: src/pages/html.astro uses console on line 1. Use the logger.",
+    "src/pages/open.astro parse: src/pages/open.astro does not parse, so banned cannot read it: the frontmatter has no closing --- fence. Fix the syntax.",
+  );
+});
+
+test("banned refuses a script's set:html or set:text value that holds HTML character references, and reads one on a self-closing script", (t) => {
+  fails(
+    t,
+    [CONSOLE],
+    {
+      "src/pages/entity.astro": ["<script set:html=\"// hi&#x2028;console.log('ran');\"></script>", ""].join("\n"),
+      "src/pages/quote.astro": ['<script set:text="console.log(&quot;ran&quot;);"></script>', ""].join("\n"),
+      "src/pages/self.astro": ['<p>ไทย</p>', "<script id='x' set:html='console.log(1)' />", ""].join("\n"),
+    },
+    "src/pages/entity.astro parse: src/pages/entity.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:html value that is unquoted or holds HTML character references, which no check can read as written. Write the code as the script's body. Fix the syntax.",
+    "src/pages/quote.astro parse: src/pages/quote.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:text value that is unquoted or holds HTML character references, which no check can read as written. Write the code as the script's body. Fix the syntax.",
+    "src/pages/self.astro console: src/pages/self.astro uses console on line 2. Use the logger.",
+  );
+});
