@@ -1,3 +1,4 @@
+import banned from "./checks/banned.mjs";
 import baselineGrowth from "./checks/baseline-growth.mjs";
 import boundaries from "./checks/boundaries.mjs";
 import commitSubject from "./checks/commit-subject.mjs";
@@ -36,4 +37,4 @@ import wiring from "./checks/wiring.mjs";
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned];

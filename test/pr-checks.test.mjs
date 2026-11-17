@@ -393,6 +393,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "tests: OK",
       "pr-tests: OK (#123)",
       "boundaries: skipped, git tracks no JavaScript or TypeScript source",
+      "banned: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);

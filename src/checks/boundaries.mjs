@@ -226,7 +226,7 @@ function ownerOf(scope, name) {
  * @param {any} pattern
  * @returns {string[]} The names a binding pattern declares.
  */
-function namesOf(pattern) {
+export function namesOf(pattern) {
   switch (pattern?.type) {
     case "Identifier":
       return [pattern.name];

@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.11.0" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.12.0" }
 }
 ```
 
@@ -137,7 +137,7 @@ Each file resolves as the TypeScript of its project does, the project being its 
 | Parse | A file does not parse. |
 | Unresolved | A relative, absolute or `#` import does not resolve, or a bare one does not resolve and either names a workspace package, directly or through an alias whose `node_modules` link leads into the repository, or neither the importer's `package.json` nor the root `package.json` declares its package. A workspace package's subpath outside its `exports` fails here. A specifier with a scheme, such as `node:fs` or `cloudflare:test`, and a Node builtin are skipped. |
 
-Globs are repository paths matched against the resolved file, extension included, with `path.matchesGlob`. A glob that starts with `/`, has a `..` segment, or leaves a `[` or `{` open fails every command. Each finding is one import, named by the file and the specifier, such as `apps/web/src/a.ts imports ../api/src/db.ts`. It replaces each workspace plugin's `module-boundaries` and `no-restricted-import-paths` rules, so `wiring` asks to delete `packages/oxlint-plugin-*/rules/` files of those names and their tests; remove the rules from the plugin and the oxlint configs in the same pull request. A package ban such as `zod` against `zod/mini` stays in oxlint's `no-restricted-imports`, which matches import names and `allowTypeImports`.
+Globs are repository paths matched against the resolved file, extension included, with `path.matchesGlob`. A glob that starts with `/`, has a `..` segment, or leaves a `[` or `{` open fails every command. Each finding is one import, named by the file and the specifier, such as `apps/web/src/a.ts imports ../api/src/db.ts`. It replaces each workspace plugin's `module-boundaries` and `no-restricted-import-paths` rules, so `wiring` asks to delete `packages/oxlint-plugin-*/rules/` files of those names and their tests; remove the rules from the plugin and the oxlint configs in the same pull request. A package ban such as `zod` against `zod/mini` goes in `banned`, whose `import` entry matches the exact module name and skips type-only imports.
 
 ```json
 {
@@ -152,7 +152,32 @@ Globs are repository paths matched against the resolved file, extension included
 }
 ```
 
-Like `wiring`, `dead-code`, `duplicates`, `typecheck`, `tests` and `boundaries` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
+`banned` fails a file that uses an API its repository bans. Each entry in the `banned` list of `.standard/config.json` names the API with exactly one of `import`, `global` or `property`, as a string or a list, and says what to use instead in `fix`. `files` lists the globs it covers, every tracked source when absent, and `except` lists the globs inside them where the API is allowed. A use counts once, for the first entry that covers its file.
+
+| Rule | Fails when |
+| --- | --- |
+| `import` | A file imports, re-exports, `import()`s or `require()`s the module by a literal name. With `#name`, a file imports that export or reads it through a named, default or namespace binding, an `import()` or `require()` result or a JSX tag, so `@base-ui/react#Dialog` matches `<BaseUI.Dialog>`. `zod` does not match `zod/mini`, and a type-only import never matches. |
+| `global` | A file reads the dotted path, or a path below it, from the global a local name does not shadow. The read may go through `globalThis`, `window`, `self` or `global`, a destructuring, a literal computed key or, for `process`, an import of `node:process`. `import.meta.env` counts as a root. A `const` or `let` that a static path initializes carries it, even above its declaration, so `const p = process; p.env` and `const { parse } = JSON` match. |
+| `property` | A file reads the property on any object by a static key or a destructuring, such as `toLocaleDateString`. |
+| oxlint | A tracked `.oxlintrc.json`, `*.oxlintrc.json` or `oxlint.config.*` sets `no-restricted-imports`, `no-restricted-properties` or `no-restricted-globals` anywhere, `"off"` included. |
+| Parse | A source that an entry covers does not parse. |
+
+Each file and API is one finding, such as `src/a.ts process.env`, with every line in its fix. `banned` replaces the plugin rules `no-process-env`, `no-bare-json-parse`, `no-module-mocking` and `no-manual-memo` under `packages/oxlint-plugin-*/rules/`, with their tests. To migrate, turn each oxlint `no-restricted-*` entry and each plugin rule's allowlist into one entry, then delete the rule from every oxlint config:
+
+```json
+{
+  "banned": [
+    { "global": "process.env", "files": ["apps/api/**"], "except": ["apps/api/src/env.ts"], "fix": "Use the helpers in src/env.ts." },
+    { "property": ["toLocaleDateString", "toLocaleTimeString"], "except": ["apps/*/src/format.ts"], "fix": "Use the helpers in src/format.ts." },
+    { "import": ["zod", "zod/v4"], "files": ["apps/web/**"], "fix": "Import zod/mini in apps/web." },
+    { "import": ["react#useMemo", "react#useCallback", "react#memo"], "files": ["apps/web/**"], "fix": "React Compiler already memoizes this, so remove it." }
+  ]
+}
+```
+
+The bans every repository shares, `Reflect.apply`, `Reflect.get` and module mocking through `vi` or `jest`, live in the shared oxlint config, so the editor shows them. oxlint does not merge rule options: a config that sets `no-restricted-properties` replaces the shared list for its files, and an override that turns it `"off"` drops it. So each repository's own bans live in `banned`, and `banned` fails any oxlint config that sets one of these rules.
+
+Like `wiring`, `dead-code`, `duplicates`, `typecheck`, `tests`, `boundaries` and `banned` keep no baseline: a baseline file allows nothing, and `--init`, `--write` and `--prune` refuse. A repository with findings keeps the check in `pending` until it finds none.
 
 To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bumps the pin to 0.10.0, fix what `pnpm exec standard check tests` prints, then remove `tests` from `pending`. Remove `pr-tests` once the team is ready for every pull request that adds logic to carry a test.
 
@@ -162,11 +187,11 @@ The package ships one oxlint config, one oxfmt config and one tsconfig. The lint
 
 | Export | File | Holds |
 | --- | --- | --- |
-| `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names and no `any`. |
+| `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names, no `any`, and bans on `Reflect.apply`, `Reflect.get` and module mocking. |
 | `@mapringg/standard/oxfmt` | `config/oxfmt.json` | Type imports first, then grouped value imports; sorted `package.json` scripts; `.claude/**` ignored. |
 | `@mapringg/standard/tsconfig` | `config/tsconfig.json` | `strict` and each flag in its family, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` and `isolatedModules`; unreachable code and unused labels as errors. |
 
-`.oxlintrc.json` takes a path in `extends`, relative to the file that extends, and refuses a package name. A child's `plugins` adds to the shared list:
+`.oxlintrc.json` takes a path in `extends`, relative to the file that extends, and refuses a package name. A child's `plugins` adds to the shared list. A child that sets `no-restricted-properties` replaces the shared bans, so `banned` fails it:
 
 ```json
 {
