@@ -18,8 +18,11 @@ const CLIENT_FETCH = "client-data/no-client-fetch";
 const TEMPLATE = "src/lib/swr.ts";
 /** The template's `useSWR` under its current and former names. A rename keeps the finding's key, so a baseline survives it. */
 const HOOKS = new Set(["useSWR", "useServerData", "useServerSeeded"]);
-/** swr's own hook, which the template wraps and `react/no-direct-swr` bans elsewhere. */
-const SWR_HOOK = /^swr#(?:default|useSWR)(?:\.|$)/;
+/** swr's own hooks, which the template wraps and `react/no-direct-swr` bans elsewhere. */
+const SWR_HOOK = /^swr(?:#(?:default|useSWR)|\/immutable#default)(?:\.|$)/;
+/** The browser's request globals and the HTTP client packages built on them. */
+const GLOBALS = new Set(["fetch", "XMLHttpRequest"]);
+const CLIENTS = new Set(["ky", "axios"]);
 const LISTED_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in ${FILE} with its reason: pages, live, client-state or unreachable.`;
 const FETCH_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in ${FILE} with its reason.`;
 const BROWSER = 'and "use client" runs it in the browser.';
@@ -66,15 +69,19 @@ function reach(edges, seeds) {
   return reached;
 }
 
-/** @type {(use: Parsed["uses"][number]) => string | null} What a use loads data through in the browser. */
-const transport = ({ space, path }) => (space === "global" && (path === "fetch" || path.startsWith("fetch.")) ? "fetch" : null);
+/** @type {(use: Parsed["uses"][number]) => string | null} The request global or HTTP client package a use loads data through. */
+const transport = ({ space, path, kind }) => {
+  const [name] = (space === "global" ? path : moduleOf(path)).split(space === "global" ? "." : "/");
+  if (space === "global") return GLOBALS.has(name) ? name : null;
+  return CLIENTS.has(name) && kind !== "type" ? name : null;
+};
 
 /** @type {import("../registry.mjs").Check} */
 export default {
   name: "client-data",
   since: "0.14.13",
   doc: {
-    enforces: "Only a file that `client-data` lists, with its reason, calls `useSWR`, from the app's `src/lib/swr.ts` under any of its names or from swr itself. A `\"use client\"` file that it does not list reads no `fetch` and imports no module that `api-modules` matches, directly or through modules without a directive. Tests, stories and fixtures are exempt.",
+    enforces: "Only a file that `client-data` lists, with its reason, calls `useSWR`, from the app's `src/lib/swr.ts` under any of its names or from swr itself. A `\"use client\"` file that it does not list reads no `fetch` or `XMLHttpRequest`, imports no `ky` or `axios`, and imports no module that `api-modules` matches, directly or through modules without a directive. Tests, stories and fixtures are exempt.",
     fix: "Read data in a Server Component and pass it as props, and write through a Server Action, or list the file in `client-data` with why the browser must load it.",
     config: ["client-data", "api-modules"],
   },

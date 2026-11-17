@@ -19,7 +19,7 @@ import { sourceFacts } from "./support/source.mjs";
  */
 
 const FLAG_STATES = new Set(["loading", "isLoading", "error", "isError"]);
-const SWR = new Set(["swr", "swr/infinite"]);
+const SWR = new Set(["swr", "swr/infinite", "swr/immutable"]);
 const WRAPPER = "src/lib/swr.ts";
 const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
 const OWNER = /^(?:[A-Z]|use[A-Z])/;
