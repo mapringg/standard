@@ -219,7 +219,7 @@ function trackedDocs(repo) {
  */
 function findings(path, source, docs) {
   const { program, comments, errors, text } = parseSource(path, source, { markup: true });
-  if (errors.length > 0) return [{ key: `${path} parse`, fix: `${path} does not parse, so no-comments cannot read it: ${errors[0]?.message}. Fix the syntax.` }];
+  if (errors.length > 0) return [{ key: `${path} parse`, fix: `${path} does not parse, so no-comments cannot read it: ${errors[0]?.message}. ${/** @type {any} */ (errors[0])?.fix ?? "Fix the syntax."}` }];
   const sorted = /** @type {Comment[]} */ (comments.filter((comment) => comment.start !== program.hashbang?.start)).sort((a, b) => a.start - b.start);
   const codeStart = /** @type {Node[]} */ (program.body)[0]?.start ?? text.length;
   const header = sorted.filter((comment) => comment.start < codeStart);
