@@ -147,6 +147,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  suspense-errors   n/a",
       "  cache-components  n/a",
       "  no-comments       on",
+      "  docs              on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
@@ -159,7 +160,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       `suspense-errors in ${name}: n/a, no tracked package.json declares next`,
       `cache-components in ${name}: n/a, no tracked package.json declares next`,
       "",
-      `${name}: 20 of 21 pass`,
+      `${name}: 21 of 22 pass`,
       "",
     ].join("\n"),
   );
@@ -172,20 +173,20 @@ test("an n/a row leaves the denominator, and a row that applies joins it", (t) =
     repos[0].cells.find((cell) => cell.row === "pr-screenshot"),
     { group: "checks", row: "pr-screenshot", status: "n/a", pass: null, notes: [".standard/config.json sets no pr.screenshots"] },
   );
-  assert.deepEqual([repos[0].passing, repos[0].total], [20, 20]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [21, 21]);
   assert.equal(status, 0);
 
   const screenshots = { pr: { screenshots: { when: ["web/**"], uploader: "scripts/upload.mjs" } } };
   const applied = scoreJson(repoWith(t, WIRED, screenshots), []);
   assert.equal(statuses(applied.repos[0])["pr-screenshot"], "on");
-  assert.deepEqual([applied.repos[0].passing, applied.repos[0].total], [21, 21]);
+  assert.deepEqual([applied.repos[0].passing, applied.repos[0].total], [22, 22]);
 });
 
 test("pending stays in the denominator and fails", (t) => {
   const { status, repos } = scoreJson(repoWith(t, { ...WIRED, "scripts/check-pr-convention.mjs": "old" }, { pending: ["pr-body"] }), []);
   assert.equal(statuses(repos[0])["pr-body"], "pending");
   assert.equal(statuses(repos[0]).retired, "ok");
-  assert.deepEqual([repos[0].passing, repos[0].total], [20, 21]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [21, 22]);
   assert.equal(status, 1);
 });
 
@@ -198,13 +199,13 @@ test("a pending check shows pending and fails even where it would not apply", (t
     pass: false,
     notes: [".standard/config.json pending lists it, so it does not run."],
   });
-  assert.deepEqual([repos[0].passing, repos[0].total], [20, 21]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [21, 22]);
   assert.equal(status, 1);
 });
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, suspense-errors, cache-components, no-comments.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, suspense-errors, cache-components, no-comments, docs.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -248,7 +249,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.14.17 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.15.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -293,8 +294,9 @@ test("a check the pinned version predates is absent, and so is every check witho
     "suspense-errors": "n/a",
     "cache-components": "n/a",
     "no-comments": "absent",
+    "docs": "absent",
   });
-  assert.deepEqual([bare.passing, bare.total], [5, 18]);
+  assert.deepEqual([bare.passing, bare.total], [5, 19]);
 });
 
 test("a baseline file does not make wiring debt, since wiring keeps no baseline", (t) => {
@@ -312,7 +314,7 @@ test("several paths print a matrix with a column and a count per repo", (t) => {
   assert.match(stdout, /^ {2}claude-md {9}ok {2,}fail$/m);
   assert.match(stdout, new RegExp(`^claude-md in ${b}: Make CLAUDE.md exactly "@AGENTS.md" and a newline`, "m"));
   assert.doesNotMatch(stdout, new RegExp(`claude-md in ${a}`));
-  assert.deepEqual(lines.slice(-2), [`${a}: 20 of 20 pass`, `${b}: 19 of 20 pass`]);
+  assert.deepEqual(lines.slice(-2), [`${a}: 21 of 21 pass`, `${b}: 20 of 21 pass`]);
   assert.equal(status, 1);
 });
 
@@ -330,7 +332,7 @@ test("several paths in JSON give one entry per repo, by folder name", (t) => {
   const other = repoWith(t, WIRED);
   const { status, repos } = scoreJson(tempDir(t, "elsewhere"), [wired, other]);
   assert.deepEqual(repos.map((repo) => repo.name), [basename(wired), basename(other)]);
-  assert.deepEqual(repos.map((repo) => [repo.passing, repo.total]), [[20, 20], [20, 20]]);
+  assert.deepEqual(repos.map((repo) => [repo.passing, repo.total]), [[21, 21], [21, 21]]);
   assert.equal(status, 0);
 });
 
@@ -367,7 +369,7 @@ test("--remote reads each repo's GitHub settings through gh and names the fix fo
       { group: "github", row: "current", status: "ok", pass: true, notes: [] },
     ],
   );
-  assert.deepEqual([repos[0].passing, repos[0].total], [21, 22]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [22, 23]);
   assert.equal(status, 1);
 });
 
@@ -578,14 +580,14 @@ test("--remote fails closed on classic protection or pull request rules of the w
 });
 
 test("--remote fails current when a newer release tag than the pin exists", (t) => {
-  const gh = fakeGh(t, GOOD_GITHUB, ["v0.4.0", "v0.15.0", "v0.9.1", "v1.0.0-rc.1"]);
+  const gh = fakeGh(t, GOOD_GITHUB, ["v0.4.0", "v0.16.0", "v0.9.1", "v1.0.0-rc.1"]);
   const { status, repos } = scoreJson(repoWith(t, WIRED), ["--remote"], gh.env);
   assert.deepEqual(repos[0].cells.at(-1), {
     group: "github",
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.17."],
+    notes: ["Bump @mapringg/standard to v0.16.0, the latest release; the repo pins 0.15.0."],
   });
   assert.equal(status, 1);
 });

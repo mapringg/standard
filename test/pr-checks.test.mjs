@@ -463,6 +463,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "suspense-errors: skipped, no tracked package.json declares next",
       "cache-components: skipped, no tracked package.json declares next",
       "no-comments: OK",
+      "docs: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);
