@@ -50,14 +50,14 @@ export type SeededPages<Page> = {
 
 type NextPage = { list: string; status: "loading" } | { list: string; status: "failed"; error: Error };
 
-type Flights = { refresh: Promise<unknown> | undefined; next: Promise<void> | undefined };
+type Flights = { refresh: Promise<unknown> | undefined; next: Promise<void> | undefined; restarts: number };
 
 const PAGES = Symbol("pages");
 const flightsByCache = new WeakMap<Cache, Map<string, Flights>>();
 
 function flightsOf(cache: Cache, list: string): Flights {
   const lists = flightsByCache.get(cache) ?? new Map<string, Flights>();
-  const flights = lists.get(list) ?? { refresh: undefined, next: undefined };
+  const flights = lists.get(list) ?? { refresh: undefined, next: undefined, restarts: 0 };
   flightsByCache.set(cache, lists.set(list, flights));
   return flights;
 }
@@ -88,12 +88,13 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
   const loadingMore = next?.status === "loading";
   const failure = next?.status === "failed" ? next.error : undefined;
   const settle = (after: NextPage | null) => setRequested((now) => (now?.list === id ? after : now));
-  const appendNext = async () => {
+  const appendNext = async (restarts: number) => {
     for (let appended = false; !appended; ) {
       const key = keyAfter(cached());
       if (key === null) return;
       const page = await fetchPage(key);
       for (let settled; settled !== flights.refresh; ) await (settled = flights.refresh)?.catch(() => undefined);
+      if (flights.restarts !== restarts) return;
       await mutate<readonly Page[]>(
         list,
         (current) => {
@@ -109,7 +110,10 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
     if (list === null) return;
     setRequested({ list: id, status: "loading" });
     try {
-      await (flights.next ??= appendNext().finally(() => (flights.next = undefined)));
+      const { restarts } = flights;
+      await (flights.next ??= appendNext(restarts).finally(() => {
+        if (flights.restarts === restarts) flights.next = undefined;
+      }));
       settle(null);
     } catch (thrown) {
       settle({ list: id, status: "failed", error: thrown instanceof Error ? thrown : new Error(String(thrown)) });
@@ -126,6 +130,8 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
     },
     async restart() {
       settle(null);
+      flights.restarts += 1;
+      flights.next = undefined;
       await mutate<readonly Page[]>(list, (current) => (current ?? fallbackData).slice(0, 1), { revalidate: true });
     },
     async revalidate() {
