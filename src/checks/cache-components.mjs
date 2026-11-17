@@ -11,7 +11,7 @@ import { parseSource } from "./support/sources.mjs";
  * @typedef {{ kind: "on" } | { kind: "missing" } | { kind: "off" | "unread" | "experimental", line: number } | { kind: "hidden", line: number, why: string }} Verdict
  */
 
-const CONFIGS = ["ts", "mts", "mjs", "js", "cjs"].map((extension) => `next.config.${extension}`);
+const CONFIGS = ["js", "mjs", "ts", "mts"].map((extension) => `next.config.${extension}`);
 const WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "TSTypeAssertion", "ParenthesizedExpression"]);
 const SET = "Set cacheComponents: true at the top level of the object it exports, as Next 16 reads it.";
 
@@ -30,6 +30,7 @@ function verdictOf(program, lineOf) {
   /** @type {Map<string, Node>} */
   const consts = new Map(program.body.flatMap((/** @type {Node} */ node) => {
     const declaration = node.type === "ExportNamedDeclaration" ? node.declaration : node;
+    if (declaration?.type === "FunctionDeclaration" && declaration.id) return [[declaration.id.name, declaration]];
     return declaration?.type === "VariableDeclaration" ? declaration.declarations.flatMap((/** @type {Node} */ item) => (item.id.type === "Identifier" && item.init ? [[item.id.name, item.init]] : [])) : [];
   }));
   const seen = /** @type {Set<Node>} */ (new Set());
@@ -42,11 +43,15 @@ function verdictOf(program, lineOf) {
       case "ObjectExpression": return object(value);
       case "Identifier": return consts.has(value.name) ? read(/** @type {Node} */ (consts.get(value.name))) : { kind: "hidden", line: lineOf(value), why: "a name the check cannot trace" };
       case "CallExpression": {
-        const config = value.arguments.filter((/** @type {Node} */ arg) => arg.type !== "SpreadElement").map(read).find((/** @type {Verdict} */ verdict) => verdict.kind !== "hidden");
-        return config ?? { kind: "hidden", line: lineOf(value), why: "a call that takes no object it can read" };
+        const verdicts = value.arguments.filter((/** @type {Node} */ arg) => arg.type !== "SpreadElement").map(read);
+        const set = verdicts.find((/** @type {Verdict} */ verdict) => verdict.kind !== "hidden" && verdict.kind !== "missing");
+        if (set) return set;
+        if (!verdicts.some((/** @type {Verdict} */ verdict) => verdict.kind === "missing")) return { kind: "hidden", line: lineOf(value), why: "a call that takes no object it can read" };
+        return verdicts.some((/** @type {Verdict} */ verdict) => verdict.kind === "hidden") ? { kind: "hidden", line: lineOf(value), why: "a call with an argument it cannot read and none that sets cacheComponents" } : { kind: "missing" };
       }
       case "ArrowFunctionExpression":
-      case "FunctionExpression": {
+      case "FunctionExpression":
+      case "FunctionDeclaration": {
         if (value.body.type !== "BlockStatement") return read(value.body);
         const last = value.body.body.findLast((/** @type {Node} */ statement) => statement.type === "ReturnStatement" && statement.argument);
         return last ? read(last.argument) : { kind: "hidden", line: lineOf(value), why: "a function that returns no object at its top level" };
@@ -100,6 +105,7 @@ export default {
     return dependents(repo, "next").flatMap((app) => {
       const path = CONFIGS.map((name) => posix.join(app, name)).find((candidate) => tracked.has(candidate));
       const key = `${app} cacheComponents`;
+      if (path === undefined && JSON.parse(repo.read(posix.join(app, "package.json"))).dependencies?.next === undefined) return [];
       if (path === undefined) return [{ key, fix: `${app} has no next.config file. Add next.config.ts that exports { cacheComponents: true }.` }];
       const text = repo.read(path);
       const { program, errors } = parseSource(path, text);
