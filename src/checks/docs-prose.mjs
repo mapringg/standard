@@ -1,5 +1,5 @@
 import { REQUIRED_HEADINGS } from "./pr-body.mjs";
-import { loadCorpus } from "./support/docs.mjs";
+import { loadCorpus, plainText } from "./support/docs.mjs";
 
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
@@ -25,7 +25,7 @@ function properNames(corpus) {
 function titleCase(heading, proper) {
   if (REQUIRED_HEADINGS.includes(heading)) return false;
   let starts = true;
-  for (const word of heading.replace(/`[^`]*`/g, " ").replace(/^\s*\d+(?:\.\d+)*[.)]?\s+/, "").split(/\s+/).filter(Boolean)) {
+  for (const word of plainText(heading, " ").replace(/^\s*\d+(?:\.\d+)*[.)]?\s+/, "").split(/\s+/).filter(Boolean)) {
     const bare = core(word);
     if (!starts && /^\p{Lu}/u.test(bare) && !/^[\p{Lu}\p{N}]+$/u.test(bare) && !/.[\p{Lu}.]/u.test(bare) && !proper.has(bare)) return true;
     starts = /[.:?!]$/.test(word);

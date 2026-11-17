@@ -103,6 +103,35 @@ test("docs-prose fails a sentence over 40 words, counting a code span or a link 
   );
 });
 
+test("docs-prose reads a code span between equal backtick runs as code", (t) => {
+  passes(t, {
+    "docs/a.md": [
+      "# Use ``a `Just` Robust`` here",
+      "",
+      "Use ``a `just` — robust`` as the example.",
+      `Then ${words(38)} \`\`a \`b\` c d e\`\`.`,
+      "",
+    ].join("\n"),
+  });
+});
+
+test("docs-prose leaves reference definitions and HTML markup out of prose", (t) => {
+  passes(t, {
+    "docs/a.md": [
+      "# Guide",
+      "",
+      "Read [the manual][manual].",
+      "",
+      "[manual]: https://example.com/just/robust",
+      "",
+      '<img src="https://example.com/just/robust.svg" alt="Logo — dark">',
+      '<p align="center"><a href="https://example.com/very">Docs</a></p>',
+      "",
+    ].join("\n"),
+  });
+  fails(t, { "docs/a.md": '# Guide\n\n<p align="center">It is very fast.</p>\n' }, `docs/a.md uses filler on line 3 "very". ${FILLER}`);
+});
+
 test("docs-prose leaves logs and files of no kind to docs", (t) => {
   passes(t, { "docs/decision-log.md": "# Big Log\n\nIt is just — very long.\n", "DESIGN.md": "# Big Design\n" });
 });
