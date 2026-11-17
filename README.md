@@ -191,7 +191,7 @@ The fix names the replacement for each kind of effect:
 
 | The effect | Replacement |
 | --- | --- |
-| Reads data | `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`, or a server component |
+| Reads data | A Server Component that passes the data down as props, or `useSWR` or `useSWRInfinite` from `src/lib/swr.ts` when it must load in the browser |
 | Derives state from props or state | Compute it in render |
 | Responds to an event | The event handler |
 | Resets state when a prop changes | A `key` |
