@@ -330,3 +330,67 @@ test("restart while the next page loads ends with only the restarted first page"
   await settle();
   assert.deepEqual({ requests: api.requests, pages: firstItems(result), loadingMore: result.current.loadingMore }, { requests: [["items", 1], ["items", 0]], pages: ["restarted 0"], loadingMore: false });
 });
+
+function queuedPages() {
+  const requests = [];
+  const held = [];
+  return {
+    requests,
+    fetchPage(key) {
+      requests.push(key);
+      if (key[1] === 0) return Promise.resolve({ index: 0, items: ["fetched 0"] });
+      return new Promise((resolve, reject) => held.push({ resolve: () => resolve({ index: key[1], items: [`fetched ${key[1]}`] }), reject: (message) => reject(new Error(message)) }));
+    },
+    held,
+  };
+}
+
+async function loadMoreAcrossRestart(t) {
+  const api = queuedPages();
+  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  await act(async () => result.current.loadMore());
+  await act(async () => result.current.restart());
+  await settle(() => firstItems(result)[0] === "fetched 0");
+  await act(async () => result.current.loadMore());
+  await settle(() => api.held.length === 2);
+  const [obsolete, current] = api.held;
+  return { api, result, obsolete, current };
+}
+
+const loadState = (result) => ({ pages: firstItems(result), loadingMore: result.current.loadingMore, error: result.current.error?.message });
+
+test("a load more from before a restart that succeeds late keeps the newer load more loading", async (t) => {
+  const { api, result, obsolete } = await loadMoreAcrossRestart(t);
+  await act(async () => obsolete.resolve());
+  await settle();
+  assert.deepEqual({ requests: api.requests, ...loadState(result) }, { requests: [["items", 1], ["items", 0], ["items", 1]], pages: ["fetched 0"], loadingMore: true, error: undefined });
+});
+
+test("a load more from before a restart that succeeds late keeps the error of the newer load more", async (t) => {
+  const { result, obsolete, current } = await loadMoreAcrossRestart(t);
+  await act(async () => current.reject("page 1 failed"));
+  await settle(() => result.current.error !== undefined);
+  await act(async () => obsolete.resolve());
+  await settle();
+  assert.deepEqual(loadState(result), { pages: ["fetched 0"], loadingMore: false, error: "page 1 failed" });
+});
+
+test("a load more from before a restart that fails late shows no error", async (t) => {
+  const { result, obsolete, current } = await loadMoreAcrossRestart(t);
+  await act(async () => obsolete.reject("obsolete page failed"));
+  await settle();
+  assert.deepEqual(loadState(result), { pages: ["fetched 0"], loadingMore: true, error: undefined });
+  await act(async () => current.resolve());
+  await settle(() => !result.current.loadingMore);
+  assert.deepEqual(loadState(result), { pages: ["fetched 0", "fetched 1"], loadingMore: false, error: undefined });
+});
+
+test("a load more that fails late after another component restarts the list shows no error", async (t) => {
+  const api = queuedPages();
+  const { result } = await mount(t, () => useTwoLists(api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  await act(async () => result.current.table.loadMore());
+  await act(async () => result.current.toolbar.restart());
+  await act(async () => api.held[0].reject("obsolete page failed"));
+  await settle(() => !result.current.table.loadingMore);
+  assert.deepEqual({ table: result.current.table.error?.message, toolbar: result.current.toolbar.error?.message }, { table: undefined, toolbar: undefined });
+});
