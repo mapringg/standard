@@ -12,14 +12,24 @@ import { parseSource } from "./support/sources.mjs";
  */
 
 const ERROR_FILE = /^(global-)?error\.[jt]sx?$/;
-const LAYOUT = /^layout\.[jt]sx?$/;
-const LISTED = `wrap the <Suspense> in a component that error-boundaries in ${FILE} lists.`;
+const LAYOUT = /^(layout|template)\.[jt]sx?$/;
+const LOADING = /^loading\.[jt]sx?$/;
+const LISTED = `wrap the <Suspense> in a component that error-boundaries in ${FILE} lists or that catchError makes in the same file.`;
 
 /** @type {(program: Node) => Map<string, Imported>} */
 function importsOf(program) {
   return new Map(program.body.flatMap((/** @type {Node} */ node) => (node.type === "ImportDeclaration" && node.importKind !== "type"
     ? node.specifiers.map((/** @type {Node} */ item) => [item.local.name, { module: node.source.value, name: item.type === "ImportSpecifier" ? item.imported.name ?? item.imported.value : item.type === "ImportDefaultSpecifier" ? "default" : "*" }])
     : [])));
+}
+
+/** @type {(program: Node, imports: Map<string, Imported>) => Set<string>} The top-level names that `catchError` from `next/error` makes. */
+function caughtOf(program, imports) {
+  const made = (/** @type {Node | null} */ init) => init?.type === "CallExpression" && init.callee.type === "Identifier" && imports.get(init.callee.name)?.module === "next/error" && imports.get(init.callee.name)?.name === "catchError";
+  return new Set(program.body.flatMap((/** @type {Node} */ node) => {
+    const declaration = node.type === "ExportNamedDeclaration" ? node.declaration : node;
+    return declaration?.type === "VariableDeclaration" ? declaration.declarations.filter((/** @type {Node} */ item) => item.id.type === "Identifier" && made(item.init)).map((/** @type {Node} */ item) => item.id.name) : [];
+  }));
 }
 
 /** @type {(name: Node, imports: Map<string, Imported>) => Imported | null} The export a JSX tag names: `Tag` from a named import, or `Lib.Tag` from a namespace or default import. */
@@ -47,8 +57,8 @@ export default {
   name: "suspense-errors",
   since: "0.14.16",
   doc: {
-    enforces: "A `<Suspense>` in a file under a Next app's `app` folder sits under an error boundary: an `error.*` in its route segment or a parent, a `global-error.*` at the app root, or a component that `error-boundaries` lists around it in the same file. A layout's own segment's `error.*` does not count.",
-    fix: "Add an `error.tsx` to the segment or a parent, or wrap the `<Suspense>` in a listed error boundary.",
+    enforces: "A `<Suspense>` in a file under a Next app's `app` folder, and each `loading.*` there, sits under an error boundary: an `error.*` in its route segment or a parent, a `global-error.*` at the app root, or a component around it in the same file that `error-boundaries` lists or `catchError` makes. A layout's or template's own segment's `error.*` does not count.",
+    fix: "Add an `error.tsx` to the segment or a parent, or a `global-error.tsx` for the root layout, or wrap the `<Suspense>` in a listed or `catchError` error boundary.",
     config: ["error-boundaries"],
   },
   subject: "tree",
@@ -70,22 +80,31 @@ export default {
       const found = resolve(file, specifier);
       return found === null || found.startsWith("../") || found.split("/").includes("node_modules") ? null : found;
     };
-    return routed.flatMap(({ path, root }) => {
-      const folder = posix.dirname(path);
-      const layout = LAYOUT.test(posix.basename(path));
-      let covered = has(root, "global-");
-      for (let at = folder; !covered; at = posix.dirname(at)) {
-        covered = (!layout || at !== folder) && has(at, "");
-        if (at === root) break;
+    /** @type {(folder: string, root: string, own: boolean) => boolean} */
+    const covered = (folder, root, own) => {
+      if (has(root, "global-")) return true;
+      for (let at = folder; ; at = posix.dirname(at)) {
+        if ((own || at !== folder) && has(at, "")) return true;
+        if (at === root) return false;
       }
-      if (covered) return [];
+    };
+    const loadings = repo.files().flatMap((path) => {
+      const root = LOADING.test(posix.basename(path)) && !NOT_PRODUCT.test(path) ? appRootOf(apps, path) : null;
+      const folder = posix.dirname(path);
+      return root === null || covered(folder, root, true) ? [] : [{ key: `${path} Suspense`, fix: `${path} is the Suspense boundary of ${folder}, and no error boundary covers it. Add an error.tsx to ${folder} or a parent segment, or a global-error.tsx to the app folder.` }];
+    });
+    return [...loadings, ...routed.flatMap(({ path, root }) => {
+      const folder = posix.dirname(path);
+      const kind = LAYOUT.test(posix.basename(path)) ? posix.basename(path).split(".")[0] : null;
+      if (covered(folder, root, kind === null)) return [];
       const text = repo.read(path);
       const { program, errors } = parseSource(path, text, { preserveParens: false });
       if (errors.length > 0) return [];
       const imports = importsOf(program);
+      const caught = caughtOf(program, imports);
       /** @type {(tag: Imported | null) => boolean} */
       const isBoundary = (tag) => tag !== null && listed.some(({ source, name }) => name === tag.name && (source === tag.module || target(path, tag.module) === source));
-      const lines = /** @type {number[]} */ ([]);
+      const sites = /** @type {{ line: number, column: number }[]} */ ([]);
       /** @type {(node: unknown, guarded: boolean) => void} */
       const walk = (node, guarded) => {
         if (Array.isArray(node)) return node.forEach((item) => walk(item, guarded));
@@ -93,18 +112,24 @@ export default {
         if (typeof value?.type !== "string") return;
         if (value.type === "JSXElement") {
           const tag = tagOf(value.openingElement.name, imports);
-          if (!guarded && tag?.module === "react" && tag.name === "Suspense") lines.push(text.slice(0, value.start).split("\n").length);
-          return walk([value.openingElement.attributes, value.children], guarded || isBoundary(tag));
+          if (!guarded && tag?.module === "react" && tag.name === "Suspense") {
+            const before = text.slice(0, value.start).split("\n");
+            sites.push({ line: before.length, column: (before.at(-1) ?? "").length + 1 });
+          }
+          const name = value.openingElement.name;
+          return walk([value.openingElement.attributes, value.children], guarded || isBoundary(tag) || (name.type === "JSXIdentifier" && caught.has(name.name)));
         }
         Object.values(value).forEach((child) => walk(child, guarded));
       };
       walk(program.body, false);
-      const unique = [...new Set(lines)];
-      const shown = `line${unique.length > 1 ? "s" : ""} ${unique.join(", ")}`;
-      const fix = layout
-        ? `A segment's error.tsx does not catch its own layout, so add an error.tsx to a parent of ${folder}, or a global-error.tsx for the root layout, or ${LISTED}`
-        : `Add an error.tsx to ${folder} or a parent segment, or ${LISTED}`;
-      return lines.map(() => ({ key: `${path} Suspense`, fix: `${path} renders <Suspense> on ${shown}, and no error boundary wraps it. ${fix}` }));
-    });
+      const shared = (/** @type {number} */ line) => sites.filter((site) => site.line === line).length > 1;
+      const shown = `line${sites.length > 1 ? "s" : ""} ${sites.map(({ line, column }) => (shared(line) ? `${line}:${column}` : `${line}`)).join(", ")}`;
+      const fix = kind === null
+        ? `Add an error.tsx to ${folder} or a parent segment, or ${LISTED}`
+        : folder === root
+          ? `No error.tsx catches the root ${kind}, so add a global-error.tsx to ${root}, or ${LISTED}`
+          : `A segment's error.tsx does not catch its own ${kind}, so add an error.tsx to a parent of ${folder}, or ${LISTED}`;
+      return sites.map(() => ({ key: `${path} Suspense`, fix: `${path} renders <Suspense> on ${shown}, and no error boundary wraps it. ${fix}` }));
+    })];
   },
 };
