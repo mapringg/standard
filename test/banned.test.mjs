@@ -131,7 +131,105 @@ test("banned fails a tracked oxlint config that sets a restricted rule anywhere,
       "apps/web/oxlint.config.ts": 'export default { rules: { "eslint/no-restricted-properties": ["error", { object: "Date", property: "now" }] } };\n',
     },
     "apps/api/.oxlintrc.json no-restricted-imports: apps/api/.oxlintrc.json sets no-restricted-imports, which bans APIs a second way beside banned. Move its entries to banned in .standard/config.json, and delete the rule from rules and every overrides entry.",
-    "apps/web/oxlint.config.ts no-restricted-properties: apps/web/oxlint.config.ts sets no-restricted-properties, which replaces the bans on Reflect and module mocking from @mapringg/standard/oxlint for the files it covers. Move its entries to banned in .standard/config.json, and delete the rule from rules and every overrides entry.",
+    "apps/web/oxlint.config.ts no-restricted-properties: apps/web/oxlint.config.ts sets no-restricted-properties, which replaces the bans on Reflect from @mapringg/standard/oxlint for the files it covers. Move its entries to banned in .standard/config.json, and delete the rule from rules and every overrides entry.",
+  );
+});
+
+const MOCK_FIX = "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module.";
+
+test("banned fails module mocking in every repository through aliases, namespaces, destructuring and globals, and passes a local vi", (t) => {
+  fails(
+    t,
+    [],
+    {
+      "src/aliased.test.ts": 'import { vi as v } from "vitest";\nv.mock("./db");\n',
+      "src/namespace.test.ts": 'import * as V from "vitest";\nV.vi.doMock("./db");\n',
+      "src/destructured.test.ts": 'import { vi } from "vitest";\nconst { mock } = vi;\nmock("./db");\n',
+      "src/global.test.ts": 'vi.mock("./db");\n',
+      "src/jest.test.ts": 'import { jest } from "@jest/globals";\njest.unmock("./db");\n',
+      "src/local.test.ts": 'const vi = { mock() {} };\nvi.mock("./db");\n',
+    },
+    `src/aliased.test.ts vitest#vi.mock: src/aliased.test.ts uses vitest#vi.mock on line 2. ${MOCK_FIX}`,
+    `src/destructured.test.ts vitest#vi.mock: src/destructured.test.ts uses vitest#vi.mock on lines 2, 3. ${MOCK_FIX}`,
+    `src/global.test.ts vi.mock: src/global.test.ts uses vi.mock on line 1. ${MOCK_FIX}`,
+    `src/jest.test.ts @jest/globals#jest.unmock: src/jest.test.ts uses @jest/globals#jest.unmock on line 2. ${MOCK_FIX}`,
+    `src/namespace.test.ts vitest#vi.doMock: src/namespace.test.ts uses vitest#vi.doMock on line 2. ${MOCK_FIX}`,
+  );
+});
+
+test("banned fails a file that re-exports vi or jest, and passes other vitest exports and a direct vi.fn", (t) => {
+  const reexport = (path, api, line, name, module) => `${path} export ${api}: ${path} re-exports ${api} on line ${line}. Import ${name} from ${module} where you use it.`;
+  fails(
+    t,
+    [],
+    {
+      "src/named.ts": 'export { vi } from "vitest";\n',
+      "src/renamed.ts": 'export { expect, jest as runner } from "@jest/globals";\n',
+      "src/all.ts": 'export * from "vitest";\n',
+      "src/all-as.ts": 'export * as V from "vitest";\n',
+      "src/local.ts": 'import { vi } from "vitest";\nexport { vi };\nexport const v = vi;\n',
+      "src/global.ts": "export default vi;\n",
+      "src/meta.ts": "export const runner = import.meta.vitest;\n",
+      "src/other.ts": 'export { expect } from "vitest";\nexport * from "vitest/node";\n',
+      "src/spy.test.ts": 'import { vi } from "vitest";\nimport * as helper from "./named";\nvi.fn();\nvi.spyOn(console, "log");\nhelper.vi.fn();\n',
+    },
+    reexport("src/all-as.ts", "vitest#vi", 1, "vi", "vitest"),
+    reexport("src/all.ts", "vitest#vi", 1, "vi", "vitest"),
+    reexport("src/global.ts", "vi", 1, "vi", "vitest"),
+    "src/local.ts export vitest#vi: src/local.ts re-exports vitest#vi on lines 2, 3. Import vi from vitest where you use it.",
+    reexport("src/meta.ts", "vitest#vi", 1, "vi", "vitest"),
+    reexport("src/named.ts", "vitest#vi", 1, "vi", "vitest"),
+    reexport("src/renamed.ts", "@jest/globals#jest", 1, "jest", "@jest/globals"),
+  );
+});
+
+test("banned treats import.meta.vitest as the vitest module", (t) => {
+  fails(
+    t,
+    [],
+    {
+      "src/sum.ts": 'export const sum = 1;\nif (import.meta.vitest) {\n  const { vi } = import.meta.vitest;\n  vi.doMock("./db");\n  import.meta.vitest.vi.mock("./db");\n  vi.fn();\n}\n',
+    },
+    `src/sum.ts vitest#vi.doMock: src/sum.ts uses vitest#vi.doMock on line 4. ${MOCK_FIX}`,
+    `src/sum.ts vitest#vi.mock: src/sum.ts uses vitest#vi.mock on line 5. ${MOCK_FIX}`,
+  );
+});
+
+test("banned fails every vitest and jest member that replaces or restores a module, and passes the ones that read the real module", (t) => {
+  const vitest = ["doUnmock", "importMock"];
+  const jest = ["setMock", "dontMock", "deepUnmock", "unstable_unmockModule", "enableAutomock", "disableAutomock", "autoMockOn", "autoMockOff", "requireMock", "createMockFromModule", "onGenerateMock"];
+  const files = {
+    ...Object.fromEntries(vitest.map((name) => [`src/vi-${name}.test.ts`, `import { vi } from "vitest";\nvi.${name}("./db");\n`])),
+    ...Object.fromEntries(jest.map((name) => [`src/jest-${name}.test.ts`, `import { jest } from "@jest/globals";\njest.${name}("./db");\n`])),
+    "src/global-setMock.test.ts": 'jest.setMock("./db", {});\n',
+    "src/real.test.ts": [
+      'import { vi } from "vitest";',
+      'import { jest } from "@jest/globals";',
+      'await vi.importActual("./db");',
+      'jest.requireActual("./db");',
+      "vi.resetModules();",
+      "jest.isolateModules(() => {});",
+      "vi.mocked(vi.fn());",
+      "",
+    ].join("\n"),
+  };
+  const line = (path, api, at) => `${path} ${api}: ${path} uses ${api} on line ${at}. ${MOCK_FIX}`;
+  fails(
+    t,
+    [],
+    files,
+    line("src/global-setMock.test.ts", "jest.setMock", 1),
+    ...jest.toSorted().map((name) => line(`src/jest-${name}.test.ts`, `@jest/globals#jest.${name}`, 2)),
+    ...vitest.toSorted().map((name) => line(`src/vi-${name}.test.ts`, `vitest#vi.${name}`, 2)),
+  );
+});
+
+test("banned catches a banned export through a longer chain such as .call", (t) => {
+  fails(
+    t,
+    [{ import: "react#useMemo", fix: "Let the React Compiler memoize." }],
+    { "src/view.tsx": 'import React from "react";\nexport const value = React.useMemo.call(null, () => 1, []);\n' },
+    "src/view.tsx react#useMemo: src/view.tsx uses react#useMemo on line 2. Let the React Compiler memoize.",
   );
 });
 

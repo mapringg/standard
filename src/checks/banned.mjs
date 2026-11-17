@@ -14,10 +14,35 @@ const SECOND_WAY = "bans APIs a second way beside banned";
 
 /** oxlint rule options do not merge, so a config that sets one of these replaces the shared one for its files. */
 const OXLINT_RULES = new Map([
-  ["no-restricted-properties", "replaces the bans on Reflect and module mocking from @mapringg/standard/oxlint for the files it covers"],
+  ["no-restricted-properties", "replaces the bans on Reflect from @mapringg/standard/oxlint for the files it covers"],
   ["no-restricted-imports", SECOND_WAY],
   ["no-restricted-globals", SECOND_WAY],
 ]);
+
+/**
+ * Each test runner's members that replace a module, restore one, switch automocking, or hand back a mocked module, from the VitestUtils
+ * interface of vitest 5.1.0 and the Jest interface of @jest/environment 30.5.2. Members that read the real module, such as importActual
+ * and requireActual, stay allowed.
+ */
+const MOCKING = [
+  { module: "vitest", object: "vi", members: ["mock", "doMock", "unmock", "doUnmock", "importMock"] },
+  {
+    module: "@jest/globals",
+    object: "jest",
+    members: ["mock", "doMock", "setMock", "unstable_mockModule", "unmock", "dontMock", "deepUnmock", "unstable_unmockModule", "enableAutomock", "disableAutomock", "autoMockOn", "autoMockOff", "requireMock", "createMockFromModule", "onGenerateMock"],
+  },
+];
+
+/** Module mocking through vitest or jest, imported or as a global, banned in every source file before the repository's own entries. */
+const BUILT_IN = /** @type {readonly BannedRule[]} */ (MOCKING.flatMap(({ module, object, members }) => [
+  { space: "module", paths: members.map((name) => `${module}#${object}.${name}`) },
+  { space: "global", paths: members.map((name) => `${object}.${name}`) },
+]).map((rule) => ({
+  ...rule,
+  files: [],
+  except: [],
+  fix: "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module.",
+})));
 
 const OXLINT_CONFIG = /(?:^|\/)(?:[^/]*\.)?oxlintrc\.json$|(?:^|\/)oxlint\.config\.[cm]?[jt]s$/;
 
@@ -27,20 +52,23 @@ function covers(rule, path) {
   return (rule.files.length === 0 || rule.files.some(matches)) && !rule.except.some(matches);
 }
 
+/** @type {(rule: BannedRule, path: string, use: string) => boolean} A path covers itself and every longer use: `react` covers `react#useMemo`, which covers `react#useMemo.call`. */
+const under = (rule, path, use) => use === path || use.startsWith(path + (rule.space === "module" && !path.includes("#") ? "#" : "."));
+
 /**
  * @param {import("./support/source.mjs").Parsed} file
- * @param {readonly BannedRule[]} rules In config order. Each use counts once, for the first rule that covers the file and the use.
- * @returns {Finding[]} One per banned API the file uses, with every line in the fix.
+ * @param {readonly BannedRule[]} rules The built-in bans, then config order. Each use counts once, for the first rule that covers the file and the use.
+ * @returns {Finding[]} One per banned API the file uses or test runner object it re-exports, with every line in the fix.
  */
 function findings(file, rules) {
-  /** @type {Map<string, { lines: Set<number>, fix: string }>} */
+  /** @type {Map<string, { lines: Set<number>, fix: string, said: string }>} */
   const found = new Map();
   /** @type {Set<unknown>} */
   const claimed = new Set();
-  /** @type {(api: string, line: number, fix: string) => void} */
-  const add = (api, line, fix) => {
-    if (!found.has(api)) found.set(api, { lines: new Set(), fix });
-    found.get(api)?.lines.add(line);
+  /** @type {(key: string, line: number, fix: string, said?: string) => void} */
+  const add = (key, line, fix, said = `uses ${key}`) => {
+    if (!found.has(key)) found.set(key, { lines: new Set(), fix, said });
+    found.get(key)?.lines.add(line);
   };
   for (const rule of rules.filter((rule) => covers(rule, file.path))) {
     if (rule.space === "property") {
@@ -50,17 +78,22 @@ function findings(file, rules) {
       }
       continue;
     }
-    const separator = rule.space === "module" ? "#" : ".";
     for (const use of file.uses.filter((use) => use.kind !== "type" && use.space === rule.space && !claimed.has(use))) {
-      const api = rule.paths.find((path) => use.path === path || use.path.startsWith(path + separator));
+      const api = rule.paths.find((path) => under(rule, path, use.path));
       if (api === undefined) continue;
       claimed.add(use);
       add(api, use.line, rule.fix);
     }
   }
-  return [...found].map(([api, { lines, fix }]) => {
+  for (const { space, path, line } of file.exports) {
+    const runner = MOCKING.find(({ module, object }) => (space === "module" ? path === module || path === `${module}#${object}` : path === object));
+    if (!runner) continue;
+    const api = space === "module" ? `${runner.module}#${runner.object}` : runner.object;
+    add(`export ${api}`, line, `Import ${runner.object} from ${runner.module} where you use it.`, `re-exports ${api}`);
+  }
+  return [...found].map(([key, { lines, fix, said }]) => {
     const sorted = [...lines].sort((a, b) => a - b);
-    return { key: `${file.path} ${api}`, fix: `${file.path} uses ${api} on line${sorted.length > 1 ? "s" : ""} ${sorted.join(", ")}. ${fix}` };
+    return { key: `${file.path} ${key}`, fix: `${file.path} ${said} on line${sorted.length > 1 ? "s" : ""} ${sorted.join(", ")}. ${fix}` };
   });
 }
 
@@ -102,8 +135,8 @@ export default {
   retired: ["no-process-env", "no-bare-json-parse", "no-module-mocking", "no-manual-memo"].flatMap((rule) => [`packages/oxlint-plugin-*/rules/${rule}.ts`, `packages/oxlint-plugin-*/rules/${rule}.test.ts`]),
   applies: () => ({ on: true }),
   run(repo) {
-    const files = sourceFacts(repo).filter((file) => repo.config.banned.some((rule) => covers(rule, file.path)));
+    const rules = [...BUILT_IN, ...repo.config.banned];
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
-    return [...oxlintConflicts(repo), ...files.flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, repo.config.banned)))];
+    return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => ("error" in file ? [parseError(file)] : findings(file, rules)))];
   },
 };

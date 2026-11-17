@@ -6,7 +6,7 @@ import { namesOf as names } from "../boundaries.mjs";
 /**
  * @typedef {{ type: string, [key: string]: any }} Node
  *
- * One use of an API from outside the file. A "module" path is a specifier, or `specifier#export`, such as `react#useMemo`.
+ * One use of an API from outside the file. A "module" path is a specifier, or `specifier#export` and any static members read after it, such as `react#useMemo` or `vitest#vi.mock`.
  * A "global" path is a dotted chain from an unshadowed global, such as `process.env.API_URL`. Kind "type" is a type-only import, which no rule counts.
  * A call adds `call`: the name and start offset of the nearest named function around it, the first name its result's
  * array pattern binds, and the UTF-16 offset where the call ends.
@@ -15,7 +15,9 @@ import { namesOf as names } from "../boundaries.mjs";
  *
  * `members` holds the lines of each static property name read on any object, by member access or destructuring.
  * `client` is true when the directive prologue holds "use client".
- * @typedef {{ path: string, uses: readonly Use[], members: ReadonlyMap<string, readonly number[]>, client: boolean }} Parsed
+ * `exports` holds each value the file exports that comes from outside it: `vitest#vi` for `export { vi } from "vitest"` or a local that holds vi, and the module itself for `export * from "vitest"`.
+ * @typedef {{ space: "module" | "global", path: string, line: number }} Export
+ * @typedef {{ path: string, uses: readonly Use[], exports: readonly Export[], members: ReadonlyMap<string, readonly number[]>, client: boolean }} Parsed
  * @typedef {Parsed | { path: string, error: string }} FileFacts
  *
  * What a chain names so far, and what a binding holds: an import, or a local that a static chain initialized. Other locals hold null. A module ref with a `namespace` is a namespace or default binding, whose next key names an export.
@@ -27,6 +29,9 @@ import { namesOf as names } from "../boundaries.mjs";
 
 /** Modules whose default or namespace binding is a global, and whose named exports are its members. */
 const MODULE_GLOBALS = new Map([["process", "process"], ["node:process", "process"]]);
+
+/** Globals that hold a module's namespace: an in-source Vitest test reads vi from import.meta.vitest. */
+const GLOBAL_MODULES = new Map([["import.meta.vitest", "vitest"]]);
 
 const WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "TSTypeAssertion", "ChainExpression"]);
 
@@ -107,8 +112,12 @@ function keyOf(key, computed) {
 
 /** @type {(ref: Ref, key: string) => Ref} */
 function extend(ref, key) {
-  if (ref.space === "global") return { space: "global", path: ref.path ? `${ref.path}.${key}` : key };
-  return ref.namespace === null ? ref : moduleRef(`${ref.namespace}#${key}`);
+  if (ref.space === "global") {
+    const path = ref.path ? `${ref.path}.${key}` : key;
+    const module = GLOBAL_MODULES.get(path);
+    return module ? importRef({ module, imported: "*" }) : { space: "global", path };
+  }
+  return moduleRef(ref.namespace === null ? `${ref.path}.${key}` : `${ref.namespace}#${key}`);
 }
 
 /** @type {(binding: { module: string, imported: string }) => Ref} */
@@ -127,6 +136,7 @@ function factsOf(path, text) {
   for (let index = text.indexOf("\n"); index !== -1; index = text.indexOf("\n", index + 1)) starts.push(index + 1);
   const lineOf = (/** @type {Node} */ node) => starts.findLastIndex((start) => start <= node.start) + 1;
   const pending = /** @type {{ ref: Later, kind: Use["kind"], line: number, call?: Call }[]} */ ([]);
+  const exported = /** @type {{ ref: Later, line: number }[]} */ ([]);
   const members = /** @type {Map<string, number[]>} */ (new Map());
   const stack = /** @type {Map<string, Later | null>[]} */ ([]);
   const owners = /** @type {{ name: string, at: number }[]} */ ([]);
@@ -136,6 +146,10 @@ function factsOf(path, text) {
   /** @type {(ref: Later | null, kind: Use["kind"], node: Node, call?: Call) => void} */
   const emit = (ref, kind, node, call) => {
     if (ref) pending.push({ ref, kind, line: lineOf(node), call });
+  };
+  /** @type {(ref: Later | null, node: Node) => void} */
+  const exportOf = (ref, node) => {
+    if (ref) exported.push({ ref, line: lineOf(node) });
   };
   /** @type {(node: Node | null, name: string) => void} Names the functions a binding holds, through wrapping calls such as memo(...). */
   const label = (node, name) => {
@@ -176,10 +190,12 @@ function factsOf(path, text) {
     const kindOf = (/** @type {Node} */ item) => (typeOnly || (item.importKind ?? item.exportKind) === "type" ? "type" : "import");
     const allTypes = specifiers.length > 0 && specifiers.every((/** @type {Node} */ item) => kindOf(item) === "type");
     emit(now(moduleRef(module)), typeOnly || allTypes ? "type" : "import", node);
+    if (node.type === "ExportAllDeclaration" && !typeOnly) exportOf(now(importRef({ module, imported: "*" })), node);
     for (const specifier of specifiers) {
       const imported = specifier.type === "ImportDefaultSpecifier" ? "default" : specifier.type === "ImportNamespaceSpecifier" ? "*"
         : /** @type {string} */ (keyOf(specifier.type === "ExportSpecifier" ? specifier.local : specifier.imported, false));
       emit(now(importRef({ module, imported })), kindOf(specifier), specifier);
+      if (node.type === "ExportNamedDeclaration" && kindOf(specifier) !== "type") exportOf(now(importRef({ module, imported })), specifier);
       if (node.type === "ImportDeclaration") top.set(specifier.local.name, kindOf(specifier) === "type" ? null : now(importRef({ module, imported })));
     }
   }
@@ -265,7 +281,8 @@ function factsOf(path, text) {
       case "ExportNamedDeclaration":
         if (node.source || node.exportKind === "type") return;
         walk(node.declaration);
-        for (const specifier of node.specifiers) if (specifier.exportKind !== "type") refer(specifier.local, "read");
+        for (const name of node.declaration ? declared([node.declaration]) : []) exportOf(resolve(name), node);
+        for (const specifier of node.specifiers) if (specifier.exportKind !== "type") exportOf(refer(specifier.local, "read"), specifier);
         return;
       case "VariableDeclarator": {
         if (node.id.type === "Identifier") label(node.init, node.id.name);
@@ -275,7 +292,7 @@ function factsOf(path, text) {
       }
       case "ExportDefaultDeclaration":
         label(node.declaration, "default");
-        return walk(node.declaration);
+        return exportOf(refer(node.declaration, "read"), node);
       case "AssignmentExpression": {
         const base = refer(node.right, "read");
         return node.left.type.endsWith("Pattern") ? pattern(node.left, base) : walk(node.left);
@@ -313,13 +330,17 @@ function factsOf(path, text) {
 
   stack.push(top);
   walk(program.body);
+  const exports = exported.flatMap(({ ref, line }) => {
+    const found = ref();
+    return found?.path ? [{ space: found.space, path: found.path, line }] : [];
+  });
   const uses = pending.flatMap(({ ref, kind, line, call }) => {
     const found = ref();
     if (!found?.path) return [];
     const use = { space: found.space, path: found.path, line };
     return [call ? { ...use, kind: /** @type {const} */ ("call"), call } : { ...use, kind: /** @type {Exclude<Use["kind"], "call">} */ (kind) }];
   });
-  return { path, uses, members, client: program.body.some((/** @type {Node} */ node) => node.directive === "use client") };
+  return { path, uses, exports, members, client: program.body.some((/** @type {Node} */ node) => node.directive === "use client") };
 }
 
 /** banned and react read the same repo in one run, so each parses it once. */
