@@ -7,11 +7,13 @@ import { parseSource, sourceFiles } from "./support/sources.mjs";
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
  * @typedef {{ type: string, start: number, end: number, [key: string]: any }} Node
- * @typedef {{ type: "Line" | "Block", value: string, start: number, end: number }} Comment
+ * @typedef {{ type: "Line" | "Block" | "Html", value: string, start: number, end: number }} Comment
  *
  * What a kind needs to judge one comment: the comment's text without its markers, whether it is part of the file's
- * license header, the SAFETY comments a type assertion claims, and the doc headings.
- * @typedef {{ body: string, header: boolean, comment: Comment, claimed: ReadonlyMap<Comment, Comment[]>, docs: ReadonlyMap<string, () => ReadonlySet<string>> }} Context
+ * license tag run, whether it sits above the code in a header that holds a copyright or license notice besides that
+ * run, the SAFETY
+ * comments a type assertion claims, and the doc headings.
+ * @typedef {{ body: string, licensed: boolean, noticed: boolean, comment: Comment, claimed: ReadonlyMap<Comment, Comment[]>, docs: ReadonlyMap<string, () => ReadonlySet<string>> }} Context
  *
  * One kind of comment the check recognises. `judge` returns undefined when the comment is not of this kind, null when it
  * passes, and otherwise the fix. The check tries the kinds in order, and a comment of no kind gets the COMMENT fix.
@@ -26,6 +28,7 @@ const GENERATED_NAMES = new Set(["next-env.d.ts"]);
 const parseSpdx = createRequire(import.meta.url)("spdx-expression-parse");
 const LICENSE_TAG = /^(?:SPDX-License-Identifier:|@license)\s+(\S.*)$/;
 const LICENSE_WORDS = /\b(?:copyright|licen[cs]e|spdx)\b|©/i;
+const NOTICE = /\b(?:copyright|spdx)\b|©|@license\b/i;
 const LICENSE_FIX = "Keep only a leading `SPDX-License-Identifier: <expression>` line, whose expression names SPDX license ids such as `MIT` or `Apache-2.0 OR MIT`. If this is third-party code that must keep its copyright or notice, mark its path `linguist-vendored` in `.gitattributes`.";
 
 /** @type {(line: string) => boolean} Whether a line is a license tag whose expression parses as SPDX and names only SPDX-listed licenses and exceptions, not a `LicenseRef-` or `DocumentRef-` that could say anything. */
@@ -59,6 +62,7 @@ const DIRECTIVE = /^(?:(?:eslint|oxlint)-(?:disable|enable)|@ts-)/;
 /** Nodes that own the comment above them, or above the export that holds them, so a SAFETY comment there claims the assertions inside. */
 const OWNERS = new Set(["ExpressionStatement", "PropertyDefinition", "ReturnStatement", "ThrowStatement", "VariableDeclaration"]);
 
+const HTML = "An HTML comment ships to every visitor. Move the why into a name or a doc, and delete the comment.";
 const COMMENT = `Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in ${DOCS.join(" or ")} and point at it alone on a line with // See: <path>.md#<heading>.`;
 
 /** @type {(heading: string) => string} The anchor GitHub gives a heading. */
@@ -66,6 +70,7 @@ const slug = (heading) => heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-
 
 /** @type {Kind[]} */
 const KINDS = [
+  { key: "html-comment", judge: ({ comment }) => (comment.type === "Html" ? HTML : undefined) },
   {
     key: "lint-directive",
     judge: ({ body }) => {
@@ -101,12 +106,12 @@ const KINDS = [
       return anchor === undefined || headings().has(anchor) ? null : `Point at a heading ${path} has, as GitHub slugs it, or drop the anchor; it has no #${anchor}.`;
     },
   },
-  { key: "license", judge: ({ header, body }) => (header ? null : LICENSE_WORDS.test(body) ? LICENSE_FIX : undefined) },
+  { key: "license", judge: ({ licensed, noticed, body }) => (licensed ? null : NOTICE.test(body) || (noticed && LICENSE_WORDS.test(body)) ? LICENSE_FIX : undefined) },
 ];
 
 /** @type {(comment: Comment) => string} */
 function bodyOf(comment) {
-  return comment.type === "Block" ? comment.value.replace(/^\s*\*?/, "").trim() : comment.value.trim();
+  return comment.type === "Line" || comment.type === "Html" ? comment.value.trim() : comment.value.replace(/^\s*\*?/, "").trim();
 }
 
 /**
@@ -213,16 +218,18 @@ function trackedDocs(repo) {
  * @returns {Finding[]} One per kind of problem in the file, with every line in the fix.
  */
 function findings(path, source, docs) {
-  const { program, comments, errors, text } = parseSource(path, source);
-  if (errors.length > 0) return [{ key: `${path} parse`, fix: `${path} does not parse, so no-comments cannot read it: ${errors[0]?.message}. Fix the syntax.` }];
+  const { program, comments, errors, text } = parseSource(path, source, { markup: true });
+  if (errors.length > 0) return [{ key: `${path} parse`, fix: `${path} does not parse, so no-comments cannot read it: ${errors[0]?.message}. ${/** @type {any} */ (errors[0])?.fix ?? "Fix the syntax."}` }];
   const sorted = /** @type {Comment[]} */ (comments.filter((comment) => comment.start !== program.hashbang?.start)).sort((a, b) => a.start - b.start);
   const codeStart = /** @type {Node[]} */ (program.body)[0]?.start ?? text.length;
-  const licensed = new Set(licenseHeader(sorted.filter((comment) => comment.start < codeStart)));
+  const header = sorted.filter((comment) => comment.start < codeStart);
+  const licensed = new Set(licenseHeader(header));
+  const noticed = new Set(header.some((comment) => !licensed.has(comment) && NOTICE.test(bodyOf(comment))) ? header : []);
   const claimed = claimedSafety(text, program, sorted);
   /** @type {Map<string, { key: string, lines: Set<number>, fix: string }>} */
   const found = new Map();
   for (const comment of sorted) {
-    const context = { body: bodyOf(comment), header: licensed.has(comment), comment, claimed, docs };
+    const context = { body: bodyOf(comment), licensed: licensed.has(comment), noticed: noticed.has(comment), comment, claimed, docs };
     let verdict = /** @type {string | null | undefined} */ (undefined);
     let key = "comment";
     for (const kind of KINDS) {
@@ -249,7 +256,7 @@ export default {
   name: "no-comments",
   since: "0.13.0",
   doc: {
-    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped.",
+    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. An `.astro` component's markup holds no HTML comment, and its expressions follow the same rules. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped.",
     fix: "Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`.",
     config: [],
   },

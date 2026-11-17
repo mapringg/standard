@@ -11,6 +11,9 @@ importers:
       '@astrojs/compiler':
         specifier: 4.0.0
         version: 4.0.0
+      entities:
+        specifier: 9.0.0
+        version: 9.0.0
       knip:
         specifier: 6.45.1
         version: 6.45.1
@@ -20,6 +23,9 @@ importers:
       oxc-resolver:
         specifier: 11.24.2
         version: 11.24.2
+      parse5:
+        specifier: 8.1.1
+        version: 8.1.1
       spdx-expression-parse:
         specifier: 5.0.0
         version: 5.0.0

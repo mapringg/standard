@@ -114,7 +114,7 @@ export const WIRED = {
   ".standard/config.json": { hooks: { "pre-push": ["pnpm test"] } },
   "package.json": {
     scripts: { prepare: "standard install", test: "node --test" },
-    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.14.8" },
+    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.14.9" },
   },
   ".github/workflows/ci.yml": [
     "on:",

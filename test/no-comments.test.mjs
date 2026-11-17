@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { git, standard, tempRepo, write } from "./helpers.mjs";
 
 const COMMENT = "Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in docs/*.md or apps/*/docs/*.md and point at it alone on a line with // See: <path>.md#<heading>.";
+const HTML = "An HTML comment ships to every visitor. Move the why into a name or a doc, and delete the comment.";
 const LICENSE = "Keep only a leading `SPDX-License-Identifier: <expression>` line, whose expression names SPDX license ids such as `MIT` or `Apache-2.0 OR MIT`. If this is third-party code that must keep its copyright or notice, mark its path `linguist-vendored` in `.gitattributes`.";
 
 function check(t, files) {
@@ -235,7 +236,7 @@ test("wiring fails a repo plugin's no-comments rule and its test, which no-comme
   assert.doesNotMatch(stdout, /safety-comment/);
 });
 
-test("no-comments fails comments in an Astro component's frontmatter and scripts, and passes its markup and HTML comments", (t) => {
+test("no-comments fails comments in an Astro component's frontmatter, scripts and markup", (t) => {
   fails(
     t,
     {
@@ -254,6 +255,7 @@ test("no-comments fails comments in an Astro component's frontmatter and scripts
       ].join("\n"),
     },
     `src/pages/index.astro comment: src/pages/index.astro has comments on lines 2, 8. ${COMMENT}`,
+    `src/pages/index.astro html-comment: src/pages/index.astro has a comment on line 5. ${HTML}`,
   );
 });
 
@@ -275,4 +277,184 @@ test("no-comments reads Astro frontmatter past a fence line in a string, and ski
     },
     `src/pages/index.astro comment: src/pages/index.astro has a comment on line 5. ${COMMENT}`,
   );
+});
+
+test("no-comments fails HTML comments and markup expression comments in an Astro component, and passes a pointer and a directive there", (t) => {
+  fails(
+    t,
+    {
+      "docs/layout.md": "# Layout\n\n## Font preloads\n",
+      "src/pages/markup.astro": [
+        "---",
+        "const items = [1];",
+        "---",
+        "<!-- ships to visitors -->",
+        "<!--",
+        "  spans lines",
+        "-->",
+        "<!--[if IE]><p>old</p><![endif]-->",
+        "<?prose in a bogus comment?>",
+        '<p title="<!-- an attribute value -->">สวัสดี {/* in an expression */}</p>',
+        "<ul>{items.map((item) => {",
+        "  // inside the arrow",
+        "  return <li>{/* nested */ item}</li>;",
+        "})}</ul>",
+        "<Card data={/* attribute */ 1} {/* spread */ ...items} label=`a${/* template */ 1}` slot={<i>{/* jsx */}</i>} />",
+        "<noscript><!-- in noscript --></noscript>",
+        "<pre is:raw><!-- raw --> {/* literal text */}</pre>",
+        '<div set:html="<!-- injected -->"></div>',
+        "<style>/* css */ p { color: red; }</style>",
+        '<script type="application/ld+json">{"a": "/* data */"}</script>',
+        "<title><!-- title text --></title>",
+        '<div set:text="<!-- escaped text -->"></div>',
+        "{/* See: docs/layout.md#font-preloads */}",
+        "{/* oxlint-disable-next-line no-img-element -- intrinsic sizing */}",
+        "<img />",
+        "{/* See: docs/missing.md */}",
+        "</ prose in an end tag>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/markup.astro html-comment: src/pages/markup.astro has comments on lines 4, 5, 8, 9, 16, 17, 18, 27. ${HTML}`,
+    `src/pages/markup.astro comment: src/pages/markup.astro has comments on lines 10, 12, 13, 15. ${COMMENT}`,
+    "src/pages/markup.astro doc-pointer: src/pages/markup.astro has a comment on line 26. Point at a tracked doc that matches docs/*.md or apps/*/docs/*.md, with a path from the repository root; docs/missing.md is not one.",
+  );
+});
+
+test("no-comments gives the license fix only to a notice marker or a license header, not to prose that says license", (t) => {
+  fails(
+    t,
+    {
+      "src/a.ts": "// Validate the license field before saving the driver record.\nexport const a = 1;\n",
+      "src/b.ts": "export const b = 1;\n// The driving licence number must have eight digits.\n",
+      "src/c.ts": "// Copyright 2026 Someone\n// Licensed under the Apache License, Version 2.0.\n// Reads the cache first.\nexport const c = 1;\n",
+      "src/d.ts": "export const d = 1;\n/* \u00a9 2026 Someone */\n",
+      "src/e.ts": "// SPDX-License-Identifier: MIT\n// Validate the driving license field.\nexport const e = 1;\n",
+      "src/f.ts": "// @license MIT\n// Verify the driving licence.\nexport const f = 1;\n",
+    },
+    `src/a.ts comment: src/a.ts has a comment on line 1. ${COMMENT}`,
+    `src/b.ts comment: src/b.ts has a comment on line 2. ${COMMENT}`,
+    `src/c.ts license: src/c.ts has comments on lines 1, 2. ${LICENSE}`,
+    `src/c.ts comment: src/c.ts has a comment on line 3. ${COMMENT}`,
+    `src/d.ts license: src/d.ts has a comment on line 2. ${LICENSE}`,
+    `src/e.ts comment: src/e.ts has a comment on line 2. ${COMMENT}`,
+    `src/f.ts comment: src/f.ts has a comment on line 2. ${COMMENT}`,
+  );
+});
+
+test("no-comments finds an HTML comment that nested is:raw or braces hide in is:raw and set:html content", (t) => {
+  fails(
+    t,
+    {
+      "src/pages/raw.astro": [
+        "<div is:raw><pre is:raw><!-- prose --></pre></div>",
+        '<div is:raw>{"<!-- prose -->"}</div>',
+        '<div set:html="<div is:raw><!-- prose --></div>" />',
+        "<div set:html=\"{'<!-- prose -->'}\" />",
+        "<div is:raw>{<i><!-- prose --></i>}</div>",
+        '<div is:raw><p title="<!-- text -->">hello</p><script>"<!-- script text -->"</script>{"plain"}</div>',
+        "<div is:raw></astro-raw><!-- prose --></div>",
+        "",
+      ].join("\n"),
+      "src/pages/text.astro": 'Hello "<!-- prose -->"\n<p>"quoted" text</p>\n',
+    },
+    `src/pages/raw.astro html-comment: src/pages/raw.astro has comments on lines 1, 2, 3, 4, 5, 7. ${HTML}`,
+    `src/pages/text.astro html-comment: src/pages/text.astro has a comment on line 1. ${HTML}`,
+  );
+});
+
+test("no-comments passes CDATA in SVG and MathML, which is text there, and fails CDATA in HTML or an integration point and a comment in SVG", (t) => {
+  fails(
+    t,
+    {
+      "src/pages/cdata.astro": [
+        "<svg><![CDATA[ plain text ]]></svg>",
+        "<svg><!-- in svg --></svg>",
+        "<p><![CDATA[ bogus ]]></p>",
+        "<div is:raw><svg><![CDATA[ text ]]></svg></div>",
+        "<svg><foreignObject><p><![CDATA[ html ]]></p></foreignObject></svg>",
+        "<math><![CDATA[ m ]]></math>",
+        "<svg is:raw><![CDATA[ raw ]]></svg>",
+        "<svg><foreignObject><![CDATA[ svg text ]]></foreignObject></svg>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/cdata.astro html-comment: src/pages/cdata.astro has comments on lines 2, 3, 5, 8. ${HTML}`,
+  );
+});
+
+test("no-comments reads raw HTML and set:html values with an HTML parser in their element's context", (t) => {
+  const deep = (depth) => `<div is:raw>${"<x is:raw>".repeat(depth)}<!-- prose -->${"</x>".repeat(depth)}</div>`;
+  fails(
+    t,
+    {
+      "src/pages/html.astro": [
+        "<div is:raw><x is:raw><x is:raw><!-- prose --></x></x></div>",
+        "<div is:raw><div is:raw><div is:raw><!-- prose --></div></div></div>",
+        '<div is:raw><x a={"<!-- prose -->"}>safe</x></div>',
+        "<svg><title><!-- prose --></title></svg>",
+        "<math><mi><mglyph><![CDATA[ text ]]></mglyph></mi></math>",
+        '<math><annotation-xml encoding="application/xml"><x><![CDATA[ text ]]></x></annotation-xml></math>',
+        "<div is:raw><svg><title><!-- prose --></title></svg></div>",
+        '<div set:html="Hello &amp; world"/>',
+        "<div is:raw><TEXTAREA><!-- prose --></TEXTAREA></div>",
+        '<div set:html="<div is:raw><div is:raw><!-- prose --></div></div>"/>',
+        '<div is:raw><math><annotation-xml encoding="text/html"><p><![CDATA[ text ]]></p></annotation-xml></math></div>',
+        '<div set:html="&lt;!-- encoded --&gt;"/>',
+        deep(10),
+        "<svg><style><!-- svg style --></style></svg>",
+        "<div is:raw><svg><![CDATA[ <!-- text --> ]]></svg></div>",
+        "<svg><![cdata[ text ]]></svg>",
+        "<div is:raw><x is:raw><textarea><!-- text --></textarea></x></div>",
+        '<div set:html="a&#10;&lt;!-- next line --&gt;"/>',
+        '<math><annotation-xml encoding="text/html"><p><![CDATA[ text ]]></p></annotation-xml></math>',
+        "<title><!-- title text --></title><style><!-- css --></style>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/html.astro html-comment: src/pages/html.astro has comments on lines 1, 2, 4, 7, 10, 11, 12, 13, 14, 16, 18, 19. ${HTML}`,
+  );
+});
+
+test("no-comments names markup code it cannot place, with a rewrite in place of a syntax fix", (t) => {
+  const { stdout, status } = check(t, { "src/pages/a.astro": "---\nconst x = 1;\n---\n{<T,>(value: T) => value}\n" });
+  assert.equal(stdout, "no-comments: src/pages/a.astro parse: src/pages/a.astro does not parse, so no-comments cannot read it: the markup on line 4 holds code the compiler places where the text does not have it, which no check can read. Move that code into the frontmatter, and use its result in the markup.\n");
+  assert.equal(status, 1);
+});
+
+test("no-comments fails CDATA in a font with color inside SVG, which leaves foreign content", (t) => {
+  fails(t, { "src/pages/a.astro": '<p>a</p>\n<svg><font color="red"><![CDATA[ text ]]></font></svg>\n' }, `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`);
+});
+
+test("no-comments fails CDATA in a font with face inside MathML, which leaves foreign content", (t) => {
+  fails(t, { "src/pages/a.astro": '<p>a</p>\n<math><font face="serif"><![CDATA[ text ]]></font></math>\n' }, `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`);
+});
+
+test("no-comments passes comment-like text in a title under a font with color in SVG, which is an HTML title", (t) => {
+  passes(t, { "src/pages/a.astro": '<svg><font color="red"><title><!-- text --></title></font></svg>\n' });
+});
+
+test("no-comments leaves title text under a font spread undecided, but checks code and later markup", (t) => {
+  passes(t, {
+    "src/pages/static.astro": '<svg><font {...{color:"red"}}><title><!-- prose --></title></font></svg>\n',
+    "src/pages/dynamic.astro": '<math><font {...props}><title><!-- prose --></title></font></math>\n',
+  });
+  fails(
+    t,
+    { "src/pages/a.astro": '<svg><font {...props}><title><!-- prose --></title>{/* code */ 1}</font></svg>\n<!-- sibling -->\n' },
+    `src/pages/a.astro comment: src/pages/a.astro has a comment on line 1. ${COMMENT}`,
+    `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`,
+  );
+});
+
+test("no-comments passes comment-like text after a constant set:html that opens a textarea", (t) => {
+  passes(t, { "src/pages/a.astro": '<div set:html="&lt;textarea&gt;"/><!-- prose -->\n' });
+});
+
+test("no-comments passes comment-like text after is:raw content that opens plaintext", (t) => {
+  passes(t, { "src/pages/a.astro": "<div is:raw><plaintext></div><!-- prose -->\n" });
+});
+
+test("no-comments reports a set:html comment on the line its entities put it", (t) => {
+  fails(t, { "src/pages/a.astro": '<div set:html="\n&copy;\n&lt;!-- comment --&gt;"/>\n' }, `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 3. ${HTML}`);
 });
