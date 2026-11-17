@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { git, standard, tempRepo, write } from "./helpers.mjs";
@@ -123,6 +124,10 @@ test("no-comments skips a generated file, named by its header or as next-env.d.t
     `src/a.ts comment: src/a.ts has a comment on line 2. ${COMMENT}`,
     `src/env.d.ts comment: src/env.d.ts has a comment on line 1. ${COMMENT}`,
   );
+});
+
+test("no-comments passes the swr template copied into a Next app", (t) => {
+  passes(t, { "apps/web/src/lib/swr.ts": readFileSync(new URL("../templates/swr.ts", import.meta.url), "utf8") });
 });
 
 test("no-comments fails a source it cannot parse", (t) => {
