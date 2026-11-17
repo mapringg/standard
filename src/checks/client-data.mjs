@@ -29,7 +29,8 @@ const moduleOf = (path) => (path.indexOf("#", 1) === -1 ? path : path.slice(0, p
 
 /**
  * @param {Repo} repo
- * @returns {Promise<(file: string, specifier: string) => string | null>} The repo file a file's specifier names, or null.
+ * @returns {Promise<(file: string, specifier: string) => string | null>} The file a file's specifier names, relative to the root, or null. Only
+ *   source files are ever reached, so a target in node_modules or outside the repo matches nothing.
  */
 async function targets(repo) {
   const root = realpathSync(repo.root);
@@ -40,8 +41,7 @@ async function targets(repo) {
   const resolve = (file, specifier) => {
     const resolver = resolvers.of(file);
     const found = resolver.resolve(posix.join(root, file), specifier, "import", true, "static") ?? resolver.resolve(posix.join(root, file), specifier, "import", true, "dynamic");
-    const relative = found === null || found === "builtin" ? null : posix.relative(root, found);
-    return relative === null || relative.startsWith("../") || relative.split("/").includes("node_modules") ? null : relative;
+    return found === null || found === "builtin" ? null : posix.relative(root, found);
   };
   return (file, specifier) => {
     const at = `${file}\0${specifier}`;
