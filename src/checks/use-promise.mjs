@@ -96,10 +96,11 @@ function holds(test, name) {
 }
 
 /**
- * @type {(fn: Node, top: Map<string, Binding>) => boolean} Whether a function returns only a promise it keeps in a module-level binding and
- *   reuses: the binding its first statement returns when set, one it only sets with `??=` or `||=`, or one it never sets.
+ * @type {(fn: Node, top: Map<string, Binding>, writes: Map<string, Set<Node>>) => boolean} Whether a function returns only a promise it keeps
+ *   in a module-level binding and reuses: the binding its first statement returns when set, one it only sets with `??=` or `||=`, or one it
+ *   never sets. No other assignment in the module, nested callbacks included, may set that binding.
  */
-function keeps(fn, top) {
+function keeps(fn, top, writes) {
   /** @type {Set<string>} */
   const own = new Set(fn.params.flatMap(namesOf));
   /** @type {Node[]} */
@@ -108,6 +109,8 @@ function keeps(fn, top) {
   const stored = [];
   /** @type {Map<string, string[]>} The operators each name is assigned with. */
   const assigned = new Map();
+  /** @type {Set<Node>} */
+  const mine = new Set();
   /** @type {(node: unknown) => void} */
   const walk = (node) => {
     if (Array.isArray(node)) return node.forEach(walk);
@@ -116,6 +119,7 @@ function keeps(fn, top) {
     if (value.type === "VariableDeclarator") namesOf(value.id).forEach((name) => own.add(name));
     if (value.type === "ReturnStatement") returned.push(value.argument);
     if (value.type === "AssignmentExpression" && value.left.type === "Identifier") {
+      mine.add(value);
       assigned.set(value.left.name, [...(assigned.get(value.left.name) ?? []), value.operator]);
       if (value.operator === "=" && unwrap(value.right).type === "Identifier") stored.push([value.left.name, unwrap(value.right).name]);
     }
@@ -129,12 +133,16 @@ function keeps(fn, top) {
   /** @type {(name: string) => boolean} */
   const module = (name) => !own.has(name) && top.get(name)?.kind === "local";
   /** @type {(name: string) => boolean} */
-  const kept = (name) => module(name) && (name === guarded || (assigned.get(name) ?? []).every((operator) => operator === "??=" || operator === "||="));
+  const kept = (name) => {
+    const all = [...(writes.get(name) ?? [])];
+    if (!module(name) || !all.every((node) => mine.has(node))) return false;
+    return name === guarded ? all.length <= 1 : (assigned.get(name) ?? []).every((operator) => operator === "??=" || operator === "||=");
+  };
   return returned.length > 0 && returned.every((node) => {
     const value = node && unwrap(node);
     if (value?.type === "AssignmentExpression" && ["??=", "||="].includes(value.operator) && value.left.type === "Identifier") return kept(value.left.name);
     if (value?.type !== "Identifier") return false;
-    return kept(value.name) || stored.some(([name, local]) => local === value.name && name === guarded && module(name));
+    return kept(value.name) || stored.some(([name, local]) => local === value.name && name === guarded && kept(name));
   });
 }
 
@@ -232,6 +240,10 @@ export default {
       const values = new Set();
       /** @type {Map<Node, string>} */
       const names = new Map();
+      /** @type {Map<string, string>} A name that holds another name, as in `const read = useRead`. */
+      const aliases = new Map();
+      /** @type {Map<string, Set<Node>>} Each assignment anywhere in the file to a module-level name. */
+      const writes = new Map();
       /** @type {Map<Node, { receiver: Node, lookup: (name: string) => Binding | undefined }>} An inline `.map` or `.flatMap` callback, to the list it reads. */
       const callbacks = new Map();
       /** @type {(node: unknown, parent: Node | null, field: string) => void} */
@@ -242,6 +254,11 @@ export default {
         const lookup = () => lookupIn([...scopes]);
         if (value.type === "FunctionDeclaration" && value.id) names.set(value, value.id.name);
         if (value.type === "VariableDeclarator" && value.id.type === "Identifier" && value.init && FUNCTIONS.has(inner(value.init).type)) names.set(inner(value.init), value.id.name);
+        if (value.type === "VariableDeclarator" && value.id.type === "Identifier" && value.init && unwrap(value.init).type === "Identifier") aliases.set(value.id.name, unwrap(value.init).name);
+        const left = value.type === "AssignmentExpression" ? value.left : value.type === "UpdateExpression" ? value.argument : null;
+        for (const name of left ? namesOf(unwrap(left)) : []) {
+          if (lookupIn(scopes)(name) === top.get(name)) writes.set(name, new Set([...(writes.get(name) ?? []), value]));
+        }
         if (value.type === "Identifier" && !["callee", "id", "key"].includes(field) && !(field === "property" && !parent?.computed)) values.add(value.name);
         const scope = FUNCTIONS.has(value.type)
           ? new Map([
@@ -260,6 +277,8 @@ export default {
       };
       walk(program.body, null, "body");
       const { exported, trusted } = boundary(program);
+      /** @type {(name: string, seen?: Set<string>) => string} */
+      const root = (name, seen = new Set()) => (aliases.has(name) && !seen.has(name) ? root(/** @type {string} */ (aliases.get(name)), seen.add(name)) : name);
       /** @type {Map<string, Origin>} */
       const resolved = new Map();
       /**
@@ -275,7 +294,7 @@ export default {
         resolved.set(id, trust ? "ok" : "untraced");
         const callback = index === 0 ? callbacks.get(fn) : undefined;
         const name = names.get(fn);
-        const at = callback || name === undefined ? [] : calls.filter((call) => call.name === name);
+        const at = callback || name === undefined ? [] : calls.filter((call) => root(call.name) === name);
         /** @type {Origin} */
         const result = callback ? origin(callback.receiver, callback.lookup, new Set()) : trust ? "ok" : name === undefined || exported.has(fn) || values.has(name) || at.length === 0 ? "untraced" : "ok";
         if (result === "ok") {
@@ -335,14 +354,14 @@ export default {
             const binding = callee.type === "Identifier" ? lookup(callee.name) : undefined;
             if (binding?.kind === "import") return cached(path, binding.module) !== null ? "ok" : "created";
             const fn = binding?.kind === "local" && binding === top.get(callee.name) ? binding.fn ?? (binding.init && unwrap(binding.init)) : null;
-            return callee === unwrap(value.callee) && fn && FUNCTIONS.has(fn.type) && keeps(fn, top) ? "ok" : "created";
+            return callee === unwrap(value.callee) && !writes.has(callee.name) && fn && FUNCTIONS.has(fn.type) && keeps(fn, top, writes) ? "ok" : "created";
           }
           case "Identifier": {
             const binding = lookup(value.name);
             if (binding?.kind === "param") return worst(argument(binding.fn, binding.index, binding.key), binding.fallback ? origin(binding.fallback, lookup, seen) : "ok");
             if (binding?.kind === "import") return imported(path, binding);
             if (binding?.kind !== "local" || !binding.init) return "untraced";
-            if (binding === top.get(value.name)) return FUNCTIONS.has(unwrap(binding.init).type) ? "untraced" : "ok";
+            if (binding === top.get(value.name)) return FUNCTIONS.has(unwrap(binding.init).type) || writes.has(value.name) ? "untraced" : "ok";
             return origin(binding.key === null ? binding.init : member(binding.init, binding.key), lookup, seen);
           }
           default: return "untraced";
