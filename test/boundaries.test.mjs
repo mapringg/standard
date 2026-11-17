@@ -276,3 +276,55 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
     });
   });
 }
+
+test("boundaries reads only a const loader that an imported or const createRequire makes, and a default sees only the parameters", (t) => {
+  const api = 'new URL("../../api/package.json", import.meta.url)';
+  const cwd = repoWith(t, {
+    "apps/web/scripts/reanchor.mjs": `import { createRequire } from "node:module";\nlet r = createRequire(import.meta.url);\nr = createRequire(${api});\nr("./src/db/client.ts");\n`,
+    "apps/web/scripts/reassigned.mjs": `import { createRequire } from "node:module";\nlet r = createRequire(${api});\nr = (x) => x;\nr("./missing.ts");\n`,
+    "apps/web/scripts/destructured.mjs": `import { createRequire } from "node:module";\nconst { r } = { r: createRequire(${api}) };\nr("./missing.ts");\n`,
+    "apps/web/scripts/creator-destructured.mjs": `import * as m from "node:module";\nconst { createRequire } = m;\nconst r = createRequire(${api});\nr("./missing.ts");\n`,
+    "apps/web/scripts/default-param.mjs": `import { createRequire } from "node:module";\nconst r = createRequire(${api});\nfunction f(x = r("./src/db/client.ts")) {\n  const r = (y) => y;\n  return x;\n}\nf();\n`,
+    "apps/web/scripts/const-module.cjs": 'const m = require("node:module");\nconst r = m.createRequire(__filename);\nr("./missing.cjs");\n',
+    "apps/web/scripts/with-scope.cjs": 'with ({ require: (x) => x }) {\n  require("./missing.cjs");\n}\n',
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/scripts/const-module.cjs imports ./missing.cjs: "./missing.cjs" in apps/web/scripts/const-module.cjs does not resolve. Fix the path so it names a file.',
+      'boundaries: apps/web/scripts/default-param.mjs imports ./src/db/client.ts: apps/api/src/db/client.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+    ],
+    status: 1,
+  });
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries stops as TypeScript ${major} does at a null or invalid exports target, and follows an imports target to another package`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": {
+        name: "api",
+        type: "module",
+        exports: {
+          "./null-condition": { types: null, import: "./src/required.ts" },
+          "./null-array": [null, "./src/required.ts"],
+          "./inner-parent": { types: "./missing.d.ts", import: "./sub/../src/required.ts" },
+          "./escape": { types: "./missing.d.ts", import: "./../outside.ts" },
+        },
+      },
+      "apps/api/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/outside.ts": 'export const value: "required" = "required";\n',
+      "apps/node/package.json": { name: "node-app", type: "module", dependencies: { api: "workspace:*" }, imports: { "#other": { types: "./missing.d.ts", import: "other" } } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/node_modules/other/package.json": { name: "other", type: "module", exports: "./index.ts" },
+      "apps/node/node_modules/other/index.ts": 'export const value: "other" = "other";\n',
+      "apps/node/src/private.mts": 'import { value } from "#other";\nexport const v: "other" = value;\n',
+      ...Object.fromEntries(["null-condition", "null-array", "inner-parent", "escape"].map((name) => [`apps/node/src/${name}.mts`, `import { value } from "api/${name}";\nexport const v = value;\n`])),
+    });
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const unexported = (name) => `boundaries: apps/node/src/${name}.mts imports api/${name}: "api/${name}" is not in the exports of the workspace package api. Import a subpath its exports list, or add this one there.`;
+    assert.deepEqual(findings(cwd), {
+      lines: ["escape", "inner-parent", "null-array", "null-condition"].map(unexported),
+      status: 1,
+    });
+  });
+}

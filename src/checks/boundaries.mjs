@@ -157,7 +157,7 @@ function baseOf(node, file) {
 /**
  * @typedef {{ kind: "creator" | "namespace" | "other" } | { kind: "require", base: string | null }} Binding What a name means in a scope: the
  *   createRequire import, a namespace of node:module, a require that createRequire made from base, or anything else.
- * @typedef {{ parent: Scope | null, names: Map<string, Binding> }} Scope
+ * @typedef {{ parent: Scope | null, names: Map<string, Binding>, opaque?: boolean }} Scope A with statement's body is opaque: any name in it may come from its object.
  */
 
 const OTHER = /** @type {Binding} */ ({ kind: "other" });
@@ -167,10 +167,10 @@ const LOOPS = new Set(["ForStatement", "ForInStatement", "ForOfStatement"]);
 /**
  * @param {Scope} scope
  * @param {string} name
- * @returns {Scope | null} The nearest scope that binds the name, or null for a global.
+ * @returns {Scope | null} The nearest scope that binds the name, or may, or null for a global.
  */
 function ownerOf(scope, name) {
-  for (let at = /** @type {Scope | null} */ (scope); at; at = at.parent) if (at.names.has(name)) return at;
+  for (let at = /** @type {Scope | null} */ (scope); at; at = at.parent) if (at.names.has(name) || at.opaque) return at;
   return null;
 }
 
@@ -264,7 +264,7 @@ function requestOf(node) {
  * @param {any} program
  * @param {string} file Absolute.
  * @returns {Request[]} Every import with a fixed specifier. A require() call reads its callee's nearest binding: the global require,
- *   or one that createRequire made from a fixed anchor. The calls wait for the whole walk, so a function may use a require declared below it.
+ *   or a const that createRequire, imported or a const of node:module, made from a fixed anchor. Any other loader is skipped. The calls wait for the whole walk, so a function may use a require declared below it.
  */
 function requestsOf(program, file) {
   /** @type {Request[]} */
@@ -292,18 +292,15 @@ function requestsOf(program, file) {
     if (node === null || typeof node !== "object") return;
     const any = /** @type {any} */ (node);
     if (FUNCTIONS.has(any.type)) {
-      const inner = open(scope);
-      if (any.type === "FunctionExpression" && any.id) inner.names.set(any.id.name, OTHER);
-      for (const param of any.params) for (const name of namesOf(param)) inner.names.set(name, OTHER);
-      if (any.body?.type === "BlockStatement") {
-        declareVars(inner, any.body.body);
-        declareBlock(inner, any.body.body);
-        visit(any.params, inner);
-        visit(any.body.body, inner);
-      } else {
-        visit(any.params, inner);
-        visit(any.body, inner);
-      }
+      const params = open(scope);
+      if (any.type === "FunctionExpression" && any.id) params.names.set(any.id.name, OTHER);
+      for (const param of any.params) for (const name of namesOf(param)) params.names.set(name, OTHER);
+      visit(any.params, params);
+      if (any.body?.type !== "BlockStatement") return visit(any.body, params);
+      const body = open(params);
+      declareVars(body, any.body.body);
+      declareBlock(body, any.body.body);
+      visit(any.body.body, body);
       return;
     }
     if (any.type === "BlockStatement" || any.type === "StaticBlock" || any.type === "SwitchStatement") {
@@ -323,11 +320,18 @@ function requestsOf(program, file) {
       children(any, inner);
       return;
     }
-    if (any.type === "VariableDeclarator" && any.id.type === "Identifier" && any.init?.type === "CallExpression" && creates(any.init.callee, scope)) {
-      const owner = ownerOf(scope, any.id.name);
-      const base = baseOf(any.init.arguments[0], file);
-      const before = owner?.names.get(any.id.name);
-      if (owner) owner.names.set(any.id.name, { kind: "require", base: before?.kind === "require" && before.base !== base ? null : base });
+    if (any.type === "WithStatement") {
+      visit(any.object, scope);
+      visit(any.body, { parent: scope, names: new Map(), opaque: true });
+      return;
+    }
+    if (any.type === "VariableDeclaration" && any.kind === "const") {
+      for (const { id, init } of any.declarations) {
+        const owner = id.type === "Identifier" && init?.type === "CallExpression" ? ownerOf(scope, id.name) : null;
+        if (owner === null) continue;
+        if (creates(init.callee, scope)) owner.names.set(id.name, { kind: "require", base: baseOf(init.arguments[0], file) });
+        else if (init.callee.type === "Identifier" && init.callee.name === "require" && ownerOf(scope, "require") === null && ["module", "node:module"].includes(literal(init.arguments[0]) ?? "")) owner.names.set(id.name, { kind: "namespace" });
+      }
     }
     if (any.type === "CallExpression" && any.callee.type === "Identifier" && any.arguments.length === 1) calls.push({ node: any, scope });
     const request = requestOf(any);
@@ -341,7 +345,8 @@ function requestsOf(program, file) {
   for (const { node, scope } of calls) {
     const specifier = literal(node.arguments[0]);
     if (specifier === null) continue;
-    const binding = ownerOf(scope, node.callee.name)?.names.get(node.callee.name);
+    const owner = ownerOf(scope, node.callee.name);
+    const binding = owner ? owner.names.get(node.callee.name) ?? OTHER : undefined;
     if (binding === undefined && node.callee.name === "require") requests.push({ specifier, kind: "require" });
     else if (binding?.kind === "require" && binding.base) requests.push({ specifier, kind: "require", base: binding.base });
   }

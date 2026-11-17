@@ -69,16 +69,19 @@ function oxcProject(tsconfig, options) {
     }
     return /** @type {ResolverFactory} */ (factories.get(key));
   };
-  return {
-    moduleResolution: node ? "node" : "bundler",
-    resolve(file, specifier, mode, viaPaths) {
-      const conditions = conditionsFor(mode);
-      const found = oxc(factory(conditions, viaPaths), file, specifier);
-      if (found !== null || tsconfig === null || /^[./]/.test(specifier)) return found;
-      // oxc-resolver stops at the first exports target that matches. TypeScript skips one whose file does not exist and tries the next.
-      return fallThrough(file, specifier, new Set([...conditions, "default"]));
-    },
+  /** @type {Resolve} */
+  const resolve = (file, specifier, mode, viaPaths) => {
+    const conditions = conditionsFor(mode);
+    const found = oxc(factory(conditions, viaPaths), file, specifier);
+    if (tsconfig === null || /^[./]/.test(specifier)) return found;
+    // A tsconfig path that maps the specifier wins, as TypeScript tries paths before packages.
+    if (viaPaths && found !== oxc(factory(conditions, false), file, specifier)) return found;
+    // oxc-resolver follows Node: it stops at a missing target and skips a null one. TypeScript does the reverse, so walk the map as it does.
+    const walked = walk(file, specifier, new Set([...conditions, "default"]), (from, bare) => resolve(from, bare, mode, false));
+    if (walked === STOP) return null;
+    return walked ?? found;
   };
+  return { moduleResolution: node ? "node" : "bundler", resolve };
 }
 
 /**
@@ -124,53 +127,64 @@ function exportsMap(exports) {
   return subpaths ? /** @type {Record<string, unknown>} */ (exports) : { ".": exports };
 }
 
+/** The walk reached a null or invalid target, which ends resolution unresolved. */
+const STOP = Symbol("stop");
+const INVALID_SEGMENT = /^(?:\.\.?|node_modules)$/i;
+
 /**
+ * @typedef {(from: string, specifier: string) => string | "builtin" | null} ResolveBare Resolves a package name an imports target names.
  * @param {string} file
  * @param {string} specifier
  * @param {ReadonlySet<string>} conditions
- * @returns {string | null} The target TypeScript takes: the first, in the map's order, whose conditions all match and whose file exists.
+ * @param {ResolveBare} bare
+ * @returns {string | null | typeof STOP} The target TypeScript takes: the first, in the map's order, whose conditions match and whose file
+ *   exists. Null when the package has no map or no key matches, which leaves the answer to oxc-resolver, and STOP when no target
+ *   exists or a null or invalid one ends the walk.
  */
-function fallThrough(file, specifier, conditions) {
+function walk(file, specifier, conditions, bare) {
   const mapping = mappingOf(file, specifier);
   if (mapping === null) return null;
   const { dir, map, key } = mapping;
-  if (Object.hasOwn(map, key) && !key.includes("*")) return target(dir, map[key], "", conditions);
+  const imports = specifier.startsWith("#");
+  /** @param {unknown} value @param {string} star */
+  const target = (value, star) => targetOf(dir, value, star, conditions, imports ? bare : null);
+  if (Object.hasOwn(map, key) && !key.includes("*")) return target(map[key], "") ?? STOP;
   let best = null;
   for (const pattern of Object.keys(map)) {
     const [prefix, suffix, extra] = pattern.split("*");
     if (suffix === undefined || extra !== undefined || !key.startsWith(prefix) || !key.endsWith(suffix) || key.length < pattern.length) continue;
     if (best === null || prefix.length > best.prefix.length || (prefix.length === best.prefix.length && pattern.length > best.pattern.length)) best = { pattern, prefix, suffix };
   }
-  return best && target(dir, map[best.pattern], key.slice(best.prefix.length, key.length - best.suffix.length), conditions);
+  return best && (target(map[best.pattern], key.slice(best.prefix.length, key.length - best.suffix.length)) ?? STOP);
 }
 
 /**
- * @param {string} dir
+ * @param {string} dir The package folder.
  * @param {unknown} value
- * @param {string} star
+ * @param {string} star What the pattern's * matched.
  * @param {ReadonlySet<string>} conditions
- * @returns {string | null}
+ * @param {ResolveBare | null} bare For an imports map, which may name another package.
+ * @returns {string | null | typeof STOP} Null to try the next candidate, as for a missing file.
  */
-function target(dir, value, star, conditions) {
+function targetOf(dir, value, star, conditions, bare) {
   if (typeof value === "string") {
-    if (!value.startsWith("./")) return null;
-    const path = posix.join(dir, value.replaceAll("*", star));
-    const alias = Object.entries(EXTENSION_ALIAS).find(([extension]) => path.endsWith(extension));
-    const candidates = alias ? alias[1].map((extension) => path.slice(0, -alias[0].length) + extension) : [path];
+    const path = value.replaceAll("*", star);
+    if (!value.startsWith("./")) {
+      if (bare === null || /^(?:[#/]|\.\.?\/)/.test(value) || /^[a-z][a-z0-9+.-]*:/i.test(value)) return STOP;
+      const found = bare(posix.join(dir, "package.json"), path);
+      return found === null || found === "builtin" ? STOP : found;
+    }
+    if (path.slice(2).split(/[/\\]/).some((segment) => INVALID_SEGMENT.test(segment))) return STOP;
+    const absolute = posix.join(dir, path);
+    const alias = Object.entries(EXTENSION_ALIAS).find(([extension]) => absolute.endsWith(extension));
+    const candidates = alias ? alias[1].map((extension) => absolute.slice(0, -alias[0].length) + extension) : [absolute];
     const found = candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
     return found ? realpathSync(found) : null;
   }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = target(dir, item, star, conditions);
-      if (found !== null) return found;
-    }
-    return null;
-  }
-  if (value === null || typeof value !== "object") return null;
-  for (const [condition, branch] of Object.entries(value)) {
-    if (condition !== "default" && !conditions.has(condition)) continue;
-    const found = target(dir, branch, star, conditions);
+  if (value === null || (Array.isArray(value) && value.length === 0)) return STOP;
+  const branches = Array.isArray(value) ? value : typeof value === "object" ? Object.entries(value).flatMap(([condition, branch]) => (condition === "default" || conditions.has(condition) ? [branch] : [])) : [];
+  for (const branch of branches) {
+    const found = targetOf(dir, branch, star, conditions, bare);
     if (found !== null) return found;
   }
   return null;
