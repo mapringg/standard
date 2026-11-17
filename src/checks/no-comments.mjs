@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 
-import { parseSync } from "oxc-parser";
+import { parseSource, sourceFiles } from "./support/sources.mjs";
 
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
@@ -16,7 +16,6 @@ import { parseSync } from "oxc-parser";
  * @typedef {{ key: string, judge(context: Context): string | null | undefined }} Kind
  */
 
-const SOURCE = /\.[cm]?[jt]sx?$/;
 const DOCS = ["docs/*.md", "apps/*/docs/*.md"];
 const GENERATED_NAMES = new Set(["next-env.d.ts"]);
 const GENERATED_TAG = /@generated\b/;
@@ -163,12 +162,12 @@ function trackedDocs(repo) {
 
 /**
  * @param {string} path
- * @param {string} text
+ * @param {string} source
  * @param {ReadonlyMap<string, () => ReadonlySet<string>>} docs
  * @returns {Finding[]} One per kind of problem in the file, with every line in the fix.
  */
-function findings(path, text, docs) {
-  const { program, comments, errors } = parseSync(path, text);
+function findings(path, source, docs) {
+  const { program, comments, errors, text } = parseSource(path, source);
   if (errors.length > 0) return [{ key: `${path} parse`, fix: `${path} does not parse, so no-comments cannot read it: ${errors[0]?.message}. Fix the syntax.` }];
   const sorted = /** @type {Comment[]} */ (comments.filter((comment) => comment.start !== program.hashbang?.start)).sort((a, b) => a.start - b.start);
   const codeStart = /** @type {Node[]} */ (program.body)[0]?.start ?? text.length;
@@ -216,9 +215,6 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const docs = trackedDocs(repo);
-    return repo
-      .files()
-      .filter((path) => SOURCE.test(path) && !path.split("/").includes("node_modules"))
-      .flatMap((path) => findings(path, repo.read(path), docs));
+    return sourceFiles(repo).flatMap((path) => findings(path, repo.read(path), docs));
   },
 };
