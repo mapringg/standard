@@ -298,6 +298,15 @@ test("baseline-growth lets the bump to 0.14.14 stage route-await", (t) => {
   assert.equal(status, 0);
 });
 
+test("baseline-growth lets the bump to 0.14.15 stage use-promise", (t) => {
+  const { stdout, status } = checkGrowth(t, {
+    base: pinned("0.14.14"),
+    head: { ...pinned("0.14.15"), ".standard/config.json": { pending: ["use-promise"] } },
+  });
+  assert.equal(stdout.trim(), "baseline-growth: OK (#123)");
+  assert.equal(status, 0);
+});
+
 test("baseline-growth lets the PR that first installs the standard list anything as pending", (t) => {
   const { stdout, status } = checkGrowth(t, {
     head: { ...pinned("0.2.0"), ".standard/config.json": { pending: ["commit-subject", "pr-body"] } },
@@ -432,6 +441,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "react: skipped, no tracked package.json declares react",
       "client-data: skipped, no tracked package.json declares react",
       "route-await: skipped, no tracked package.json declares next",
+      "use-promise: skipped, no tracked package.json declares react",
       "no-comments: OK",
     ].join("\n"),
   );
