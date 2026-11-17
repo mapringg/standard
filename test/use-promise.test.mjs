@@ -16,6 +16,8 @@ const APP = {
 const CACHED = { "cached-modules": ["apps/web/src/lib/cached.ts"] };
 const CREATED = "A new promise on each render suspends forever. Take the promise as a prop from a Server Component, or call a function from a module that cached-modules in .standard/config.json lists.";
 const UNTRACED = "The check fails closed here, since a promise made during render suspends forever. Take the promise as a prop, call a function from a module that cached-modules lists, or read a context that createContext makes in a file the check can resolve.";
+/** TypeScript 7's API server prints this when the check closes it, after the run has finished. */
+const TSGO_SHUTDOWN = /^context canceled\n/m;
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 
 function repoWith(t, config, files) {
@@ -29,7 +31,8 @@ function repoWith(t, config, files) {
 
 function check(t, config, files, ...flags) {
   const cwd = repoWith(t, config, files);
-  return { cwd, ...standard(cwd, ["check", "use-promise", ...flags]) };
+  const run = standard(cwd, ["check", "use-promise", ...flags]);
+  return { cwd, ...run, stderr: run.stderr.replace(TSGO_SHUTDOWN, "") };
 }
 
 function fails(t, config, files, ...fixes) {
