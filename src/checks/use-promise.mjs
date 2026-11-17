@@ -10,10 +10,11 @@ import { parseSource } from "./support/sources.mjs";
  * @typedef {{ type: string, [key: string]: any }} Node
  *
  * What a name holds where `use` reads it: a parameter of an enclosing function, a local and the expression that set it, or an import.
- * @typedef {{ kind: "param" } | { kind: "local", init: Node | null } | { kind: "import", module: string, name: string }} Binding
+ * `key` is the property a destructuring pattern took the name from.
+ * @typedef {{ kind: "param", fn: Node, index: number, key: string | null } | { kind: "local", init: Node | null, key: string | null } | { kind: "import", module: string, name: string }} Binding
  *
- * Where a value passed to `use` comes from. `ok` is a prop, a parameter, a cached function's result or a context. `created` is a call or
- * `new` the render makes. `untraced` is a value whose origin the check cannot read.
+ * Where a value passed to `use` comes from. `ok` is an exported component's prop, a cached function's result or a context. `created` is a
+ * call or `new` the render makes. `untraced` is a value whose origin the check cannot read.
  * @typedef {"ok" | "created" | "untraced"} Origin
  */
 
@@ -43,6 +44,20 @@ function namesOf(node) {
   }
 }
 
+/** @type {(node: Node) => [string, string | null][]} The names a pattern binds, each with the property it took the name from. */
+function keyed(node) {
+  if (node.type === "AssignmentPattern") return keyed(node.left);
+  if (node.type === "TSParameterProperty") return keyed(node.parameter);
+  if (node.type !== "ObjectPattern") return namesOf(node).map((name) => [name, null]);
+  return node.properties.flatMap((/** @type {Node} */ item) => {
+    const key = item.type === "RestElement" || item.computed ? null : item.key.name ?? String(item.key.value);
+    return namesOf(item.type === "RestElement" ? item.argument : item.value).map((name) => [name, key]);
+  });
+}
+
+/** @type {(object: Node, key: string) => Node} */
+const member = (object, key) => ({ type: "MemberExpression", computed: false, object, property: { type: "Identifier", name: key } });
+
 /** @type {(statements: Node[]) => [string, Binding][]} The names a block's own statements declare, each with what it holds. */
 function declared(statements) {
   return statements.flatMap((statement) => {
@@ -51,9 +66,9 @@ function declared(statements) {
       return node.specifiers.map((/** @type {Node} */ item) => [item.local.name, { kind: "import", module: node.source.value, name: item.type === "ImportSpecifier" ? item.imported.name ?? item.imported.value : item.type === "ImportDefaultSpecifier" ? "default" : "*" }]);
     }
     if (node.type === "VariableDeclaration") {
-      return node.declarations.flatMap((/** @type {Node} */ item) => namesOf(item.id).map((name) => [name, { kind: "local", init: item.init }]));
+      return node.declarations.flatMap((/** @type {Node} */ item) => keyed(item.id).map(([name, key]) => [name, { kind: "local", init: item.init, key }]));
     }
-    return ["FunctionDeclaration", "ClassDeclaration"].includes(node.type) && node.id ? [[node.id.name, { kind: "local", init: null }]] : [];
+    return ["FunctionDeclaration", "ClassDeclaration"].includes(node.type) && node.id ? [[node.id.name, { kind: "local", init: null, key: null }]] : [];
   });
 }
 
@@ -72,6 +87,33 @@ function isCreateContext(callee, lookup) {
   return binding?.kind === "import" && binding.module === "react" && (binding.name === "*" || binding.name === "default");
 }
 
+/** @type {(program: Node) => { exported: Set<Node>, trusted: Set<Node> }} Functions a module boundary can call, and those among them that are components, whose props a Server Component may pass. */
+function boundary(program) {
+  /** @type {Map<string, Node>} */
+  const functions = new Map();
+  for (const statement of program.body) {
+    const node = statement.type.startsWith("Export") && statement.declaration ? statement.declaration : statement;
+    if (node.type === "FunctionDeclaration" && node.id) functions.set(node.id.name, node);
+    if (node.type === "VariableDeclaration") {
+      for (const item of node.declarations) if (item.id.type === "Identifier" && item.init && FUNCTIONS.has(unwrap(item.init).type)) functions.set(item.id.name, unwrap(item.init));
+    }
+  }
+  /** @type {[Node | undefined, string][]} */
+  const exports = program.body.flatMap((/** @type {Node} */ statement) => {
+    if (statement.type === "ExportDefaultDeclaration") {
+      const node = unwrap(statement.declaration);
+      return [[node.type === "Identifier" ? functions.get(node.name) : node, "default"]];
+    }
+    if (statement.type !== "ExportNamedDeclaration" || statement.source) return [];
+    const node = statement.declaration;
+    if (node?.type === "FunctionDeclaration") return [[node, node.id.name]];
+    if (node?.type === "VariableDeclaration") return node.declarations.flatMap((/** @type {Node} */ item) => (item.id.type === "Identifier" ? [[functions.get(item.id.name), item.id.name]] : []));
+    return statement.specifiers.map((/** @type {Node} */ item) => [functions.get(item.local.name ?? item.local.value), item.exported.name ?? item.exported.value]);
+  });
+  const found = exports.flatMap(([fn, name]) => (fn && FUNCTIONS.has(fn.type) ? [{ fn, name }] : []));
+  return { exported: new Set(found.map(({ fn }) => fn)), trusted: new Set(found.filter(({ name }) => name === "default" || /^[A-Z]/.test(name)).map(({ fn }) => fn)) };
+}
+
 /** @type {(...origins: Origin[]) => Origin} */
 const worst = (...origins) => (origins.includes("created") ? "created" : origins.includes("untraced") ? "untraced" : "ok");
 
@@ -80,7 +122,7 @@ export default {
   name: "use-promise",
   since: "0.14.15",
   doc: {
-    enforces: "In a `\"use client\"` file, React's `use` reads a prop, a parameter, the result of a function from a module that `cached-modules` lists, or a context that `createContext` makes. It never reads a call or `new` that the render makes, through any local. A value whose origin the check cannot trace fails.",
+    enforces: "In a `\"use client\"` file, React's `use` reads an exported component's prop, a parameter whose callers in the file pass one of these, the result of a function from a module that `cached-modules` lists, or a context that `createContext` makes. It never reads a call or `new` that the render makes, through any local. A value whose origin the check cannot trace fails.",
     fix: "Take the promise as a prop from a Server Component, or call a function from a module that `cached-modules` lists.",
     config: ["cached-modules"],
   },
@@ -123,12 +165,90 @@ export default {
       const program = programOf(path);
       if (program === null) return [];
       const text = repo.read(path);
-      /** @type {{ origin: Exclude<Origin, "ok">, line: number }[]} */
-      const found = [];
+      /** @type {(node: Node) => number} */
+      const lineOf = (node) => text.slice(0, node.start).split("\n").length;
+      /** @type {Record<Exclude<Origin, "ok">, Set<number>>} */
+      const found = { created: new Set(), untraced: new Set() };
       /** @type {Map<string, Binding>[]} */
       const scopes = [topLevel(program)];
       /** @type {(stack: Map<string, Binding>[]) => (name: string) => Binding | undefined} */
       const lookupIn = (stack) => (name) => stack.findLast((scope) => scope.has(name))?.get(name);
+      /** @type {{ node: Node, lookup: (name: string) => Binding | undefined }[]} */
+      const reads = [];
+      /** @type {{ name: string, node: Node, lookup: (name: string) => Binding | undefined }[]} */
+      const calls = [];
+      /** @type {Set<string>} Names the file reads other than as the callee of a call or the tag of an element. */
+      const values = new Set();
+      /** @type {Map<Node, string>} */
+      const names = new Map();
+      /** @type {(node: unknown, parent: Node | null, field: string) => void} */
+      const walk = (node, parent, field) => {
+        if (Array.isArray(node)) return node.forEach((item) => walk(item, parent, field));
+        const value = /** @type {Node | null} */ (node);
+        if (typeof value?.type !== "string" || (value.type.startsWith("TS") && !WRAPPERS.has(value.type))) return;
+        const lookup = () => lookupIn([...scopes]);
+        if (value.type === "FunctionDeclaration" && value.id) names.set(value, value.id.name);
+        if (value.type === "VariableDeclarator" && value.id.type === "Identifier" && value.init && FUNCTIONS.has(unwrap(value.init).type)) names.set(unwrap(value.init), value.id.name);
+        if (value.type === "Identifier" && !["callee", "id", "key"].includes(field) && !(field === "property" && !parent?.computed)) values.add(value.name);
+        const scope = FUNCTIONS.has(value.type)
+          ? new Map([
+            ...value.params.flatMap((/** @type {Node} */ param, /** @type {number} */ index) => keyed(param).map(([name, key]) => [name, /** @type {Binding} */ ({ kind: "param", fn: value, index, key })])),
+            ...(value.body.type === "BlockStatement" ? declared(value.body.body) : []),
+          ])
+          : value.type === "BlockStatement" ? new Map(declared(value.body)) : null;
+        if (scope) scopes.push(/** @type {Map<string, Binding>} */ (scope));
+        if (value.type === "CallExpression" && ends.has(value.end) && value.arguments[0]) reads.push({ node: value, lookup: lookup() });
+        if (value.type === "CallExpression" && unwrap(value.callee).type === "Identifier") calls.push({ name: unwrap(value.callee).name, node: value, lookup: lookup() });
+        if (value.type === "JSXElement" && value.openingElement.name.type === "JSXIdentifier") calls.push({ name: value.openingElement.name.name, node: value, lookup: lookup() });
+        Object.entries(value).forEach(([key, child]) => walk(child, value, key));
+        if (scope) scopes.pop();
+      };
+      walk(program.body, null, "body");
+      const { exported, trusted } = boundary(program);
+      /** @type {Map<string, Origin>} */
+      const resolved = new Map();
+      /** @type {(fn: Node, index: number, key: string | null) => Origin} A parameter is an exported component's prop, or what each of the file's own calls passes it, and each call that passes a created or untraced value is a finding there. */
+      const argument = (fn, index, key) => {
+        if (trusted.has(fn)) return "ok";
+        const id = `${fn.start}:${index}:${key}`;
+        const known = resolved.get(id);
+        if (known) return known;
+        resolved.set(id, "untraced");
+        const name = names.get(fn);
+        const at = calls.filter((call) => call.name === name);
+        const result = name === undefined || exported.has(fn) || values.has(name) || at.length === 0 ? "untraced" : "ok";
+        if (result === "ok") {
+          for (const call of at) {
+            const verdict = fed(call, index, key);
+            if (verdict !== "ok") found[verdict].add(lineOf(call.node));
+          }
+        }
+        resolved.set(id, result);
+        return result;
+      };
+      /** @type {(call: { node: Node, lookup: (name: string) => Binding | undefined }, index: number, key: string | null) => Origin} */
+      const fed = ({ node, lookup }, index, key) => {
+        /** @type {(value: Node) => Origin} */
+        const from = (value) => origin(value, lookup, new Set());
+        if (node.type === "JSXElement") {
+          if (index > 0) return "untraced";
+          return worst(...node.openingElement.attributes.flatMap((/** @type {Node} */ item) => {
+            if (item.type === "JSXSpreadAttribute") return [from(item.argument)];
+            if (key !== null && item.name.name !== key) return [];
+            return [item.value?.type === "JSXExpressionContainer" && item.value.expression.type !== "JSXEmptyExpression" ? from(item.value.expression) : "ok"];
+          }), ...((key === null || key === "children") && node.children.some((/** @type {Node} */ child) => child.type !== "JSXText") ? [/** @type {Origin} */ ("untraced")] : []));
+        }
+        if (node.arguments.slice(0, index + 1).some((/** @type {Node} */ item) => item.type === "SpreadElement")) return "untraced";
+        const value = node.arguments[index];
+        if (!value) return "ok";
+        if (key === null) return from(value);
+        const object = unwrap(value);
+        if (object.type !== "ObjectExpression") return from(member(value, key));
+        return worst(...object.properties.flatMap((/** @type {Node} */ item) => {
+          if (item.type === "SpreadElement") return [from(item.argument)];
+          return !item.computed && (item.key.name ?? String(item.key.value)) === key ? [from(item.value)] : [];
+        }));
+      };
       /** @type {(node: Node, lookup: (name: string) => Binding | undefined, seen: Set<Node>) => Origin} */
       const origin = (node, lookup, seen) => {
         const value = unwrap(node);
@@ -137,7 +257,11 @@ export default {
         switch (value.type) {
           case "ConditionalExpression": return worst(origin(value.consequent, lookup, seen), origin(value.alternate, lookup, seen));
           case "LogicalExpression": return worst(origin(value.left, lookup, seen), origin(value.right, lookup, seen));
-          case "MemberExpression": return origin(value.object, lookup, seen);
+          case "MemberExpression": {
+            const object = unwrap(value.object);
+            const binding = !value.computed && object.type === "Identifier" ? lookup(object.name) : undefined;
+            return binding?.kind === "param" && binding.key === null ? argument(binding.fn, binding.index, value.property.name) : origin(value.object, lookup, seen);
+          }
           case "NewExpression": return "created";
           case "CallExpression": {
             if (isCreateContext(value.callee, lookup)) return "ok";
@@ -148,32 +272,22 @@ export default {
           }
           case "Identifier": {
             const binding = lookup(value.name);
-            if (binding?.kind === "param") return "ok";
+            if (binding?.kind === "param") return argument(binding.fn, binding.index, binding.key);
             if (binding?.kind === "import") return imported(path, binding);
-            return binding?.kind === "local" && binding.init ? origin(binding.init, lookup, seen) : "untraced";
+            if (binding?.kind !== "local" || !binding.init) return "untraced";
+            return origin(binding.key === null ? binding.init : member(binding.init, binding.key), lookup, seen);
           }
           default: return "untraced";
         }
       };
-      /** @type {(node: unknown) => void} */
-      const walk = (node) => {
-        if (Array.isArray(node)) return node.forEach(walk);
-        const value = /** @type {Node | null} */ (node);
-        if (typeof value?.type !== "string" || (value.type.startsWith("TS") && !WRAPPERS.has(value.type))) return;
-        const scope = FUNCTIONS.has(value.type) ? new Map([...value.params.flatMap(namesOf).map((/** @type {string} */ name) => [name, /** @type {Binding} */ ({ kind: "param" })]), ...(value.body.type === "BlockStatement" ? declared(value.body.body) : [])])
-          : value.type === "BlockStatement" ? new Map(declared(value.body)) : null;
-        if (scope) scopes.push(/** @type {Map<string, Binding>} */ (scope));
-        if (value.type === "CallExpression" && ends.has(value.end) && value.arguments[0]) {
-          const verdict = origin(value.arguments[0], lookupIn([...scopes]), new Set());
-          if (verdict !== "ok") found.push({ origin: verdict, line: text.slice(0, value.start).split("\n").length });
-        }
-        Object.values(value).forEach(walk);
-        if (scope) scopes.pop();
-      };
-      walk(program.body);
-      return found.map(({ origin: verdict }) => {
-        const lines = found.filter((item) => item.origin === verdict).map((item) => item.line);
-        return { key: `${path} use ${verdict}`, fix: `${path} passes React's use() ${SAID[verdict].said}, on line${lines.length > 1 ? "s" : ""} ${lines.join(", ")}. ${SAID[verdict].fix}` };
+      for (const { node, lookup } of reads) {
+        const verdict = origin(node.arguments[0], lookup, new Set());
+        if (verdict !== "ok") found[verdict].add(lineOf(node));
+      }
+      return /** @type {const} */ (["created", "untraced"]).flatMap((verdict) => {
+        const lines = [...found[verdict]].sort((a, b) => a - b);
+        if (lines.length === 0) return [];
+        return [{ key: `${path} use ${verdict}`, fix: `${path} passes React's use() ${SAID[verdict].said}, on line${lines.length > 1 ? "s" : ""} ${lines.join(", ")}. ${SAID[verdict].fix}` }];
       });
     });
   },
