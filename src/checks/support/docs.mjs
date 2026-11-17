@@ -14,8 +14,8 @@ import { isDoc, place } from "../../doc-kinds.mjs";
  * A link as written, on the line it starts, and the repository path it lands on, which may not exist.
  * A reference link is its definition, once, however many references use it.
  * @typedef {{ line: number, text: string, path: string, anchor: string | null }} Link
- * Code a doc names things in: each code span, and each code block from its first line, with `span` false.
- * @typedef {{ line: number, text: string, span: boolean }} Code
+ * Code a doc names things in: each code span, and each code block from its first line, with `span` false and its fence's language.
+ * @typedef {{ line: number, text: string, span: boolean, lang: string | null }} Code
  * @typedef {{ path: string, kind: Kind, links: Link[], code: Code[], anchors: ReadonlySet<string>, marker: boolean }} Doc
  * @typedef {{ docs: ReadonlyMap<string, Doc>, misplaced: { path: string, refused: boolean }[] }} Corpus
  */
@@ -109,10 +109,10 @@ export function parseDoc(path, kind, text) {
     else if (node.type === "linkReference" || node.type === "imageReference") used.add(node.identifier);
     else if (node.type === "definition") definitions.push(node);
     else if (node.type === "html") marker ||= node.value.includes(MARKER);
-    else if (node.type === "inlineCode") code.push({ line: lineOf(node), text: node.value.replaceAll("\n", " "), span: true });
+    else if (node.type === "inlineCode") code.push({ line: lineOf(node), text: node.value.replaceAll("\n", " "), span: true, lang: null });
     else if (node.type === "code") {
       const fenced = "`~".includes(text[node.position?.start.offset ?? 0] ?? "");
-      code.push({ line: lineOf(node) + (fenced ? 1 : 0), text: node.value, span: false });
+      code.push({ line: lineOf(node) + (fenced ? 1 : 0), text: node.value, span: false, lang: node.lang?.toLowerCase() ?? null });
     } else if (node.type === "text" && kind.name === "agents") {
       node.value.split("\n").forEach((part, at) => {
         const line = lineOf(node) + at;

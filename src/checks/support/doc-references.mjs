@@ -38,6 +38,7 @@ const NOT_PATH = /[\s<>$|=;'"\\]/;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SYMBOL = /^(?:[a-z][a-z0-9]*[A-Z]\w*|[A-Z][a-z0-9]+[A-Z]\w*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:\(\))?$/;
 const VALUE_FLAGS = new Set(["--filter", "-F", "-C", "--dir"]);
+const SHELLS = new Set(["sh", "bash", "shell", "zsh", "console"]);
 const UNCLOSED = "a quote is not closed, so no shell can run it; fix the quoting";
 const PNPM_COMMANDS = new Set(
   "add approve-builds audit bin cache config create dedupe deploy dlx env exec fetch help i import init install install-test it licenses link list ln ls outdated pack patch patch-commit patch-remove prune publish rb rebuild remove rm root run self-update server setup start store t test un uninstall unlink up update upgrade why".split(" "),
@@ -88,7 +89,7 @@ function repoIndex(repo) {
         if (text.includes("\0")) continue;
         extensions.add(posix.extname(posix.basename(path)));
         for (const word of text.match(/[A-Za-z_$][\w$]*/g) ?? []) words.add(word);
-        for (const name of text.match(/(?<![\w./-])[\w-]+(?:\.[\w-]+)+/g) ?? []) names.add(name);
+        for (const name of text.match(/(?<![\w./-])[\w-]+(?:\.[\w-]+)+(?!\.?[\w/-])/g) ?? []) names.add(name);
       } catch {}
     }
     return (source = { words, names, extensions });
@@ -137,6 +138,18 @@ function pathMiss(path, doc, index) {
 function linesOf(text, from, to) {
   const end = text.indexOf("\n", to);
   return text.slice(text.lastIndexOf("\n", from - 1) + 1, end === -1 ? text.length : end).replace(/\\\n[ \t]*/g, "").trim();
+}
+
+/** @type {(transcript: string) => string} The commands of a console transcript: each line after a `$ ` prompt and each `> ` line that continues it, with output lines left empty so line numbers hold. */
+function prompted(transcript) {
+  let command = false;
+  return transcript
+    .split("\n")
+    .map((line) => {
+      command = line.startsWith("$ ") || (command && line.startsWith("> "));
+      return command ? line.slice(2) : "";
+    })
+    .join("\n");
 }
 
 /** @type {(text: string) => { calls: PnpmCall[], unclosed: number | null }} Each command a POSIX shell runs in code whose command word is `pnpm`, with the package flags that pick where its script lives, and the offset of a quote that never closes in code that runs `pnpm`. */
@@ -194,8 +207,9 @@ function misses(doc, corpus, index) {
   const local = doc.kind.references === "local";
   /** @type {Miss[]} */
   const found = [];
-  for (const { line, text, span } of doc.code) {
-    const { calls, unclosed } = pnpmCalls(text);
+  for (const { line, text: code, span, lang } of doc.code) {
+    const text = lang === "console" ? prompted(code) : code;
+    const { calls, unclosed } = span || SHELLS.has(lang ?? "") ? pnpmCalls(text) : { calls: [], unclosed: null };
     const at = (/** @type {number} */ offset) => line + (text.slice(0, offset).match(/\n/g)?.length ?? 0);
     if (unclosed !== null) {
       if (!local) found.push({ line: at(unclosed), shown: `\`${linesOf(text, unclosed, unclosed)}\``, reason: UNCLOSED, ignorable: [] });
@@ -236,7 +250,9 @@ function beforeLink(root, path) {
   const parts = path.split("/");
   for (let at = 1; at < parts.length; at++) {
     const prefix = parts.slice(0, at).join("/");
-    if (lstatSync(join(root, prefix), { throwIfNoEntry: false })?.isSymbolicLink()) return prefix;
+    const stat = lstatSync(join(root, prefix), { throwIfNoEntry: false });
+    if (stat?.isSymbolicLink()) return prefix;
+    if (!stat?.isDirectory()) return path;
   }
   return path;
 }
