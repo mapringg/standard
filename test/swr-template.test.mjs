@@ -55,6 +55,13 @@ export function useExpensive(id: string) {
   return [item, list];
 }
 
+export function useSession(seed: Item) {
+  const session = useServerData(["item", "me"] as const, loadItem, { fallbackData: seed, visit: true, revalidateOnFocus: true });
+  // @ts-expect-error A visit fetches on every mount, so it takes no fresh or reuseCache.
+  const stale = useServerData(["item", "me"] as const, loadItem, { fallbackData: seed, visit: true, reuseCache: true });
+  return [session, stale];
+}
+
 export function useUnseeded(id: string) {
   // @ts-expect-error fallbackData is required.
   const item = useServerData(["item", id] as const, loadItem, { refreshInterval: 5000 });

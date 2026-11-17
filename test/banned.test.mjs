@@ -233,6 +233,31 @@ test("banned catches a banned export through a longer chain such as .call", (t) 
   );
 });
 
+const TEST_CACHE_FIX = "ServerDataTestCache gives each test its own SWR cache, so code that ships reads the global cache. Call useServerData as it is, or with visit: true when the data must be fresh on each visit, such as a session check.";
+
+test("banned fails ServerDataTestCache and SwrScope outside test files, and passes them in tests", (t) => {
+  fails(
+    t,
+    [],
+    {
+      "apps/web/src/app/layout.tsx": 'import { ServerDataTestCache } from "@/lib/swr";\nexport const Layout = ServerDataTestCache;\n',
+      "apps/web/src/app/page.tsx": 'import * as data from "../lib/swr.ts";\nexport const page = <data.SwrScope />;\n',
+      "apps/web/src/lib/index.ts": 'export { ServerDataTestCache } from "./swr";\n',
+      "apps/web/src/lib/swr.ts": "export function ServerDataTestCache() {\n  return null;\n}\n",
+      "apps/web/src/app/session.tsx": 'import { useServerData } from "@/lib/swr";\nexport const use = useServerData;\n',
+      "apps/web/src/app/page.test.tsx": 'import { ServerDataTestCache } from "@/lib/swr";\nexport const a = ServerDataTestCache;\n',
+      "apps/web/src/app/dialog.chromium.test.tsx": 'import { SwrScope } from "@/lib/swr";\nexport const a = SwrScope;\n',
+      "apps/web/src/app/page.stories.tsx": 'import { ServerDataTestCache } from "@/lib/swr";\nexport const a = ServerDataTestCache;\n',
+      "apps/web/test/render.tsx": 'import { ServerDataTestCache } from "../src/lib/swr";\nexport const a = ServerDataTestCache;\n',
+      "apps/web/src/__tests__/render.tsx": 'import { ServerDataTestCache } from "../lib/swr";\nexport const a = ServerDataTestCache;\n',
+      "apps/web/src/fixtures/render.tsx": 'import { ServerDataTestCache } from "../lib/swr";\nexport const a = ServerDataTestCache;\n',
+    },
+    `apps/web/src/app/layout.tsx ServerDataTestCache: apps/web/src/app/layout.tsx uses ServerDataTestCache on lines 1, 2. ${TEST_CACHE_FIX}`,
+    `apps/web/src/app/page.tsx SwrScope: apps/web/src/app/page.tsx uses SwrScope on line 2. ${TEST_CACHE_FIX}`,
+    `apps/web/src/lib/index.ts ServerDataTestCache: apps/web/src/lib/index.ts uses ServerDataTestCache on line 1. ${TEST_CACHE_FIX}`,
+  );
+});
+
 test("banned passes a repository with no banned uses and no restricted oxlint rules", (t) => {
   const { stdout, status } = banned(t, [ZOD, ENV], { "src/env.ts": "export const url = process.env.API_URL;\n", "src/a.ts": "export const a = 1;\n" });
   assert.deepEqual([stdout, status], ["banned: OK\n", 0]);
