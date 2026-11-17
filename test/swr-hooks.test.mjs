@@ -219,3 +219,63 @@ test("a local replacement survives load more", async (t) => {
   await settle(() => result.current.pages.length === 2);
   assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 1]], pages: ["edited 0", "fetched 1"] });
 });
+
+function heldPages() {
+  const requests = [];
+  const held = new Map();
+  return {
+    requests,
+    fetchPage(key) {
+      requests.push(key);
+      return new Promise((resolve) => held.set(key[1], (label) => resolve({ index: key[1], items: [`${label} ${key[1]}`] })));
+    },
+    finish: (index, label) => held.get(index)(label),
+  };
+}
+
+test("an edit made while the next page loads keeps the edit and the page", async (t) => {
+  const api = heldPages();
+  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  await act(async () => result.current.loadMore());
+  await act(async () => result.current.replace((pages) => pages.map((page) => ({ ...page, items: ["edited 0"] }))));
+  assert.deepEqual({ pages: firstItems(result), loadingMore: result.current.loadingMore }, { pages: ["edited 0"], loadingMore: true });
+  await act(async () => api.finish(1, "fetched"));
+  await settle(() => !result.current.loadingMore);
+  assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 1]], pages: ["edited 0", "fetched 1"] });
+});
+
+const useTwoLists = (fetchPage, options) => ({ table: useServerSeededInfinite(pageKey, fetchPage, options), toolbar: useServerSeededInfinite(pageKey, fetchPage, options) });
+
+test("load more from a second component keeps the mount refetch they share", async (t) => {
+  const api = heldPages();
+  const { result } = await mount(t, () => useTwoLists(api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }] }));
+  await act(async () => result.current.toolbar.loadMore());
+  await act(async () => api.finish(0, "refetched"));
+  await act(async () => api.finish(1, "fetched"));
+  await settle(() => result.current.table.pages.length === 2);
+  const shown = (list) => list.pages.map((page) => page.items[0]);
+  assert.deepEqual({ requests: api.requests, table: shown(result.current.table), toolbar: shown(result.current.toolbar) }, { requests: [["items", 0], ["items", 1]], table: ["refetched 0", "fetched 1"], toolbar: ["refetched 0", "fetched 1"] });
+});
+
+test("load more from two components at once fetches the next page once", async (t) => {
+  const api = server();
+  const { result } = await mount(t, () => useTwoLists(api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  await act(async () => {
+    result.current.table.loadMore();
+    result.current.toolbar.loadMore();
+  });
+  await settle(() => result.current.table.pages.length === 2);
+  await settle();
+  assert.deepEqual({ requests: api.requests, pages: result.current.toolbar.pages.map((page) => page.index) }, { requests: [["items", 1]], pages: [0, 1] });
+});
+
+test("a page list never writes to an item whose key looks like its own", async (t) => {
+  const api = server();
+  const { result } = await mount(t, () => ({
+    item: useServerSeeded(["$pages", ["items", 0]], api.item, { fallbackData: { id: "a", name: "seed" }, fresh: true }),
+    list: useServerSeededInfinite(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }),
+  }));
+  await act(async () => result.current.list.loadMore());
+  await settle(() => result.current.list.pages.length === 2);
+  assert.deepEqual(result.current.item.data, { id: "a", name: "seed" });
+});
