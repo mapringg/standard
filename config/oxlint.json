@@ -9,6 +9,17 @@
     "typescript/no-restricted-types": [
       "error",
       { "types": { "any": { "message": "Name the domain type or parse external data at its boundary." } } }
+    ],
+    "no-restricted-properties": [
+      "error",
+      { "object": "Reflect", "property": "apply", "message": "Call the typed function directly. Model dynamic dispatch behind a named interface." },
+      { "object": "Reflect", "property": "get", "message": "Use typed property access. Parse dynamic input into a named domain type before reading it." },
+      { "object": "vi", "property": "mock", "message": "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module." },
+      { "object": "vi", "property": "doMock", "message": "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module." },
+      { "object": "vi", "property": "unstable_mockModule", "message": "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module." },
+      { "object": "jest", "property": "mock", "message": "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module." },
+      { "object": "jest", "property": "doMock", "message": "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module." },
+      { "object": "jest", "property": "unstable_mockModule", "message": "Pass the dependency in as an argument or prop, or run a fake of the service it calls, instead of replacing the module." }
     ]
   }
 }

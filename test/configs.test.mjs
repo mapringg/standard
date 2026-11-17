@@ -22,3 +22,14 @@ test("an adopter extends the tsconfig by its export name and gets the strict fla
   ];
   assert.deepEqual(required.filter((flag) => config.compilerOptions[flag] !== true), []);
 });
+
+test("the oxlint config bans Reflect.apply, Reflect.get and module mocking, each with its fix", async () => {
+  const { default: config } = await import("@mapringg/standard/oxlint", { with: { type: "json" } });
+  const [level, ...entries] = config.rules["no-restricted-properties"];
+  assert.equal(level, "error");
+  assert.deepEqual(
+    entries.map((entry) => `${entry.object}.${entry.property}`),
+    ["Reflect.apply", "Reflect.get", "vi.mock", "vi.doMock", "vi.unstable_mockModule", "jest.mock", "jest.doMock", "jest.unstable_mockModule"],
+  );
+  assert.deepEqual(entries.filter((entry) => !/^[A-Z].*\.$/.test(entry.message)), []);
+});
