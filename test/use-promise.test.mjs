@@ -128,3 +128,65 @@ test("use-promise keeps a baseline that records today's calls and fails a new on
   assert.match(stdout, /^use-promise: 1 new findings\.\n {2}apps\/web\/src\/b\.tsx passes React's use\(\) a promise/);
   assert.equal(status, 1);
 });
+
+test("use-promise fails a promise a client render passes to an in-file component or hook, at the call, and a parameter it cannot trace", (t) => {
+  fails(
+    t,
+    {},
+    {
+      "apps/web/src/view.tsx": [
+        '"use client";',
+        'import { use } from "react";',
+        'import { getUser } from "@/api/users";',
+        "function Child({ p }: { p: Promise<string> }) {",
+        "  return use(p);",
+        "}",
+        "function useRead(p: Promise<string>) {",
+        "  return use(p);",
+        "}",
+        "export function View({ id }: { id: string }) {",
+        "  const read = useRead(getUser(id));",
+        '  return [read, <Child p={getUser(id)} key="a" />];',
+        "}",
+        "",
+      ].join("\n"),
+      "apps/web/src/list.tsx": [
+        '"use client";',
+        'import { use } from "react";',
+        "function Row(item: Promise<string>) {",
+        "  return use(item);",
+        "}",
+        "export function useData(p: Promise<string>) {",
+        "  return use(p);",
+        "}",
+        "export const List = ({ items }: { items: Promise<string>[] }) => items.map(Row);",
+        "",
+      ].join("\n"),
+    },
+    untraced("apps/web/src/list.tsx", "lines 4, 7"),
+    created("apps/web/src/view.tsx", "lines 11, 12"),
+  );
+});
+
+test("use-promise passes a server prop that a client component forwards to an in-file component or hook", (t) => {
+  passes(t, {}, {
+    "apps/web/src/view.tsx": [
+      '"use client";',
+      'import { use } from "react";',
+      "function Child({ p }: { p: Promise<string>; onPick: () => unknown }) {",
+      "  return use(p);",
+      "}",
+      "function useRead(p: Promise<string>) {",
+      "  return use(p);",
+      "}",
+      "function Wrapped(props: { p: Promise<string>; label: string; onPick: () => unknown }) {",
+      "  return use(props.p);",
+      "}",
+      "export function View({ p, q }: { p: Promise<string>; q: Promise<string> }) {",
+      '  return [useRead(q), <Child p={p} onPick={() => q} />, <Wrapped p={p} label="x" onPick={() => q} />];',
+      "}",
+      "",
+    ].join("\n"),
+    "apps/web/src/page.tsx": '"use client";\nimport { use } from "react";\nexport default function ({ data }: { data: Promise<string> }) {\n  return use(data);\n}\n',
+  });
+});
