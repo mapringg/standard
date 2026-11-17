@@ -101,11 +101,12 @@ function emitted(value) {
 
 /**
  * @param {Node} node An emitted expression.
- * @returns {boolean} Whether evaluating it can run no code, as with a translation table.
+ * @returns {boolean} Whether evaluating it can run no code, as with a translation table. Reading a binding runs none; reading a property can call a getter.
  */
 function isInert(node) {
   switch (node.type) {
     case "Literal":
+    case "Identifier":
       return true;
     case "TemplateLiteral":
       return node.expressions.every(isInert);
@@ -117,7 +118,6 @@ function isInert(node) {
           property.type === "Property" &&
           property.kind === "init" &&
           !property.method &&
-          !property.shorthand &&
           (!property.computed || property.key.type === "Literal") &&
           isInert(property.value),
       );

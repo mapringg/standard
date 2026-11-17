@@ -108,7 +108,7 @@ test("pr-tests passes a translation table edit, declarations, generated code and
   passes(
     t,
     {
-      "apps/web/src/i18n/en.ts": table.replace('"Hello"', '"Hi"').replace("list:", "extra: /a+/g, list:"),
+      "apps/web/src/i18n/en.ts": table.replace('"Hello"', '"Hi"').replace("list:", "extra: /a+/g, photo, image: photo, list:"),
       "apps/web/src/env.d.ts": "declare function hook(): void;\n",
       "apps/web/src/generated/client.ts": "export function call() { return fetch('/'); }\n",
       "apps/web/src/api.gen.ts": "export function call() { return 1; }\n",
@@ -201,7 +201,6 @@ test("pr-tests counts data that runs code as logic", (t) => {
     "export const state = { [delete globalThis.cache]: 1 };\n",
     "export const value = globalThis.trigger.value;\n",
     "export const copy = { ...defaults };\n",
-    "export default [size];\n",
   ]) {
     const { stdout, status } = prTests(t, { "apps/api/src/a.ts": text });
     assert.deepEqual([stdout, status], [`::error title=pr-tests::${missing("apps/api/src/a.ts")}\n`, 1], text);
