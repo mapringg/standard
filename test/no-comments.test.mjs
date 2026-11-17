@@ -363,7 +363,7 @@ test("no-comments finds an HTML comment that nested is:raw or braces hide in is:
   );
 });
 
-test("no-comments passes CDATA in SVG and MathML, which is text there, and fails CDATA in HTML and a comment in SVG", (t) => {
+test("no-comments passes CDATA in SVG and MathML, which is text there, and fails CDATA in HTML or an integration point and a comment in SVG", (t) => {
   fails(
     t,
     {
@@ -379,6 +379,45 @@ test("no-comments passes CDATA in SVG and MathML, which is text there, and fails
         "",
       ].join("\n"),
     },
-    `src/pages/cdata.astro html-comment: src/pages/cdata.astro has comments on lines 2, 3, 5. ${HTML}`,
+    `src/pages/cdata.astro html-comment: src/pages/cdata.astro has comments on lines 2, 3, 5, 8. ${HTML}`,
   );
+});
+
+test("no-comments reads raw HTML and set:html values with an HTML parser in their element's context", (t) => {
+  const deep = (depth) => `<div is:raw>${"<x is:raw>".repeat(depth)}<!-- prose -->${"</x>".repeat(depth)}</div>`;
+  fails(
+    t,
+    {
+      "src/pages/html.astro": [
+        "<div is:raw><x is:raw><x is:raw><!-- prose --></x></x></div>",
+        "<div is:raw><div is:raw><div is:raw><!-- prose --></div></div></div>",
+        '<div is:raw><x a={"<!-- prose -->"}>safe</x></div>',
+        "<svg><title><!-- prose --></title></svg>",
+        "<math><mi><mglyph><![CDATA[ text ]]></mglyph></mi></math>",
+        '<math><annotation-xml encoding="application/xml"><x><![CDATA[ text ]]></x></annotation-xml></math>',
+        "<div is:raw><svg><title><!-- prose --></title></svg></div>",
+        '<div set:html="Hello &amp; world"/>',
+        "<div is:raw><TEXTAREA><!-- prose --></TEXTAREA></div>",
+        '<div set:html="<div is:raw><div is:raw><!-- prose --></div></div>"/>',
+        '<div is:raw><math><annotation-xml encoding="text/html"><p><![CDATA[ text ]]></p></annotation-xml></math></div>',
+        '<div set:html="&lt;!-- encoded --&gt;"/>',
+        deep(10),
+        "<svg><style><!-- svg style --></style></svg>",
+        "<div is:raw><svg><![CDATA[ <!-- text --> ]]></svg></div>",
+        "<svg><![cdata[ text ]]></svg>",
+        "<div is:raw><x is:raw><textarea><!-- text --></textarea></x></div>",
+        '<div set:html="a&#10;&lt;!-- next line --&gt;"/>',
+        '<math><annotation-xml encoding="text/html"><p><![CDATA[ text ]]></p></annotation-xml></math>',
+        "<title><!-- title text --></title><style><!-- css --></style>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/html.astro html-comment: src/pages/html.astro has comments on lines 1, 2, 4, 7, 10, 11, 12, 13, 14, 16, 18, 19. ${HTML}`,
+  );
+});
+
+test("no-comments names markup code it cannot place, with a rewrite in place of a syntax fix", (t) => {
+  const { stdout, status } = check(t, { "src/pages/a.astro": "---\nconst x = 1;\n---\n{<T,>(value: T) => value}\n" });
+  assert.equal(stdout, "no-comments: src/pages/a.astro parse: src/pages/a.astro does not parse, so no-comments cannot read it: the markup on line 4 holds code the compiler places where the text does not have it, which no check can read. Move that code into the frontmatter, and use its result in the markup.\n");
+  assert.equal(status, 1);
 });
