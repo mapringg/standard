@@ -15,7 +15,7 @@ const APP = {
 };
 const CACHED = { "cached-modules": ["apps/web/src/lib/cached.ts"] };
 const CREATED = "A new promise on each render suspends forever. Take the promise as a prop from a Server Component, or call a function from a module that cached-modules in .standard/config.json lists.";
-const UNTRACED = "The check fails closed here, since a promise made during render suspends forever. Take the promise as a prop, call a function from a module that cached-modules lists, or read a context that createContext makes in a file the check can resolve.";
+const UNTRACED = "The check fails closed here, since a promise made during render suspends forever. Read a prop of an exported component or hook, a value made once at module level, or a call to a function from a module that cached-modules in .standard/config.json lists. Where a promise reaches use() through a function or list the check cannot follow, call use() in the component that takes the promise as a prop.";
 /** TypeScript 7's API server prints this when the check closes it, after the run has finished. */
 const TSGO_SHUTDOWN = /^context canceled\n/m;
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
@@ -166,7 +166,7 @@ test("use-promise fails a promise a client render passes to an in-file component
         "",
       ].join("\n"),
     },
-    untraced("apps/web/src/list.tsx", "lines 4, 7, 10"),
+    untraced("apps/web/src/list.tsx", "lines 4, 10"),
     created("apps/web/src/view.tsx", "lines 11, 12"),
   );
 });
@@ -215,8 +215,19 @@ test("use-promise passes a promise made once at module level, in the file, in a 
       "  load = next;",
       "  return next;",
       "}",
+      "let user: Promise<string> | undefined;",
+      "function guarded() {",
+      "  if (user != null) return user;",
+      "  user = getUser(\"them\");",
+      "  return user;",
+      "}",
+      "let lazy: Promise<string> | undefined;",
+      "const once = () => (lazy ??= getUser(\"us\"));",
+      "function mine() {",
+      "  return me;",
+      "}",
       "export function View() {",
-      "  return [use(me), use(shared), use(preload())];",
+      "  return [use(me), use(shared), use(preload()), use(guarded()), use(once()), use(mine())];",
       "}",
       "",
     ].join("\n"),
@@ -241,13 +252,110 @@ test("use-promise fails a function that returns a promise it does not keep at mo
         "  load = getUser(\"me\");",
         "  return load.then((user) => user);",
         "}",
+        "let current: Promise<string> | undefined;",
+        "function stored(id: string) {",
+        "  current = getUser(id);",
+        "  return current;",
+        "}",
+        "let last: Promise<string> | undefined;",
+        "function unguarded() {",
+        "  const next = getUser(\"me\");",
+        "  last = next;",
+        "  return next;",
+        "}",
+        "let late: Promise<string> | undefined;",
+        "function guardedLate() {",
+        "  late = getUser(\"me\");",
+        "  if (late) return late;",
+        "  return late;",
+        "}",
         "export function View() {",
-        "  return [use(fresh()), use(chained())];",
+        "  function inner() {",
+        "    if (load) return load;",
+        "    load = getUser(\"me\");",
+        "    return load;",
+        "  }",
+        "  return [",
+        "    use(fresh()),",
+        "    use(chained()),",
+        "    use(stored(\"me\")),",
+        "    use(unguarded()),",
+        "    use(guardedLate()),",
+        "    use(inner()),",
+        "  ];",
         "}",
         "",
       ].join("\n"),
     },
-    created("apps/web/src/view.tsx", "line 14"),
+    created("apps/web/src/view.tsx", "lines 37, 38, 39, 40, 41, 42"),
+  );
+});
+
+test("use-promise passes a prop of an exported hook or of a memo or forwardRef component, a list callback over one, and a missing argument", (t) => {
+  passes(t, {}, {
+    "apps/web/src/view.tsx": [
+      '"use client";',
+      'import * as React from "react";',
+      'import { use, memo, forwardRef } from "react";',
+      "function Row({ p }: { p: Promise<string> }) {",
+      "  return use(p);",
+      "}",
+      "function useMaybe(p?: Promise<string>) {",
+      "  return p ? use(p) : null;",
+      "}",
+      "export function useRead(p: Promise<string>) {",
+      "  return use(p);",
+      "}",
+      "export function useUserName({ user }: { user: Promise<string> }) {",
+      "  return use(user);",
+      "}",
+      "export const Card = memo(function Card({ p }: { p: Promise<string> }) {",
+      "  return use(p);",
+      "});",
+      "export const Field = forwardRef(function Field({ p }: { p: Promise<string> }, ref) {",
+      "  return [use(p), ref];",
+      "});",
+      "export const Panel = React.memo(({ p }: { p: Promise<string> }) => use(p));",
+      "export function List({ items }: { items: { p: Promise<string> }[] }) {",
+      '  return [items.map((item) => <Row p={item.p} key="a" />), items.flatMap(({ p }) => [<Row p={p} key="b" />]), useMaybe()];',
+      "}",
+      "",
+    ].join("\n"),
+    "apps/web/src/page.tsx": '"use client";\nimport { memo, use } from "react";\nexport default memo(function Page({ data }: { data: Promise<string> }) {\n  return use(data);\n});\n',
+  });
+});
+
+test("use-promise fails a promise the file passes to an exported component or hook, a default, children and an object in a local", (t) => {
+  fails(
+    t,
+    {},
+    {
+      "apps/web/src/view.tsx": [
+        '"use client";',
+        'import { use, memo } from "react";',
+        'import { getUser } from "@/api/users";',
+        "export function Child({ p }: { p: Promise<string> }) { return use(p); }",
+        "export function useRead(p: Promise<string>) { return use(p); }",
+        "export const Card = memo(function Card({ p }: { p: Promise<string> }) { return use(p); });",
+        'function Fallback({ p = getUser("me") }: { p?: Promise<string> }) { return use(p); }',
+        'export function useDefault(p = getUser("me")) { return use(p); }',
+        "function Kids({ children }: { children: Promise<string> }) { return use(children); }",
+        "function useOpts(o: { p: Promise<string> }) { return use(o.p); }",
+        "export function View({ id }: { id: string }) {",
+        "  const o = { p: getUser(id) };",
+        "  return [",
+        '    <Child p={getUser(id)} key="a" />,',
+        "    useRead(getUser(id)),",
+        '    <Card p={getUser(id)} key="b" />,',
+        '    <Fallback key="c" />,',
+        '    <Kids key="d">{getUser(id)}</Kids>,',
+        "    useOpts(o),",
+        "  ];",
+        "}",
+        "",
+      ].join("\n"),
+    },
+    created("apps/web/src/view.tsx", "lines 7, 8, 14, 15, 16, 18, 19"),
   );
 });
 
@@ -259,6 +367,7 @@ test("use-promise fails closed on a form it cannot read, an import it cannot res
       "apps/web/src/sequence.tsx": '"use client";\nimport { use } from "react";\nexport const View = (props) => use((0, props.data));\n',
       "apps/web/src/missing.tsx": '"use client";\nimport { use } from "react";\nimport { data } from "@/api/missing";\nexport const View = () => use(data);\n',
       "apps/web/src/function.tsx": '"use client";\nimport { use } from "react";\nimport { getUser } from "@/api/users";\nexport const View = () => use(getUser);\n',
+      "apps/web/src/local.tsx": '"use client";\nimport { use } from "react";\nfunction load() {\n  return 1;\n}\nconst make = () => 1;\nexport const View = () => [use(load),\n  use(make)];\n',
       "apps/web/src/cycle.tsx": '"use client";\nimport { use } from "react";\nexport function View() {\n  let a = b;\n  let b = a;\n  return use(a);\n}\n',
       "apps/web/src/tree.tsx": [
         '"use client";',
@@ -293,6 +402,7 @@ test("use-promise fails closed on a form it cannot read, an import it cannot res
     },
     untraced("apps/web/src/cycle.tsx", "line 6"),
     untraced("apps/web/src/function.tsx", "line 4"),
+    untraced("apps/web/src/local.tsx", "lines 7, 8"),
     untraced("apps/web/src/missing.tsx", "line 4"),
     untraced("apps/web/src/sequence.tsx", "line 3"),
     untraced("apps/web/src/spread.tsx", "lines 14, 15, 16"),
