@@ -62,13 +62,13 @@ const NAMESPACES = new Set(["react", "react#default"]);
 /** @type {(path: string) => string | undefined} The effect hook a path reads, itself or a member such as `.bind`. */
 const hookOf = (path) => EFFECTS.paths.find((hook) => path === hook || path.startsWith(`${hook}.`));
 
-/** The swr template's test cache, under its current and former name, from whatever path the app imports its copy. */
+/** The swr template's test cache, under its current and former names, from whatever path the app imports its copy. */
 const TEST_CACHE = /** @type {BannedRule} */ ({
   space: "module",
-  paths: ["*#ServerDataTestCache", "*#SwrScope"],
+  paths: ["*#SWRTestCache", "*#ServerDataTestCache", "*#SwrScope"],
   files: [],
   except: NOT_PRODUCT,
-  fix: "ServerDataTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useServerData on the global cache when the data must load in the client.",
+  fix: "SWRTestCache gives each test its own SWR cache, so code that ships never uses it. Fetch in a Server Component, or call useSWR from src/lib/swr.ts on the global cache when the data must load in the client.",
 });
 
 const OXLINT_CONFIG = /(?:^|\/)(?:[^/]*\.)?oxlintrc\.json$|(?:^|\/)oxlint\.config\.[cm]?[jt]s$/;
@@ -177,12 +177,9 @@ export default {
   name: "banned",
   since: "0.12.0",
   doc: {
-    enforces: "A file uses no API the repository bans, and no React effect hook outside tests, the timer template and listed wrappers, which call one but never pass it on. No file reads React's namespace whole or at a key that is not a constant, and no oxlint config bans APIs a second way.",
+    enforces: "A file uses no API the repository bans, no file outside tests imports the swr template's SWRTestCache, and no React effect hook outside tests, the timer template and listed wrappers, which call one but never pass it on. No file reads React's namespace whole or at a key that is not a constant, and no oxlint config bans APIs a second way.",
     fix: "Use what the entry's `fix` names instead, replace an effect with what it does, export only hooks that call an effect hook, and name each React export you read.",
     config: ["banned", "effect-wrappers"],
-    enforces: "A file uses no API the repository bans, no file outside tests imports the swr template's ServerDataTestCache, and no oxlint config bans APIs a second way.",
-    fix: "Use what the entry's `fix` names instead.",
-    config: ["banned"],
   },
   subject: "tree",
   baseline: false,
