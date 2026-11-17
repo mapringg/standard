@@ -47,13 +47,14 @@ function passes(t, config, files) {
 
 const useData = (from = "@/lib/swr") => `"use client";\nimport { useServerData } from "${from}";\nexport const View = () => useServerData(["user"], load, { fallbackData: null });\n`;
 
-test("client-data fails useServerData in a file client-data does not list, and passes useServerDataPages and tests", (t) => {
+test("client-data fails useServerData, or its former name useServerSeeded, in a file client-data does not list, and passes useServerDataPages and tests", (t) => {
   fails(
     t,
     API,
     {
       "apps/web/src/feed.tsx": useData(),
       "apps/web/src/bound.tsx": '"use client";\nimport * as Data from "../lib/swr";\nconst read = Data.useServerData;\nexport const View = () => read(["user"], load);\n',
+      "apps/web/src/seeded.tsx": '"use client";\nimport { useServerSeeded, useServerSeededInfinite } from "@/lib/swr";\nexport const View = () => [useServerSeeded(["user"], load), useServerSeededInfinite(["feed"], load)];\n',
       "apps/web/src/pages.tsx": '"use client";\nimport { useServerDataPages } from "@/lib/swr";\nexport const View = () => useServerDataPages(["feed"], load);\n',
       "apps/web/src/feed.test.tsx": useData(),
       "apps/web/src/feed.stories.tsx": useData(),
@@ -61,6 +62,7 @@ test("client-data fails useServerData in a file client-data does not list, and p
     },
     `apps/web/src/bound.tsx uses useServerData on lines 3, 4, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
     `apps/web/src/feed.tsx uses useServerData on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/seeded.tsx uses useServerSeeded on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
   );
 });
 
