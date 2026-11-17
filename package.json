@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "0.14.7",
+  "version": "0.14.8",
   "description": "One repository standard for every project, run by one command.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
