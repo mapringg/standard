@@ -304,6 +304,25 @@ Each entry in `client-data` gives one reason:
 }
 ```
 
+Load data on the server this way:
+
+1. A page or layout never awaits data at its top. It starts each request early, in parallel, without `await`.
+2. A Server Component that needs data is a small async component. It awaits its own data, and its parent renders it inside `<Suspense fallback>` where the data shows.
+3. A Client Component that needs data takes the unawaited promise as a prop from the server and reads it with React's `use()` inside `<Suspense>`. The promise must come from the server or a cached function. A promise created in a client render is new on every render, so the component suspends forever.
+4. Each `<Suspense>` boundary sits inside an error boundary, such as the segment's `error.tsx`.
+5. Under Next 16 `cacheComponents`, uncached data outside `<Suspense>` already fails the build.
+
+```tsx
+export default function Page({ params }: { params: Promise<{ id: string }> }) {
+  const orders = params.then(({ id }) => getOrders(id));
+  return (
+    <Suspense fallback={<OrdersSkeleton />}>
+      <Orders orders={orders} />
+    </Suspense>
+  );
+}
+```
+
 An entry names one `file` by its exact path, or a whole `app` folder. Only an app with no Server Components, such as a Vite app, goes in whole, and its reason must be `unreachable`. Any other reason, or a glob, fails every command.
 
 The check cannot verify these, so review must:
@@ -311,6 +330,7 @@ The check cannot verify these, so review must:
 - A listed reason is true. The reviewer reads the entry and judges it.
 - A `use cache` function keys per-user data by the user. Review requires a test in which two users call it and neither sees the other's data.
 - A file without `"use client"` that a client file imports also runs in the browser. The check reads only the directive.
+- Two independent requests run one after the other, such as two `await`s in one async component where neither needs the other. Review asks to start both before awaiting either.
 
 A barrel that re-exports an API module counts as one, so a client file that imports any export from it fails. Import the other export from its own file.
 
