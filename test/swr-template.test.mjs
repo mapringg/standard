@@ -12,7 +12,7 @@ const USAGE = `"use client";
 
 import type { ReactNode } from "react";
 
-import { SwrScope, useServerSeeded, useServerSeededInfinite } from "./lib/swr.ts";
+import { ServerDataTestCache, useServerData, useServerDataPages } from "./lib/swr.ts";
 
 type Item = { id: string; name: string };
 type Page = { items: readonly Item[]; next: string | null };
@@ -21,7 +21,7 @@ declare function loadItem(key: readonly ["item", string]): Promise<Item>;
 declare function loadPage(key: readonly ["items", string | null]): Promise<Page>;
 
 export function useItem(id: string | null, seed: Item) {
-  const item = useServerSeeded(id === null ? null : (["item", id] as const), loadItem, {
+  const item = useServerData(id === null ? null : (["item", id] as const), loadItem, {
     fallbackData: seed,
     refreshInterval: 5000,
     revalidateOnFocus: false,
@@ -36,7 +36,7 @@ export function useItem(id: string | null, seed: Item) {
 }
 
 export function useItems(seed: readonly Page[]) {
-  const list = useServerSeededInfinite((index, previous: Page | null) => (index > 0 && previous?.next == null ? null : (["items", previous?.next ?? null] as const)), loadPage, {
+  const list = useServerDataPages((index, previous: Page | null) => (index > 0 && previous?.next == null ? null : (["items", previous?.next ?? null] as const)), loadPage, {
     fallbackData: seed,
     fresh: true,
     refreshInterval: 30_000,
@@ -50,23 +50,23 @@ export function useItems(seed: readonly Page[]) {
 }
 
 export function useExpensive(id: string) {
-  const item = useServerSeeded(["item", id] as const, loadItem, { fallbackData: null, reuseCache: true, revalidateOnFocus: false });
-  const list = useServerSeededInfinite(() => ["items", null] as const, loadPage, { fallbackData: [], reuseCache: true });
+  const item = useServerData(["item", id] as const, loadItem, { fallbackData: null, reuseCache: true, revalidateOnFocus: false });
+  const list = useServerDataPages(() => ["items", null] as const, loadPage, { fallbackData: [], reuseCache: true });
   return [item, list];
 }
 
 export function useUnseeded(id: string) {
   // @ts-expect-error fallbackData is required.
-  const item = useServerSeeded(["item", id] as const, loadItem, { refreshInterval: 5000 });
+  const item = useServerData(["item", id] as const, loadItem, { refreshInterval: 5000 });
   // @ts-expect-error fallbackData is required.
-  const list = useServerSeededInfinite(() => ["items", null] as const, loadPage, {});
+  const list = useServerDataPages(() => ["items", null] as const, loadPage, {});
   // @ts-expect-error The wrapper fixes every setting outside Revalidation.
-  const eager = useServerSeeded(["item", id] as const, loadItem, { fallbackData: { id, name: "" }, revalidateOnMount: true });
+  const eager = useServerData(["item", id] as const, loadItem, { fallbackData: { id, name: "" }, revalidateOnMount: true });
   return [item, list, eager];
 }
 
 export function Scope({ children }: { children: ReactNode }) {
-  return <SwrScope>{children}</SwrScope>;
+  return <ServerDataTestCache>{children}</ServerDataTestCache>;
 }
 `;
 

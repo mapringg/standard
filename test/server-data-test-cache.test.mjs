@@ -26,7 +26,7 @@ for (const target of [dom.window, dom.window.document]) {
 const { act, Activity, createElement, StrictMode } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { SWRConfig } = await import("swr");
-const { SwrScope, useServerSeeded } = await import("../templates/swr.ts");
+const { ServerDataTestCache, useServerData } = await import("../templates/swr.ts");
 
 function since() {
   const before = new Map(EVENTS.map((type) => [type, new Set(live.get(type))]));
@@ -47,10 +47,10 @@ function server() {
 
 function scope(api, options = {}) {
   function Probe() {
-    useServerSeeded(["item", "a"], api.item, { fallbackData: null, ...options });
+    useServerData(["item", "a"], api.item, { fallbackData: null, ...options });
     return null;
   }
-  return createElement(SWRConfig, { value: { shouldRetryOnError: false, dedupingInterval: 0, focusThrottleInterval: 0 } }, createElement(SwrScope, null, createElement(Probe)));
+  return createElement(SWRConfig, { value: { shouldRetryOnError: false, dedupingInterval: 0, focusThrottleInterval: 0 } }, createElement(ServerDataTestCache, null, createElement(Probe)));
 }
 
 async function settle() {

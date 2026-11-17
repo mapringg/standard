@@ -12,7 +12,7 @@ const { act, createElement } = await import("react");
 const { flushSync } = await import("react-dom");
 const { createRoot } = await import("react-dom/client");
 const { SWRConfig } = await import("swr");
-const { SwrScope, useServerSeeded, useServerSeededInfinite } = await import("../templates/swr.ts");
+const { ServerDataTestCache, useServerData, useServerDataPages } = await import("../templates/swr.ts");
 
 function server(failing = new Set()) {
   const requests = [];
@@ -45,7 +45,7 @@ async function mount(t, useHook, props, config = {}) {
     return null;
   }
   const root = createRoot(document.createElement("div"));
-  const tree = (next) => createElement(SWRConfig, { value: { shouldRetryOnError: false, ...config } }, createElement(SwrScope, null, next?.shown === false ? null : createElement(Probe, next)));
+  const tree = (next) => createElement(SWRConfig, { value: { shouldRetryOnError: false, ...config } }, createElement(ServerDataTestCache, null, next?.shown === false ? null : createElement(Probe, next)));
   const render = (next) => act(async () => root.render(tree(next)));
   await render(props);
   t.after(() => act(async () => root.unmount()));
@@ -59,7 +59,7 @@ async function settle(until = () => false) {
 }
 
 async function mountFirstPage(t, api) {
-  const mounted = await mount(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [] }));
+  const mounted = await mount(t, () => useServerDataPages(pageKey, api.page, { fallbackData: [] }));
   await settle(() => mounted.result.current.pages.length === 1);
   await act(async () => mounted.result.current.revalidate());
   await settle(() => mounted.result.current.pages.length === 1);
@@ -69,7 +69,7 @@ async function mountFirstPage(t, api) {
 
 test("a client-keyed list seeded with fallbackData [] loads on mount", async (t) => {
   const api = server();
-  const { result } = await mount(t, () => useServerSeeded(["list", "mine"], api.list, { fallbackData: [] }));
+  const { result } = await mount(t, () => useServerData(["list", "mine"], api.list, { fallbackData: [] }));
   await settle(() => result.current.data.length > 0);
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["list", "mine"]], data: ["fetched mine"] });
 });
@@ -89,7 +89,7 @@ test("a client-only item seeded with fallbackData null shows it as loading until
 
 test("a key that changes from null to a value loads", async (t) => {
   const api = server();
-  const { result, rerender } = await mount(t, ({ id }) => useServerSeeded(id === null ? null : ["item", id], api.item, { fallbackData: null }), { id: null });
+  const { result, rerender } = await mount(t, ({ id }) => useServerData(id === null ? null : ["item", id], api.item, { fallbackData: null }), { id: null });
   await settle();
   assert.deepEqual(api.requests, []);
   await rerender({ id: "a" });
@@ -99,14 +99,14 @@ test("a key that changes from null to a value loads", async (t) => {
 
 test("a seeded hook marked fresh makes no request on mount", async (t) => {
   const api = server();
-  const { result } = await mount(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: { id: "a", name: "seed" }, fresh: true }));
+  const { result } = await mount(t, () => useServerData(["item", "a"], api.item, { fallbackData: { id: "a", name: "seed" }, fresh: true }));
   await settle();
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [], data: { id: "a", name: "seed" } });
 });
 
 test("a seeded hook without fresh revalidates on mount", async (t) => {
   const api = server();
-  const { result } = await mount(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: { id: "a", name: "seed" } }));
+  const { result } = await mount(t, () => useServerData(["item", "a"], api.item, { fallbackData: { id: "a", name: "seed" } }));
   assert.deepEqual(result.first.data, { id: "a", name: "seed" });
   await settle(() => result.current.data.name !== "seed");
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["item", "a"]], data: { id: "a", name: "fetched a" } });
@@ -114,7 +114,7 @@ test("a seeded hook without fresh revalidates on mount", async (t) => {
 
 test("a client-keyed page list seeded with fallbackData [] loads its first page on mount", async (t) => {
   const api = server();
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [] }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, api.page, { fallbackData: [] }));
   await settle(() => result.current.pages.length > 0);
   assert.deepEqual({ requests: api.requests, pages: result.current.pages.map((page) => page.index) }, { requests: [["items", 0]], pages: [0] });
 });
@@ -130,7 +130,7 @@ test("load more fetches only the next page", async (t) => {
 
 test("load more after a fresh seed fetches only the next page", async (t) => {
   const api = server();
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
   await settle();
   assert.deepEqual(api.requests, []);
   await act(async () => result.current.loadMore());
@@ -174,31 +174,31 @@ const SEED = { id: "a", name: "seed" };
 
 test("a hook with reuseCache fetches on its first mount and reuses the cached result when it mounts again", async (t) => {
   const api = server();
-  const result = await mountThreeTimes(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: SEED, reuseCache: true }));
+  const result = await mountThreeTimes(t, () => useServerData(["item", "a"], api.item, { fallbackData: SEED, reuseCache: true }));
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["item", "a"]], data: { id: "a", name: "fetched a" } });
 });
 
 test("a hook without reuseCache refetches each time it mounts", async (t) => {
   const api = server();
-  const result = await mountThreeTimes(t, () => useServerSeeded(["item", "a"], api.item, { fallbackData: SEED }));
+  const result = await mountThreeTimes(t, () => useServerData(["item", "a"], api.item, { fallbackData: SEED }));
   assert.deepEqual({ requests: api.requests, data: result.current.data }, { requests: [["item", "a"], ["item", "a"], ["item", "a"]], data: { id: "a", name: "fetched a" } });
 });
 
 test("a page list with reuseCache fetches on its first mount and reuses the cached pages when it mounts again", async (t) => {
   const api = server();
-  const result = await mountThreeTimes(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [], reuseCache: true }));
+  const result = await mountThreeTimes(t, () => useServerDataPages(pageKey, api.page, { fallbackData: [], reuseCache: true }));
   assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 0]], pages: ["fetched 0"] });
 });
 
 test("a page list without reuseCache refetches each time it mounts", async (t) => {
   const api = server();
-  const result = await mountThreeTimes(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [] }));
+  const result = await mountThreeTimes(t, () => useServerDataPages(pageKey, api.page, { fallbackData: [] }));
   assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 0], ["items", 0], ["items", 0]], pages: ["fetched 0"] });
 });
 
 test("an edit to one page list never reaches the list selected next", async (t) => {
   const api = server();
-  const { result, renderNow } = await mount(t, ({ id }) => useServerSeededInfinite(listKey(id), api.page, { fallbackData: [{ index: id, items: [`seed ${id}`] }], fresh: true }), { id: "A" });
+  const { result, renderNow } = await mount(t, ({ id }) => useServerDataPages(listKey(id), api.page, { fallbackData: [{ index: id, items: [`seed ${id}`] }], fresh: true }), { id: "A" });
   await act(async () => {
     const edit = result.current.replace((pages) => pages.map((page) => ({ ...page, items: ["edited A"] })));
     renderNow({ id: "B" });
@@ -210,7 +210,7 @@ test("an edit to one page list never reaches the list selected next", async (t) 
 
 test("a replace held from an earlier key never changes the item selected next", async (t) => {
   const api = server();
-  const { result, rerender } = await mount(t, ({ id }) => useServerSeeded(["item", id], api.item, { fallbackData: { id, name: "seed" }, fresh: true }), { id: "a" });
+  const { result, rerender } = await mount(t, ({ id }) => useServerData(["item", id], api.item, { fallbackData: { id, name: "seed" }, fresh: true }), { id: "a" });
   const held = result.current;
   await rerender({ id: "b" });
   await settle(() => result.current.data.name === "fetched b");
@@ -229,7 +229,7 @@ test("load more during the mount refetch keeps the refetched page", async (t) =>
       finishFirstPage = () => resolve({ index: 0, items: ["refetched 0"] });
     });
   };
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }] }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }] }));
   await act(async () => result.current.loadMore());
   await settle(() => result.current.pages.length === 2);
   await act(async () => finishFirstPage());
@@ -251,7 +251,7 @@ for (const [name, { options, start }] of Object.entries(refreshes)) {
       requests.push(key);
       return { index: key[1], items: [`v${version} page ${key[1]}`] };
     };
-    const { result, rerender } = await mount(t, ({ refreshInterval }) => useServerSeededInfinite(pageKey, fetchPage, { fallbackData: [{ index: 0, items: ["v1 page 0"] }], fresh: true, ...options, refreshInterval }), { refreshInterval: 0 }, { dedupingInterval: 0, focusThrottleInterval: 0 });
+    const { result, rerender } = await mount(t, ({ refreshInterval }) => useServerDataPages(pageKey, fetchPage, { fallbackData: [{ index: 0, items: ["v1 page 0"] }], fresh: true, ...options, refreshInterval }), { refreshInterval: 0 }, { dedupingInterval: 0, focusThrottleInterval: 0 });
     await act(async () => result.current.loadMore());
     await settle(() => result.current.pages.length === 2);
     assert.deepEqual({ requests, pages: firstItems(result) }, { requests: [["items", 1]], pages: ["v1 page 0", "v1 page 1"] });
@@ -265,7 +265,7 @@ for (const [name, { options, start }] of Object.entries(refreshes)) {
 
 test("a local replacement survives load more", async (t) => {
   const api = server();
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
   await act(async () => result.current.replace((pages) => pages.map((page) => ({ ...page, items: ["edited 0"] }))));
   assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [], pages: ["edited 0"] });
   await act(async () => result.current.loadMore());
@@ -288,7 +288,7 @@ function heldPages() {
 
 test("an edit made while the next page loads keeps the edit and the page", async (t) => {
   const api = heldPages();
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
   await act(async () => result.current.loadMore());
   await act(async () => result.current.replace((pages) => pages.map((page) => ({ ...page, items: ["edited 0"] }))));
   assert.deepEqual({ pages: firstItems(result), loadingMore: result.current.loadingMore }, { pages: ["edited 0"], loadingMore: true });
@@ -297,7 +297,7 @@ test("an edit made while the next page loads keeps the edit and the page", async
   assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 1]], pages: ["edited 0", "fetched 1"] });
 });
 
-const useTwoLists = (fetchPage, options) => ({ table: useServerSeededInfinite(pageKey, fetchPage, options), toolbar: useServerSeededInfinite(pageKey, fetchPage, options) });
+const useTwoLists = (fetchPage, options) => ({ table: useServerDataPages(pageKey, fetchPage, options), toolbar: useServerDataPages(pageKey, fetchPage, options) });
 
 test("load more from a second component keeps the mount refetch they share", async (t) => {
   const api = heldPages();
@@ -325,8 +325,8 @@ test("load more from two components at once fetches the next page once", async (
 test("a page list never writes to an item whose key looks like its own", async (t) => {
   const api = server();
   const { result } = await mount(t, () => ({
-    item: useServerSeeded(["$pages", ["items", 0]], api.item, { fallbackData: { id: "a", name: "seed" }, fresh: true }),
-    list: useServerSeededInfinite(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }),
+    item: useServerData(["$pages", ["items", 0]], api.item, { fallbackData: { id: "a", name: "seed" }, fresh: true }),
+    list: useServerDataPages(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }),
   }));
   await act(async () => result.current.list.loadMore());
   await settle(() => result.current.list.pages.length === 2);
@@ -335,7 +335,7 @@ test("a page list never writes to an item whose key looks like its own", async (
 
 test("restart while the next page loads ends with only the restarted first page", async (t) => {
   const api = heldPages();
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
   await act(async () => result.current.loadMore());
   await act(async () => void result.current.restart());
   await act(async () => api.finish(0, "restarted"));
@@ -360,7 +360,7 @@ function queuedPages() {
 
 async function loadMoreAcrossRestart(t) {
   const api = queuedPages();
-  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  const { result } = await mount(t, () => useServerDataPages(pageKey, api.fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
   await act(async () => result.current.loadMore());
   await act(async () => result.current.restart());
   await settle(() => firstItems(result)[0] === "fetched 0");

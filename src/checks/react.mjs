@@ -104,7 +104,7 @@ const RULES = [
           .map(({ line }) => ({
             key: `${file.path} fetch`,
             line,
-            fix: (lines) => `${file.path} uses fetch on ${lines}, and "use client" runs it in the browser. Fetch in a server component, or through useServerSeeded or useServerSeededInfinite from src/lib/swr.ts when the data needs pagination or revalidation.`,
+            fix: (lines) => `${file.path} uses fetch on ${lines}, and "use client" runs it in the browser. Fetch in a server component, or through useServerData or useServerDataPages from src/lib/swr.ts when the data needs pagination or revalidation.`,
           })),
       ),
   },
@@ -117,7 +117,7 @@ const RULES = [
           .map(({ path, line }) => ({
             key: `${file.path} ${path}`,
             line,
-            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerSeeded or useServerSeededInfinite from ${WRAPPER} of its app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.`,
+            fix: (lines) => `${file.path} imports ${path} on ${lines}. Use useServerData or useServerDataPages from ${WRAPPER} of its app, copied from node_modules/@mapringg/standard/templates/swr.ts with the exports it does not use deleted.`,
           })),
       ),
   },

@@ -10,18 +10,18 @@ import useSWR, {
 } from "swr";
 import { defaultConfigOptions, type ProviderConfiguration } from "swr/_internal";
 
-export type SeedKey = readonly [resource: string, ...parts: readonly unknown[]];
+export type ServerDataKey = readonly [resource: string, ...parts: readonly unknown[]];
 
-export type Revalidation = Pick<
+type Revalidation = Pick<
   SWRConfiguration,
   "refreshInterval" | "revalidateOnFocus" | "revalidateOnReconnect" | "keepPreviousData"
 >;
 
 type Mount = { fresh?: boolean; reuseCache?: boolean };
 
-export type SeededOptions<Data> = Revalidation & Mount & { fallbackData: Data };
+export type ServerDataOptions<Data> = Revalidation & Mount & { fallbackData: Data };
 
-export type Seeded<Data> = {
+export type ServerData<Data> = {
   data: Data;
   error: Error | undefined;
   validating: boolean;
@@ -37,11 +37,11 @@ function revalidateOnMount(
   return !fresh && !(reuseCache && cache.get(id)?.data !== undefined);
 }
 
-export function useServerSeeded<Key extends SeedKey, Data>(
+export function useServerData<Key extends ServerDataKey, Data>(
   key: Key | null,
   fetcher: (key: Key) => Promise<Data>,
-  options: SeededOptions<Data>,
-): Seeded<Data> {
+  options: ServerDataOptions<Data>,
+): ServerData<Data> {
   const { fallbackData, fresh = false, reuseCache = false, ...revalidation } = options;
   const { cache, mutate } = useSWRConfig();
   const { data, error, isValidating } = useSWR<Data, Error>(
@@ -67,9 +67,9 @@ export function useServerSeeded<Key extends SeedKey, Data>(
   };
 }
 
-export type SeededPagesOptions<Page> = Revalidation & Mount & { fallbackData: readonly Page[] };
+export type ServerDataPagesOptions<Page> = Revalidation & Mount & { fallbackData: readonly Page[] };
 
-export type SeededPages<Page> = {
+export type ServerDataPages<Page> = {
   pages: readonly Page[];
   error: Error | undefined;
   validating: boolean;
@@ -122,11 +122,11 @@ function dropNext(flights: Flights): void {
   flights.next = undefined;
 }
 
-export function useServerSeededInfinite<Key extends SeedKey, Page>(
+export function useServerDataPages<Key extends ServerDataKey, Page>(
   pageKey: (index: number, previous: Page | null) => Key | null,
   fetchPage: (key: Key) => Promise<Page>,
-  options: SeededPagesOptions<Page>,
-): SeededPages<Page> {
+  options: ServerDataPagesOptions<Page>,
+): ServerDataPages<Page> {
   const { fallbackData, fresh = false, reuseCache = false, ...revalidation } = options;
   const { cache, mutate } = useSWRConfig();
   const first = pageKey(0, null);
@@ -236,7 +236,7 @@ function scope(): SWRConfiguration {
   };
 }
 
-export function SwrScope({ children }: { children: ReactNode }): ReactNode {
+export function ServerDataTestCache({ children }: { children: ReactNode }): ReactNode {
   const [value] = useState(scope);
   return createElement(SWRConfig, { value }, children);
 }
