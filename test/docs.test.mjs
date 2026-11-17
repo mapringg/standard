@@ -24,6 +24,7 @@ function fails(t, files, ...lines) {
 
 const UNKNOWN = "is no kind of doc the standard allows. Move conventions to docs/<name>.md or apps/<app>/docs/<name>.md and facts about an outside system to docs/external/<name>.md, or delete it.";
 const REFUSED = "is named like a log or plan, and logs and plans are not docs. Delete it, and move any rule still in force into a conventions doc under docs/ or apps/<app>/docs/.";
+const orphan = (path, from) => `${path} orphan: No link reaches ${path} from an AGENTS.md, a CLAUDE.md, .gemini/styleguide.md or a SKILL.md. Link it from ${from}.`;
 
 test("docs passes every kind it names when each doc that needs a link has one", (t) => {
   passes(t, {
@@ -93,7 +94,6 @@ test("docs fails the check-docs external marker, since the folder decides the ki
 });
 
 test("docs fails a doc no link reaches from a root, and counts only links", (t) => {
-  const orphan = (path, from) => `${path} orphan: No link reaches ${path} from an AGENTS.md, a CLAUDE.md, .gemini/styleguide.md or a SKILL.md. Link it from ${from}.`;
   fails(
     t,
     {
@@ -118,6 +118,28 @@ test("docs fails a doc no link reaches from a root, and counts only links", (t) 
     orphan("docs/setup.md", "AGENTS.md"),
     orphan("docs/usage.md", "AGENTS.md"),
   );
+});
+
+test("docs counts no link inside an HTML comment, even one over several lines", (t) => {
+  fails(
+    t,
+    {
+      "AGENTS.md": "# Guide\n\n<!--\n[Hidden](docs/hidden.md)\n```\n-->\nWrite `<!--` to start one, and read [usage](docs/usage.md).\n\nText <!-- [Old](docs/old.md) --> and <!-- a\n@docs/old.md\n-->\n",
+      "docs/hidden.md": "# Hidden\n",
+      "docs/old.md": "# Old\n",
+      "docs/usage.md": "# Usage\n",
+    },
+    orphan("docs/hidden.md", "AGENTS.md"),
+    orphan("docs/old.md", "AGENTS.md"),
+  );
+});
+
+test("docs reads a link target with balanced parentheses whole", (t) => {
+  passes(t, {
+    "AGENTS.md": "# Guide\n\nRead [the guide](docs/guide(old).md) and [notes](<docs/notes (v2).md> \"Notes\").\n",
+    "docs/guide(old).md": "# Guide\n",
+    "docs/notes (v2).md": "# Notes\n",
+  });
 });
 
 test("docs passes a repository with no Markdown", (t) => {
