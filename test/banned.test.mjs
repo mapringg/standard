@@ -367,8 +367,8 @@ test("banned refuses a script's set:html or set:text value that holds HTML chara
       "src/pages/quote.astro": ['<script set:text="console.log(&quot;ran&quot;);"></script>', ""].join("\n"),
       "src/pages/self.astro": ['<p>ไทย</p>', "<script id='x' set:html='console.log(1)' />", ""].join("\n"),
     },
-    "src/pages/entity.astro parse: src/pages/entity.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:html value that holds HTML character references, which no check can read as written. Write the code as the script's body. Fix the syntax.",
-    "src/pages/quote.astro parse: src/pages/quote.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:text value that holds HTML character references, which no check can read as written. Write the code as the script's body. Fix the syntax.",
+    "src/pages/entity.astro parse: src/pages/entity.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:html value that is unquoted or holds HTML character references, which no check can read as written. Write the code as the script's body. Fix the syntax.",
+    "src/pages/quote.astro parse: src/pages/quote.astro does not parse, so banned cannot read it: a script on line 1 sets its body with a set:text value that is unquoted or holds HTML character references, which no check can read as written. Write the code as the script's body. Fix the syntax.",
     "src/pages/self.astro console: src/pages/self.astro uses console on line 2. Use the logger.",
   );
 });

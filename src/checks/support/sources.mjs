@@ -106,7 +106,7 @@ function astroRegions(text) {
         const start = opening.lastIndex;
         const end = quote ? text.indexOf(quote[1], start) : -1;
         if (end < 0 || text.slice(start, end) !== replaced.value) {
-          problems.push(`a script on line ${line} sets its body with a ${replaced.name} value that holds HTML character references, which no check can read as written. Write the code as the script's body`);
+          problems.push(`a script on line ${line} sets its body with a ${replaced.name} value that is unquoted or holds HTML character references, which no check can read as written. Write the code as the script's body`);
           return;
         }
         scripts.push({ start, end });
