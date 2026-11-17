@@ -86,6 +86,8 @@ test("duplicates passes a function whose body is one call that forwards its para
     '(open: boolean) => dispatch({ type: "openChanged", open })',
     '(id: string, index: number) => { store.select({ type: "picked", id, at: index }); }',
     '(left: string, right: string) => { return combine([left, right, "-"], { type: "pair", gap: null }); }',
+    '(event: { target: { value: string } }) => dispatch({ type: "search", query: event.target.value })',
+    '(e: { currentTarget: { checked: boolean } }) => dispatch({ type: "toggled", on: e.currentTarget.checked })',
   ];
   const component = (name) =>
     adapters.map((adapter, index) => `export const ${name}${index} = ${adapter};\n`).join("");
@@ -101,6 +103,9 @@ test("duplicates still finds a one-call function that computes its arguments or 
     computedArgument: '(open: boolean) => dispatch({ type: "openChanged", open: String(open) })',
     computedCallee: '(open: boolean) => pick(open).dispatch({ type: "openChanged", open })',
     freeName: '(open: boolean) => dispatch({ type: "openChanged", open, id: current })',
+    computedMember: '(event: { target: Record<string, string> }) => dispatch({ type: "search", query: event.target[field] })',
+    memberCall: '(event: { target: { value: string } }) => dispatch({ type: "search", query: event.target.value.trim() })',
+    outsideMember: '(event: { target: { value: string } }) => dispatch({ type: "search", query: form.target.value })',
   };
   const file = (prefix) =>
     Object.entries(logic)
