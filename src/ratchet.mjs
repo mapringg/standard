@@ -187,7 +187,7 @@ function verdict({ check, shown, findings, baseline, mode }) {
       write: next,
     };
   }
-  return { failed: false, lines: [] };
+  return { failed: false, lines: ["OK"] };
 }
 
 /**

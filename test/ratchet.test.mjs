@@ -40,7 +40,7 @@ const baseline = { message: ["c.ts"], summary: ["a.ts", "b.ts", "b.ts"] };
 test("passes when every finding is in the baseline", (t) => {
   const result = run(t, { findings, baseline });
   assert.equal(result.failed, false, result.output);
-  assert.equal(result.output, "");
+  assert.equal(result.output, "OK");
   assert.deepEqual(result.baseline, baseline);
 });
 
@@ -162,7 +162,7 @@ test("the runner ratchets a tree check against .standard/baselines in the repo",
   await runChecks({ checks: [treeCheck(findings)], repo, scope, names: ["example"], mode: "init" });
   assert.equal(readFileSync(stored, "utf8"), `${JSON.stringify(baseline, null, 2)}\n`);
   const [held] = await runChecks({ checks: [treeCheck(findings)], repo, scope });
-  assert.deepEqual(held, { check: "example", outcome: "ran", findings: [], failed: false, message: "" });
+  assert.deepEqual(held, { check: "example", outcome: "ran", findings: [], failed: false, message: "OK" });
 
   const [fixed] = await runChecks({ checks: [treeCheck([])], repo, scope });
   assert.equal(fixed.failed, true);
