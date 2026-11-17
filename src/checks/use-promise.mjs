@@ -11,9 +11,10 @@ import { parseSource } from "./support/sources.mjs";
  *
  * What a name holds where `use` reads it: a parameter of an enclosing function, a local and the expression that set it, or an import.
  * `key` is the property a destructuring pattern took the name from.
- * @typedef {{ kind: "param", fn: Node, index: number, key: string | null } | { kind: "local", init: Node | null, key: string | null } | { kind: "import", module: string, name: string }} Binding
+ * @typedef {{ kind: "param", fn: Node, index: number, key: string | null } | { kind: "local", init: Node | null, key: string | null, fn?: Node } | { kind: "import", module: string, name: string }} Binding
  *
- * Where a value passed to `use` comes from. `ok` is an exported component's prop, a cached function's result or a context. `created` is a
+ * Where a value passed to `use` comes from. `ok` is an exported component's prop, a cached function's result, or a value made once at module
+ * level, such as a context. `created` is a
  * call or `new` the render makes. `untraced` is a value whose origin the check cannot read.
  * @typedef {"ok" | "created" | "untraced"} Origin
  */
@@ -68,12 +69,41 @@ function declared(statements) {
     if (node.type === "VariableDeclaration") {
       return node.declarations.flatMap((/** @type {Node} */ item) => keyed(item.id).map(([name, key]) => [name, { kind: "local", init: item.init, key }]));
     }
-    return ["FunctionDeclaration", "ClassDeclaration"].includes(node.type) && node.id ? [[node.id.name, { kind: "local", init: null, key: null }]] : [];
+    if (node.type === "FunctionDeclaration" && node.id) return [[node.id.name, { kind: "local", init: null, key: null, fn: node }]];
+    return node.type === "ClassDeclaration" && node.id ? [[node.id.name, { kind: "local", init: null, key: null }]] : [];
   });
 }
 
 /** @type {(program: Node) => Map<string, Binding>} */
 const topLevel = (program) => new Map(declared(program.body));
+
+/** @type {(fn: Node, top: Map<string, Binding>) => boolean} Whether a function returns only a promise it keeps in a module-level binding, so each call after the first returns the same one. */
+function keeps(fn, top) {
+  /** @type {Set<string>} */
+  const own = new Set(fn.params.flatMap(namesOf));
+  /** @type {Node[]} */
+  const returned = fn.body.type === "BlockStatement" ? [] : [fn.body];
+  /** @type {[string, string][]} Each local the function assigns to a name, as [name, local]. */
+  const stored = [];
+  /** @type {(node: unknown) => void} */
+  const walk = (node) => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    const value = /** @type {Node | null} */ (node);
+    if (typeof value?.type !== "string" || FUNCTIONS.has(value.type) || value.type === "ClassDeclaration") return;
+    if (value.type === "VariableDeclarator") namesOf(value.id).forEach((name) => own.add(name));
+    if (value.type === "ReturnStatement") returned.push(value.argument);
+    if (value.type === "AssignmentExpression" && value.operator === "=" && value.left.type === "Identifier" && unwrap(value.right).type === "Identifier") stored.push([value.left.name, unwrap(value.right).name]);
+    Object.values(value).forEach(walk);
+  };
+  if (fn.body.type === "BlockStatement") walk(fn.body.body);
+  /** @type {(name: string) => boolean} */
+  const module = (name) => !own.has(name) && top.get(name)?.kind === "local";
+  return returned.length > 0 && returned.every((node) => {
+    const value = node && unwrap(node);
+    if (value?.type !== "Identifier") return false;
+    return module(value.name) || stored.some(([name, local]) => local === value.name && module(name));
+  });
+}
 
 /** @type {(callee: Node, lookup: (name: string) => Binding | undefined) => boolean} Whether a callee is React's createContext. */
 function isCreateContext(callee, lookup) {
@@ -122,7 +152,7 @@ export default {
   name: "use-promise",
   since: "0.14.15",
   doc: {
-    enforces: "In a `\"use client\"` file, React's `use` reads an exported component's prop, a parameter whose callers in the file pass one of these, the result of a function from a module that `cached-modules` lists, or a context that `createContext` makes. It never reads a call or `new` that the render makes, through any local. A value whose origin the check cannot trace fails.",
+    enforces: "In a `\"use client\"` file, React's `use` reads an exported component's prop, a parameter whose callers in the file pass one of these, the result of a function from a module that `cached-modules` lists, or a value made once at module level, such as a context. It never reads a call or `new` that the render makes, through any local. A value whose origin the check cannot trace fails.",
     fix: "Take the promise as a prop from a Server Component, or call a function from a module that `cached-modules` lists.",
     config: ["cached-modules"],
   },
@@ -149,7 +179,7 @@ export default {
       const { program, errors } = parseSource(path, repo.read(path), { preserveParens: false });
       return errors.length === 0 ? program : null;
     };
-    /** @type {(file: string, binding: Extract<Binding, { kind: "import" }>) => Origin} An import is cached, or a context its module makes with createContext. */
+    /** @type {(file: string, binding: Extract<Binding, { kind: "import" }>) => Origin} An import is cached, or a value its module makes once at module level. */
     const imported = (file, { module, name }) => {
       if (cached(file, module) !== null) return "ok";
       const source = target(file, module);
@@ -158,8 +188,7 @@ export default {
       const bindings = topLevel(program);
       const exported = program.body.flatMap((/** @type {Node} */ node) => (node.type === "ExportNamedDeclaration" && !node.source ? node.specifiers : [])).find((/** @type {Node} */ item) => (item.exported.name ?? item.exported.value) === name);
       const binding = bindings.get(exported ? exported.local.name : name);
-      const init = binding?.kind === "local" && binding.init ? unwrap(binding.init) : null;
-      return init?.type === "CallExpression" && isCreateContext(init.callee, (local) => bindings.get(local)) ? "ok" : "untraced";
+      return binding?.kind === "local" && binding.init && !FUNCTIONS.has(unwrap(binding.init).type) ? "ok" : "untraced";
     };
     return sites.flatMap(({ path, ends }) => {
       const program = programOf(path);
@@ -169,8 +198,9 @@ export default {
       const lineOf = (node) => text.slice(0, node.start).split("\n").length;
       /** @type {Record<Exclude<Origin, "ok">, Set<number>>} */
       const found = { created: new Set(), untraced: new Set() };
+      const top = topLevel(program);
       /** @type {Map<string, Binding>[]} */
-      const scopes = [topLevel(program)];
+      const scopes = [top];
       /** @type {(stack: Map<string, Binding>[]) => (name: string) => Binding | undefined} */
       const lookupIn = (stack) => (name) => stack.findLast((scope) => scope.has(name))?.get(name);
       /** @type {{ node: Node, lookup: (name: string) => Binding | undefined }[]} */
@@ -268,13 +298,16 @@ export default {
             let callee = unwrap(value.callee);
             while (callee.type === "MemberExpression") callee = unwrap(callee.object);
             const binding = callee.type === "Identifier" ? lookup(callee.name) : undefined;
-            return binding?.kind === "import" && cached(path, binding.module) !== null ? "ok" : "created";
+            if (binding?.kind === "import") return cached(path, binding.module) !== null ? "ok" : "created";
+            const fn = binding?.kind === "local" && binding === top.get(callee.name) ? binding.fn ?? (binding.init && unwrap(binding.init)) : null;
+            return callee === unwrap(value.callee) && fn && FUNCTIONS.has(fn.type) && keeps(fn, top) ? "ok" : "created";
           }
           case "Identifier": {
             const binding = lookup(value.name);
             if (binding?.kind === "param") return argument(binding.fn, binding.index, binding.key);
             if (binding?.kind === "import") return imported(path, binding);
             if (binding?.kind !== "local" || !binding.init) return "untraced";
+            if (binding === top.get(value.name)) return FUNCTIONS.has(unwrap(binding.init).type) ? "untraced" : "ok";
             return origin(binding.key === null ? binding.init : member(binding.init, binding.key), lookup, seen);
           }
           default: return "untraced";
