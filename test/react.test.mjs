@@ -29,7 +29,7 @@ function fails(t, files, ...fixes) {
 
 function passes(t, files) {
   const { stdout, stderr, status } = react(t, files);
-  assert.deepEqual({ stdout, stderr, status }, { stdout: "", stderr: "", status: 0 });
+  assert.deepEqual({ stdout, stderr, status }, { stdout: "react: OK\n", stderr: "", status: 0 });
 }
 
 test("react fails a second useState in a component or a hook, through memo and a namespace import", (t) => {
@@ -140,7 +140,7 @@ test("react keeps a baseline with one group per rule, and fails a source that do
     "react/single-use-state": ["apps/web/src/form.tsx Form useState", "apps/web/src/form.tsx Form useState"],
   });
   const clean = standard(cwd, ["check", "react"]);
-  assert.deepEqual([clean.stdout, clean.status], ["", 0]);
+  assert.deepEqual([clean.stdout, clean.status], ["react: OK\n", 0]);
   write(cwd, { "apps/web/src/broken.tsx": "export const = 1;\n" });
   git(cwd, "add", "-A");
   const broken = standard(cwd, ["check", "react"]);
