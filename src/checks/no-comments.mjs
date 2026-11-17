@@ -19,32 +19,9 @@ import { parseSource, sourceFiles } from "./support/sources.mjs";
 
 const DOCS = ["docs/*.md", "apps/*/docs/*.md"];
 const GENERATED_NAMES = new Set(["next-env.d.ts"]);
-const LICENSE = /@license\b|\bSPDX-License-Identifier:/;
 
-/** A line of a license header that stands alone, other than a copyright line: an SPDX tag, an `@license` tag, or the rights reservation. */
-const LICENSE_TAG = /^(?:SPDX-License-Identifier:\s+[\w.+()-]+(?:\s+(?:AND|OR|WITH)\s+[\w.+()-]+)*|@license(?:\s+[\w.+()-]+)?|All rights reserved\.?)$/;
-const COPYRIGHT = /^(?:SPDX-FileCopyrightText:(?:\s+(?:Copyright(?:\s+(?:\(c\)|©))?|\(c\)|©))?|Copyright(?:\s+(?:\(c\)|©))?|\(c\)|©)(?:\s+(.*))?$/;
-const COPYRIGHT_YEARS = /^\d{4}(?:\s*[-–,]\s*\d{4})*,?(?:\s+|$)/;
-const COPYRIGHT_LICENSE = /\.\s+(?:MIT|ISC|Apache-2\.0|BSD-[23]-Clause|MPL-2\.0)\.?$/;
-const OWNER_ABBREVIATIONS = new Set(["Inc.", "Ltd.", "Co.", "Corp.", "LLC.", "GmbH.", "Jr."]);
-const OWNER_WORDS = 6;
-
-/** @type {(line: string) => boolean} Whether a line is license text alone: a tag, or a copyright line naming years and an owner of a few words with no sentence after it. */
-function isLicenseLine(line) {
-  if (LICENSE_TAG.test(line)) return true;
-  const copyright = COPYRIGHT.exec(line);
-  if (!copyright) return false;
-  const owner = (copyright[1] ?? "").replace(/\.?\s*All rights reserved\.?$/, "").replace(COPYRIGHT_LICENSE, "").replace(COPYRIGHT_YEARS, "");
-  const words = owner.split(/\s+/).filter(Boolean);
-  if (words.length > OWNER_WORDS) return false;
-  return words.every((word, index) => !/[?!]$/.test(word) && (!word.endsWith(".") || index === words.length - 1 || OWNER_ABBREVIATIONS.has(word)));
-}
-
-/** The notices a license header may hold after its tag lines, each word for word with its spacing collapsed. */
-const NOTICES = new Set([
-  'Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.',
-  'Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.',
-]);
+/** The only license text a source may hold: one SPDX tag, or an `@license` tag, naming a license expression and nothing else. */
+const LICENSE_TAG = /^(?:SPDX-License-Identifier:|@license)\s+[\w.+()-]+(?:\s+(?:AND|OR|WITH)\s+[\w.+()-]+)*$/;
 
 const LINT_DISABLE = /^(?:eslint|oxlint)-disable(?:-next-line|-line)?(?=\s|$)/;
 const LINT_ENABLE = /^(?:eslint|oxlint)-enable(?=\s|$)/;
@@ -163,17 +140,15 @@ function claimedSafety(text, program, comments) {
 
 /**
  * @param {readonly Comment[]} header The comments above the code, in source order.
- * @returns {Comment[]} The longest run from the first that holds only license text, when the first names a license:
- * tag lines, and at most one of the NOTICES.
+ * @returns {Comment[]} The run from the first comment whose every line is a license tag. Third-party code with a full
+ * license notice is vendored, and `.gitattributes` marks it `linguist-vendored`.
  */
 function licenseHeader(header) {
-  if (!LICENSE.test(header[0]?.value ?? "")) return [];
-  let notice = "";
   let end = 0;
-  for (const [index, comment] of header.entries()) {
-    const lines = comment.value.split("\n").map((line) => line.replace(/^[\s*!]+|[\s*]+$/g, ""));
-    notice = [notice, ...lines.filter((line) => line !== "" && !isLicenseLine(line))].join(" ").replace(/\s+/g, " ").trim();
-    if (notice === "" || NOTICES.has(notice)) end = index + 1;
+  for (const comment of header) {
+    const lines = comment.value.split("\n").map((line) => line.replace(/^[\s*!]+|[\s*]+$/g, "")).filter((line) => line !== "");
+    if (lines.length === 0 || !lines.every((line) => LICENSE_TAG.test(line))) break;
+    end += 1;
   }
   return header.slice(0, end);
 }
@@ -181,10 +156,10 @@ function licenseHeader(header) {
 /**
  * @param {import("../repo.mjs").Repo} repo
  * @param {readonly string[]} paths
- * @returns {Set<string>} The paths that .gitattributes marks `linguist-generated`, as GitHub reads it.
+ * @returns {Set<string>} The paths that .gitattributes marks `linguist-generated` or `linguist-vendored`, as GitHub reads them.
  */
 function generatedPaths(repo, paths) {
-  const fields = execFileSync("git", ["check-attr", "-z", "--stdin", "linguist-generated"], { cwd: repo.root, input: paths.join("\0"), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\0");
+  const fields = execFileSync("git", ["check-attr", "-z", "--stdin", "linguist-generated", "linguist-vendored"], { cwd: repo.root, input: paths.join("\0"), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\0");
   const generated = new Set();
   for (let index = 0; index + 2 < fields.length; index += 3) {
     if (fields[index + 2] === "set" || fields[index + 2] === "true") generated.add(fields[index]);
@@ -253,8 +228,8 @@ export default {
   name: "no-comments",
   since: "0.13.0",
   doc: {
-    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a license header of license text alone. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` are skipped.",
-    fix: "Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`.",
+    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped.",
+    fix: "Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`.",
     config: [],
   },
   subject: "tree",
