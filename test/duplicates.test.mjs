@@ -81,6 +81,40 @@ test("duplicates passes a repeated statement block inside functions that differ,
   assert.equal(status, 0);
 });
 
+test("duplicates passes a function whose body is one call that forwards its parameters and literals, such as an event-to-action adapter", (t) => {
+  const adapters = [
+    '(open: boolean) => dispatch({ type: "openChanged", open })',
+    '(id: string, index: number) => { store.select({ type: "picked", id, at: index }); }',
+    '(left: string, right: string) => { return combine([left, right, "-"], { type: "pair", gap: null }); }',
+  ];
+  const component = (name) =>
+    adapters.map((adapter, index) => `export const ${name}${index} = ${adapter};\n`).join("");
+  const { stdout, status } = duplicates(repoWith(t, { "src/picker.tsx": component("onPick"), "src/dialog.tsx": component("onChoose") }));
+  assert.equal(stdout, "duplicates: OK\n");
+  assert.equal(status, 0);
+});
+
+test("duplicates still finds a one-call function that computes its arguments or its callee", (t) => {
+  const logic = {
+    condition: '(open: boolean) => dispatch({ type: "openChanged", open: open ? "yes" : "no" })',
+    arithmetic: '(count: number) => dispatch({ type: "countChanged", count: count * 2 + 1 })',
+    computedArgument: '(open: boolean) => dispatch({ type: "openChanged", open: String(open) })',
+    computedCallee: '(open: boolean) => pick(open).dispatch({ type: "openChanged", open })',
+    freeName: '(open: boolean) => dispatch({ type: "openChanged", open, id: current })',
+  };
+  const file = (prefix) =>
+    Object.entries(logic)
+      .map(([name, body]) => `export const ${prefix}${name} = ${body};\n`)
+      .join("");
+  const { stdout, status } = duplicates(repoWith(t, { "src/a.ts": file("a"), "src/b.ts": file("b") }));
+  const keys = stdout.split("\n").filter(Boolean).map((line) => line.split(": ")[1]);
+  assert.deepEqual(
+    keys,
+    Object.keys(logic).flatMap((name) => [`src/a.ts#a${name}`]).concat(Object.keys(logic).map((name) => `src/b.ts#b${name}`)),
+  );
+  assert.equal(status, 1);
+});
+
 test("duplicates scans only tracked .ts and .tsx sources outside tests, stories and declarations", (t) => {
   const cwd = repoWith(t, {
     "src/a.ts": TOTAL,
