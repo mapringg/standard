@@ -1,7 +1,7 @@
 "use client";
 
-import { createElement, useRef, useState, type ReactNode } from "react";
-import useSWR, { SWRConfig, unstable_serialize, useSWRConfig, type SWRConfiguration } from "swr";
+import { createElement, useState, type ReactNode } from "react";
+import useSWR, { SWRConfig, unstable_serialize, useSWRConfig, type Cache, type SWRConfiguration } from "swr";
 
 export type SeedKey = readonly [resource: string, ...parts: readonly unknown[]];
 
@@ -50,6 +50,18 @@ export type SeededPages<Page> = {
 
 type NextPage = { list: string; status: "loading" } | { list: string; status: "failed"; error: Error };
 
+type Flights = { refresh: Promise<unknown> | undefined; next: Promise<void> | undefined };
+
+const PAGES = Symbol("pages");
+const flightsByCache = new WeakMap<Cache, Map<string, Flights>>();
+
+function flightsOf(cache: Cache, list: string): Flights {
+  const lists = flightsByCache.get(cache) ?? new Map<string, Flights>();
+  const flights = lists.get(list) ?? { refresh: undefined, next: undefined };
+  flightsByCache.set(cache, lists.set(list, flights));
+  return flights;
+}
+
 export function useServerSeededInfinite<Key extends SeedKey, Page>(
   pageKey: (index: number, previous: Page | null) => Key | null,
   fetchPage: (key: Key) => Promise<Page>,
@@ -58,37 +70,46 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
   const { fallbackData, fresh = false, ...revalidation } = options;
   const { cache, mutate } = useSWRConfig();
   const first = pageKey(0, null);
-  const list = first === null ? null : (["$pages", first] as const);
+  const list = first === null ? null : ([PAGES, first] as const);
   const id = unstable_serialize(list);
-  const refresh = useRef<Promise<unknown>>(undefined);
+  const flights = flightsOf(cache, id);
   const [requested, setRequested] = useState<NextPage | null>(null);
   const keyAfter = (loaded: readonly Page[]) => pageKey(loaded.length, loaded.at(-1) ?? null);
+  const cached = (): readonly Page[] => cache.get(id)?.data ?? fallbackData;
   const refetchLoaded = async () => {
-    const loaded: readonly Page[] = cache.get(id)?.data ?? fallbackData;
+    const count = Math.max(1, cached().length);
     const pages: Page[] = [];
-    for (let key = first; key !== null && pages.length < Math.max(1, loaded.length); key = keyAfter(pages)) pages.push(await fetchPage(key));
+    for (let key = first; key !== null && pages.length < count; key = keyAfter(pages)) pages.push(await fetchPage(key));
     return pages;
   };
-  const { data, error, isValidating } = useSWR<readonly Page[], Error>(list, () => (refresh.current = refetchLoaded()), { ...revalidation, revalidateOnMount: !fresh });
+  const { data, error, isValidating } = useSWR<readonly Page[], Error>(list, () => (flights.refresh = refetchLoaded()), { ...revalidation, revalidateOnMount: !fresh });
   const pages = data ?? fallbackData;
   const next = requested?.list === id ? requested : null;
   const loadingMore = next?.status === "loading";
   const failure = next?.status === "failed" ? next.error : undefined;
   const settle = (after: NextPage | null) => setRequested((now) => (now?.list === id ? after : now));
-  const fetchNext = async () => {
-    if (list === null || loadingMore) return;
-    setRequested({ list: id, status: "loading" });
-    try {
-      await refresh.current?.catch(() => undefined);
+  const appendNext = async () => {
+    for (let appended = false; !appended; ) {
+      const key = keyAfter(cached());
+      if (key === null) return;
+      const page = await fetchPage(key);
+      for (let settled; settled !== flights.refresh; ) await (settled = flights.refresh)?.catch(() => undefined);
       await mutate<readonly Page[]>(
         list,
-        async (current) => {
+        (current) => {
           const loaded = current ?? fallbackData;
-          const key = keyAfter(loaded);
-          return key === null ? loaded : [...loaded, await fetchPage(key)];
+          appended = unstable_serialize(keyAfter(loaded)) === unstable_serialize(key);
+          return appended ? [...loaded, page] : loaded;
         },
         { revalidate: false },
       );
+    }
+  };
+  const fetchNext = async () => {
+    if (list === null) return;
+    setRequested({ list: id, status: "loading" });
+    try {
+      await (flights.next ??= appendNext().finally(() => (flights.next = undefined)));
       settle(null);
     } catch (thrown) {
       settle({ list: id, status: "failed", error: thrown instanceof Error ? thrown : new Error(String(thrown)) });
