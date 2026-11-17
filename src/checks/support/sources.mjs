@@ -94,9 +94,22 @@ function astroRegions(text) {
       if (!runs(node.attributes)) return;
       const replaced = node.attributes.find((attribute) => attribute.name === "set:html" || attribute.name === "set:text");
       if (replaced) {
-        const at = replaced.position && replaced.raw ? text.indexOf(replaced.raw, index(replaced.position.start.offset)) : -1;
-        if (replaced.kind === "quoted" && replaced.raw && at >= 0) scripts.push({ start: at + 1, end: at + replaced.raw.length - 1 });
-        else if (replaced.kind !== "empty") problems.push(`a script on line ${replaced.position?.start.line} sets its body with a ${replaced.name} expression, which no check can read. Write the code as the script's body`);
+        const line = replaced.position?.start.line;
+        if (replaced.kind === "empty") return;
+        if (replaced.kind !== "quoted" || !replaced.position) {
+          problems.push(`a script on line ${line} sets its body with a ${replaced.name} expression, which no check can read. Write the code as the script's body`);
+          return;
+        }
+        const opening = /\S+?\s*=\s*(["'])/y;
+        opening.lastIndex = index(replaced.position.start.offset);
+        const quote = opening.exec(text);
+        const start = opening.lastIndex;
+        const end = quote ? text.indexOf(quote[1], start) : -1;
+        if (end < 0 || text.slice(start, end) !== replaced.value) {
+          problems.push(`a script on line ${line} sets its body with a ${replaced.name} value that holds HTML character references, which no check can read as written. Write the code as the script's body`);
+          return;
+        }
+        scripts.push({ start, end });
         return;
       }
       const body = node.children.flatMap((child) => (child.type === "text" && child.position?.end ? [child.position] : []));
