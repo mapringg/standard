@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 
+import { reducerStates } from "./support/reducer-state.mjs";
 import { sourceFacts } from "./support/source.mjs";
 
 /**
@@ -7,19 +8,20 @@ import { sourceFacts } from "./support/source.mjs";
  * @typedef {import("./support/source.mjs").Parsed} Parsed
  * @typedef {import("./support/source.mjs").Use} Use
  *
- * What a rule sees: every parsed source, and the one path in each Next app that may import swr.
- * @typedef {{ files: readonly Parsed[], wrappers: ReadonlySet<string> }} Scope
+ * What a rule sees: the repository root, every parsed source, and the one path in each Next app that may import swr.
+ * @typedef {{ root: string, files: readonly Parsed[], wrappers: ReadonlySet<string> }} Scope
  *
  * One occurrence. Occurrences that share a key share one fix, which lists all their lines, because the baseline shows
  * the first fix of each key.
  * @typedef {{ key: string, line: number, fix: (lines: string) => string }} Problem
  *
- * @typedef {{ name: string, find(scope: Scope): Problem[] }} Rule
+ * @typedef {{ name: string, find(scope: Scope): Problem[] | Promise<Problem[]> }} Rule
  */
 
 const FLAG_STATES = new Set(["loading", "isLoading", "error", "isError"]);
 const SWR = new Set(["swr", "swr/infinite"]);
 const WRAPPER = "src/lib/swr.ts";
+const UNION_FIX = 'Make the state a union with one member per status, such as { status: "idle" } | { status: "done", items: Item[] }.';
 const OWNER = /^(?:[A-Z]|use[A-Z])/;
 
 /**
@@ -70,6 +72,28 @@ const RULES = [
             : [],
         ),
       ),
+  },
+  {
+    name: "react/reducer-status-union",
+    async find({ root, files }) {
+      const sites = files.flatMap((file) => ownedCalls(file, "react#useReducer").map(({ owner, key, use }) => ({ file: file.path, end: use.call.end, owner, key, line: use.line })));
+      const shapes = await reducerStates(root, sites);
+      return sites.flatMap((site) => {
+        const shape = /** @type {import("./support/reducer-state.mjs").StateShape} */ (shapes.get(site));
+        const statuses = shape.exact ? shape.members.map((member) => member.status) : [];
+        const shared = statuses.find((status, index) => status !== null && statuses.indexOf(status) !== index);
+        if (shape.exact && statuses.length >= 2 && !statuses.includes(null) && shared === undefined) return [];
+        const call = `${site.file}: ${site.owner}'s useReducer on`;
+        const problem = shared === undefined ? "which is not a union whose members each have a literal status" : `whose members share status "${shared}"`;
+        return [{
+          key: `${site.key} useReducer`,
+          line: site.line,
+          fix: (lines) => shape.exact
+            ? `${call} ${lines} holds ${shape.members.map((member) => member.text).join(" | ")}, ${problem}. ${UNION_FIX}`
+            : `${call} ${lines} ${shape.reason}, so the check cannot read its state. ${shape.fix}`,
+        }];
+      });
+    },
   },
   {
     name: "react/no-client-fetch",
@@ -128,20 +152,21 @@ export default {
   subject: "tree",
   retired: [],
   applies: (repo) => (dependents(repo, "react").length > 0 ? { on: true } : { on: false, because: "no tracked package.json declares react" }),
-  run(repo) {
+  async run(repo) {
     const facts = sourceFacts(repo);
     const scope = {
+      root: repo.root,
       files: facts.flatMap((file) => ("error" in file ? [] : [file])),
       wrappers: new Set(dependents(repo, "next").map((app) => posix.join(app, WRAPPER))),
     };
     const parseErrors = facts.flatMap((file) => ("error" in file ? [{ key: `${file.path} parse`, group: "react/parse", fix: `${file.path} does not parse, so react cannot read it: ${file.error}. Fix the syntax.` }] : []));
     return [
       ...parseErrors,
-      ...RULES.flatMap((rule) => {
-        const problems = rule.find(scope);
+      ...(await Promise.all(RULES.map(async (rule) => {
+        const problems = await rule.find(scope);
         const lines = Map.groupBy(problems, (problem) => problem.key);
         return problems.map(({ key, fix }) => ({ key, group: rule.name, fix: fix(linesText((lines.get(key) ?? []).map((problem) => problem.line))) }));
-      }),
+      }))).flat(),
     ];
   },
 };

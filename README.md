@@ -187,9 +187,22 @@ To adopt `tests` or `pr-tests`, add it to `pending` in the pull request that bum
 | --- | --- | --- |
 | `react/single-use-state` | An owner calls `useState` a second time. Each call after the first is one finding. A single `useState` that holds one value, an object included, passes. | Hold the owner's state in one `useReducer`. |
 | `react/no-flag-state` | A `useState` call's first binding is `loading`, `isLoading`, `error` or `isError`. | Model the status in a `useReducer` state union, such as `{ status: "loading" } \| { status: "done", data }`. |
+| `react/reducer-status-union` | A `useReducer` state is not a union of two or more members that each have a different string literal `status`, such as `{ status: "idle" \| "done"; data?: Item[] }` or two members with `status: "ready"`. The check reads the state type with the TypeScript the file resolves, through the call's return type, so any binding of the state works. | Make the state a union with one member per status, such as `{ status: "idle" } \| { status: "done", items: Item[] }`. |
 | `react/no-client-fetch` | A file whose directive prologue holds `"use client"` reads the global `fetch`, also through `window` or `globalThis` or passed as a value. A local named `fetch` passes. | Fetch in a server component, or through `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts` when the data needs pagination or revalidation. |
 | `react/no-direct-swr` | A file imports `swr` or `swr/infinite`, other than `<app>/src/lib/swr.ts` of a folder whose tracked `package.json` declares `next`. A type-only import passes. | Use `useServerSeeded` or `useServerSeededInfinite` from `src/lib/swr.ts`. |
 | Parse | A tracked source does not parse. | Fix the syntax. |
+
+`react/reducer-status-union` fails closed: a state it cannot read fails under the same key as a wrong one, and the fix names the cause.
+
+| Cause | Fix |
+| --- | --- |
+| No `typescript` package resolves from the file's folder. | Add `typescript` to that package's devDependencies. |
+| No tsconfig covers the file. TypeScript 7 picks the project an editor would, and older TypeScript reads the nearest `tsconfig.json`. | Add the file to that tsconfig's `include`, or add a tsconfig. |
+| TypeScript parses the file without that call. | Fix the syntax errors. |
+| The call has no return type TypeScript can resolve. | Run the typecheck and fix what it reports at the call, such as missing types for `react`. |
+| The state is `any` or `unknown`. | Give the reducer's state a concrete union type. |
+| The state is a type parameter, as in a generic hook. | Call `useReducer` where the state type is concrete. |
+| TypeScript throws. | Run the typecheck and fix what it reports. |
 
 Each finding names the file, the owner and the API, such as `src/form.tsx Form useState`, with no line number, and a later owner of the same name in the file is `Form 2`. Its fix lists the lines. `react` keeps a baseline, one group per rule, so `standard check react --init` records today's findings and the check fails only new ones. The wrapper ships in the package. Copy it into each Next app and import its hooks instead of `swr`:
 
