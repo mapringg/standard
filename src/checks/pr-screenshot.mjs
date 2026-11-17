@@ -2,8 +2,8 @@ import { FILE } from "../config.mjs";
 import { git } from "../repo.mjs";
 import { evidenceHasImage } from "./support/markdown.mjs";
 
-/** A file no page renders: a lint, format or TypeScript config, a test, or a file in a scripts or test folder. */
-const CANNOT_RENDER = /(?:^|\/)(?:\.oxlintrc[^/]*|\.oxfmtrc[^/]*|tsconfig[^/]*\.json|[^/]*\.test\.[^/]*)$|(?:^|\/)(?:scripts|test|tests|__tests__)\//;
+/** A file no page renders: a lint, format or TypeScript config, a test, or a file in a __tests__ folder. */
+const CANNOT_RENDER = /(?:^|\/)(?:\.oxlintrc[^/]*|\.oxfmtrc[^/]*|tsconfig[^/]*\.json|[^/]*\.test\.[^/]*)$|(?:^|\/)__tests__\//;
 
 /** @type {import("../registry.mjs").Check} */
 export default {
