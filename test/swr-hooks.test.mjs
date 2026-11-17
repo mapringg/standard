@@ -9,6 +9,7 @@ globalThis.document = dom.window.document;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const { act, createElement } = await import("react");
+const { flushSync } = await import("react-dom");
 const { createRoot } = await import("react-dom/client");
 const { SWRConfig } = await import("swr");
 const { SwrScope, useServerSeeded, useServerSeededInfinite } = await import("../templates/swr.ts");
@@ -36,7 +37,7 @@ function server(failing = new Set()) {
 
 const pageKey = (index) => (index < 3 ? ["items", index] : null);
 
-async function mount(t, useHook, props) {
+async function mount(t, useHook, props, config = {}) {
   const result = { first: undefined, current: undefined };
   function Probe(probeProps) {
     result.current = useHook(probeProps);
@@ -44,10 +45,11 @@ async function mount(t, useHook, props) {
     return null;
   }
   const root = createRoot(document.createElement("div"));
-  const render = (next) => act(async () => root.render(createElement(SWRConfig, { value: { shouldRetryOnError: false } }, createElement(SwrScope, null, createElement(Probe, next)))));
+  const tree = (next) => createElement(SWRConfig, { value: { shouldRetryOnError: false, ...config } }, createElement(SwrScope, null, createElement(Probe, next)));
+  const render = (next) => act(async () => root.render(tree(next)));
   await render(props);
   t.after(() => act(async () => root.unmount()));
-  return { result, rerender: render };
+  return { result, rerender: render, renderNow: (next) => flushSync(() => root.render(tree(next))) };
 }
 
 async function settle(until = () => false) {
@@ -136,4 +138,84 @@ test("try again after a failed page fetches only that page", async (t) => {
   await act(async () => result.current.revalidate());
   await settle(() => result.current.pages.length === 3);
   assert.deepEqual({ requests: api.requests, pages: result.current.pages.map((page) => page.index), error: result.current.error }, { requests: [["items", 2]], pages: [0, 1, 2], error: undefined });
+});
+
+const listKey = (id) => (index) => (index < 3 ? ["items", id, index] : null);
+const firstItems = (result) => result.current.pages.map((page) => page.items[0]);
+
+test("an edit to one page list never reaches the list selected next", async (t) => {
+  const api = server();
+  const { result, renderNow } = await mount(t, ({ id }) => useServerSeededInfinite(listKey(id), api.page, { fallbackData: [{ index: id, items: [`seed ${id}`] }], fresh: true }), { id: "A" });
+  await act(async () => {
+    const edit = result.current.replace((pages) => pages.map((page) => ({ ...page, items: ["edited A"] })));
+    renderNow({ id: "B" });
+    await edit;
+  });
+  await settle(() => firstItems(result)[0] === "fetched B");
+  assert.deepEqual(firstItems(result), ["fetched B"]);
+});
+
+test("a replace held from an earlier key never changes the item selected next", async (t) => {
+  const api = server();
+  const { result, rerender } = await mount(t, ({ id }) => useServerSeeded(["item", id], api.item, { fallbackData: { id, name: "seed" }, fresh: true }), { id: "a" });
+  const held = result.current;
+  await rerender({ id: "b" });
+  await settle(() => result.current.data.name === "fetched b");
+  await act(async () => held.replace((item) => ({ ...item, name: "edited a" })));
+  await settle();
+  assert.deepEqual(result.current.data, { id: "b", name: "fetched b" });
+});
+
+test("load more during the mount refetch keeps the refetched page", async (t) => {
+  const requests = [];
+  let finishFirstPage;
+  const fetchPage = (key) => {
+    requests.push(key);
+    if (key[1] > 0) return Promise.resolve({ index: key[1], items: [`fetched ${key[1]}`] });
+    return new Promise((resolve) => {
+      finishFirstPage = () => resolve({ index: 0, items: ["refetched 0"] });
+    });
+  };
+  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, fetchPage, { fallbackData: [{ index: 0, items: ["seed 0"] }] }));
+  await act(async () => result.current.loadMore());
+  await settle(() => result.current.pages.length === 2);
+  await act(async () => finishFirstPage());
+  await settle(() => result.current.pages.length === 2 && firstItems(result)[0] !== "seed 0");
+  assert.deepEqual({ requests, pages: firstItems(result) }, { requests: [["items", 0], ["items", 1]], pages: ["refetched 0", "fetched 1"] });
+});
+
+const refreshes = {
+  focus: { options: { revalidateOnFocus: true }, start: () => window.dispatchEvent(new window.Event("focus")) },
+  reconnect: { options: { revalidateOnReconnect: true }, start: () => window.dispatchEvent(new window.Event("online")) },
+  interval: { options: {}, start: (rerender) => rerender({ refreshInterval: 30 }) },
+};
+
+for (const [name, { options, start }] of Object.entries(refreshes)) {
+  test(`${name} refresh refetches every loaded page, and load more only the next`, async (t) => {
+    const requests = [];
+    let version = 1;
+    const fetchPage = async (key) => {
+      requests.push(key);
+      return { index: key[1], items: [`v${version} page ${key[1]}`] };
+    };
+    const { result, rerender } = await mount(t, ({ refreshInterval }) => useServerSeededInfinite(pageKey, fetchPage, { fallbackData: [{ index: 0, items: ["v1 page 0"] }], fresh: true, ...options, refreshInterval }), { refreshInterval: 0 }, { dedupingInterval: 0, focusThrottleInterval: 0 });
+    await act(async () => result.current.loadMore());
+    await settle(() => result.current.pages.length === 2);
+    assert.deepEqual({ requests, pages: firstItems(result) }, { requests: [["items", 1]], pages: ["v1 page 0", "v1 page 1"] });
+    version = 2;
+    requests.length = 0;
+    await act(async () => start(rerender));
+    await settle(() => firstItems(result)[1] === "v2 page 1");
+    assert.deepEqual({ requests: requests.slice(0, 2), pages: firstItems(result) }, { requests: [["items", 0], ["items", 1]], pages: ["v2 page 0", "v2 page 1"] });
+  });
+}
+
+test("a local replacement survives load more", async (t) => {
+  const api = server();
+  const { result } = await mount(t, () => useServerSeededInfinite(pageKey, api.page, { fallbackData: [{ index: 0, items: ["seed 0"] }], fresh: true }));
+  await act(async () => result.current.replace((pages) => pages.map((page) => ({ ...page, items: ["edited 0"] }))));
+  assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [], pages: ["edited 0"] });
+  await act(async () => result.current.loadMore());
+  await settle(() => result.current.pages.length === 2);
+  assert.deepEqual({ requests: api.requests, pages: firstItems(result) }, { requests: [["items", 1]], pages: ["edited 0", "fetched 1"] });
 });
