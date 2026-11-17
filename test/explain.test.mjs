@@ -17,7 +17,7 @@ test("the README rule table is what standard explain --markdown prints", () => {
 test("explain --markdown has one row per check with its config, version and baseline", () => {
   const rows = standard(process.cwd(), ["explain", "--markdown"]).stdout.trimEnd().split("\n");
   assert.equal(rows.length, registry.length + 2);
-  assert.match(rows.find((row) => row.startsWith("| `banned` |")) ?? "", /\| `banned` \| .+ \| .+ \| `banned` \| 0\.12\.0 \| yes \|$/);
+  assert.match(rows.find((row) => row.startsWith("| `banned` |")) ?? "", /\| `banned` \| .+ \| .+ \| `banned`, `effect-wrappers` \| 0\.12\.0 \| yes \|$/);
   assert.match(rows.find((row) => row.startsWith("| `react` |")) ?? "", /\| none \| 0\.12\.0 \| no \|$/);
 });
 

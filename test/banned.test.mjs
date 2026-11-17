@@ -372,3 +372,89 @@ test("banned refuses a script's set:html or set:text value that holds HTML chara
     "src/pages/self.astro console: src/pages/self.astro uses console on line 2. Use the logger.",
   );
 });
+
+const EFFECT_FIX = "Replace the effect with what it does: read data with useServerSeeded or useServerSeededInfinite from src/lib/swr.ts or in a server component, compute derived state in render, act on an event in its handler, reset state on a prop change with a key, read an external store with useSyncExternalStore, measure or focus the DOM in a ref callback, read the latest props from a callback with useEffectEvent instead of copying them into a ref, and run a timer with useTimeout, useInterval or useAnimationFrame from src/lib/timer.ts, copied from node_modules/@mapringg/standard/templates/timer.ts. A wrapper that must keep an effect goes in effect-wrappers in .standard/config.json with its reason.";
+
+const REACT_EXPORT_FIX = "Import from react where you use it, so banned sees each effect hook.";
+
+test("banned fails React's effect hooks in product code through named, aliased, namespace, default, destructured, required, computed and re-exported uses, and a re-export of react's namespace", (t) => {
+  fails(
+    t,
+    [],
+    {
+      "src/named.tsx": 'import { useEffect } from "react";\nexport function A() {\n  useEffect(() => {});\n}\n',
+      "src/alias.tsx": 'import { useEffect as run } from "react";\nconst effect = run;\nexport function A() {\n  effect(() => {});\n}\n',
+      "src/namespace.tsx": 'import * as React from "react";\nexport function A() {\n  React.useLayoutEffect(() => {});\n}\n',
+      "src/default.tsx": 'import React from "react";\nconst { useInsertionEffect: insert } = React;\nexport function A() {\n  insert(() => {});\n}\n',
+      "src/hooks.ts": 'export { useEffect, useState } from "react";\n',
+      "src/require.ts": 'export const run = () => require("react").useEffect(() => {});\n',
+      "src/computed.ts": 'import React from "react";\nexport const run = () => React["useEffect"].call(null, () => {});\n',
+      "src/namespace-export.ts": 'export * as React from "react";\nexport { default as Default } from "react";\n',
+      "src/star-export.ts": 'export * from "react";\n',
+      "src/local.tsx": "const useEffect = (run: () => void) => run();\nexport function A() {\n  useEffect(() => {});\n}\n",
+      "src/state.tsx": 'import { useEffectEvent, useState, useSyncExternalStore } from "react";\nexport function A() {\n  return [useState(0), useEffectEvent, useSyncExternalStore];\n}\n',
+    },
+    `src/alias.tsx react#useEffect: src/alias.tsx uses react#useEffect on lines 1, 2, 4. ${EFFECT_FIX}`,
+    `src/computed.ts react#useEffect: src/computed.ts uses react#useEffect on line 2. ${EFFECT_FIX}`,
+    `src/default.tsx react#useInsertionEffect: src/default.tsx uses react#useInsertionEffect on lines 2, 4. ${EFFECT_FIX}`,
+    `src/hooks.ts react#useEffect: src/hooks.ts uses react#useEffect on line 1. ${EFFECT_FIX}`,
+    `src/named.tsx react#useEffect: src/named.tsx uses react#useEffect on lines 1, 3. ${EFFECT_FIX}`,
+    `src/namespace-export.ts export react: src/namespace-export.ts re-exports react, whose namespace holds its effect hooks, on lines 1, 2. ${REACT_EXPORT_FIX}`,
+    `src/namespace.tsx react#useLayoutEffect: src/namespace.tsx uses react#useLayoutEffect on line 3. ${EFFECT_FIX}`,
+    `src/require.ts react#useEffect: src/require.ts uses react#useEffect on line 1. ${EFFECT_FIX}`,
+    `src/star-export.ts export react: src/star-export.ts re-exports react, whose namespace holds its effect hooks, on line 1. ${REACT_EXPORT_FIX}`,
+  );
+});
+
+test("banned passes effect hooks in test files and in a wrapper that effect-wrappers lists with its reason", (t) => {
+  const effect = 'import { useEffect } from "react";\nexport function useTick(run: () => void) {\n  useEffect(() => {\n    const id = setInterval(run, 1000);\n    return () => clearInterval(id);\n  }, [run]);\n}\n';
+  const cwd = tempRepo(t, { "effect-wrappers": [{ file: "src/use-tick.ts", reason: "Runs the one interval every countdown shares." }] });
+  write(cwd, {
+    "src/use-tick.ts": effect,
+    "src/form.test.tsx": effect,
+    "src/form.spec.ts": effect,
+    "src/all.test.ts": 'export * from "react";\n',
+    "src/use-clock.ts": effect,
+  });
+  git(cwd, "add", "-A");
+  const { stdout, status } = standard(cwd, ["check", "banned"]);
+  assert.equal(stdout, `banned: src/use-clock.ts react#useEffect: src/use-clock.ts uses react#useEffect on lines 1, 3. ${EFFECT_FIX}\n`);
+  assert.equal(status, 1);
+});
+
+test("banned passes effect hooks in each React app's src/lib/timer.ts, Next or Vite, and fails them in a library's", (t) => {
+  const effect = 'import { useEffect } from "react";\nexport function useTick() {\n  useEffect(() => {});\n}\n';
+  fails(
+    t,
+    [],
+    {
+      "apps/web/package.json": { dependencies: { next: "16.0.0", react: "19.0.0" } },
+      "apps/web/src/lib/timer.ts": effect,
+      "apps/liff/package.json": { dependencies: { react: "19.0.0" }, devDependencies: { vite: "8.0.0" } },
+      "apps/liff/src/lib/timer.ts": effect,
+      "apps/liff/src/timer.ts": effect,
+      "packages/ui/package.json": { dependencies: { react: "19.0.0" } },
+      "packages/ui/src/lib/timer.ts": effect,
+    },
+    `apps/liff/src/timer.ts react#useEffect: apps/liff/src/timer.ts uses react#useEffect on lines 1, 3. ${EFFECT_FIX}`,
+    `packages/ui/src/lib/timer.ts react#useEffect: packages/ui/src/lib/timer.ts uses react#useEffect on lines 1, 3. ${EFFECT_FIX}`,
+  );
+});
+
+test("the config needs a repository path and a reason for each effect wrapper", (t) => {
+  const reason = '.standard/config.json effect-wrappers[0].reason must say why the file keeps an effect, such as "Binds the map instance, which renders no element."';
+  const cases = [
+    [{}, ".standard/config.json effect-wrappers must be a list."],
+    [[{ file: "src/a.ts" }], reason],
+    [[{ file: "src/a.ts", reason: " " }], reason],
+    [[{ file: "/src/a.ts", reason: "x" }], ".standard/config.json effect-wrappers[0].file must be a path relative to the repository root, such as scripts/upload.mjs."],
+    [[{ file: "src/*.ts", reason: "x" }], '.standard/config.json effect-wrappers[0].file has "src/*.ts", a glob. List each wrapper by its exact path.'],
+    [[{ file: "src/a.ts", reason: "x", why: "y" }], '.standard/config.json has an unknown key "effect-wrappers[0].why". Known keys: effect-wrappers[0].file, effect-wrappers[0].reason.'],
+  ];
+  for (const [wrappers, message] of cases) {
+    const cwd = tempRepo(t, { "effect-wrappers": wrappers });
+    const { stderr, status } = standard(cwd, ["check", "banned"]);
+    assert.equal(stderr, `standard: ${message}\n`);
+    assert.equal(status, 1);
+  }
+});
