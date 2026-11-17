@@ -1,8 +1,7 @@
 "use client";
 
-import { createElement, type ReactNode } from "react";
-import useSWR, { SWRConfig, useSWRConfig, type SWRConfiguration } from "swr";
-import useSWRInfinite from "swr/infinite";
+import { createElement, useRef, useState, type ReactNode } from "react";
+import useSWR, { SWRConfig, unstable_serialize, useSWRConfig, type SWRConfiguration } from "swr";
 
 export type SeedKey = readonly [resource: string, ...parts: readonly unknown[]];
 
@@ -20,16 +19,17 @@ export type Seeded<Data> = {
 
 export function useServerSeeded<Key extends SeedKey, Data>(key: Key | null, fetcher: (key: Key) => Promise<Data>, options: SeededOptions<Data>): Seeded<Data> {
   const { fallbackData, fresh = false, ...revalidation } = options;
-  const { data, error, isValidating, mutate } = useSWR<Data, Error>(key, (current: Key) => fetcher(current), { ...revalidation, revalidateOnMount: !fresh });
+  const { mutate } = useSWRConfig();
+  const { data, error, isValidating } = useSWR<Data, Error>(key, (current: Key) => fetcher(current), { ...revalidation, revalidateOnMount: !fresh });
   return {
     data: data === undefined ? fallbackData : data,
     error,
     validating: isValidating,
     async revalidate() {
-      await mutate();
+      await mutate(key);
     },
     async replace(change, { revalidate = false } = {}) {
-      await mutate((current) => change(current === undefined ? fallbackData : current), { revalidate });
+      await mutate<Data>(key, (current) => change(current === undefined ? fallbackData : current), { revalidate });
     },
   };
 }
@@ -48,49 +48,70 @@ export type SeededPages<Page> = {
   replace(change: (pages: readonly Page[]) => readonly Page[], options?: { revalidate?: boolean }): Promise<void>;
 };
 
+type NextPage = { list: string; status: "loading" } | { list: string; status: "failed"; error: Error };
+
 export function useServerSeededInfinite<Key extends SeedKey, Page>(
   pageKey: (index: number, previous: Page | null) => Key | null,
   fetchPage: (key: Key) => Promise<Page>,
   options: SeededPagesOptions<Page>,
 ): SeededPages<Page> {
   const { fallbackData, fresh = false, ...revalidation } = options;
-  const { mutate: write } = useSWRConfig();
-  const { data, error, isValidating, size, setSize, mutate } = useSWRInfinite<Page, Error>(pageKey, (key: Key) => fetchPage(key), {
-    ...revalidation,
-    initialSize: Math.max(1, fallbackData.length),
-    revalidateOnMount: !fresh,
-    revalidateFirstPage: false,
-  });
+  const { cache, mutate } = useSWRConfig();
+  const first = pageKey(0, null);
+  const list = first === null ? null : (["$pages", first] as const);
+  const id = unstable_serialize(list);
+  const refresh = useRef<Promise<unknown>>(undefined);
+  const [requested, setRequested] = useState<NextPage | null>(null);
+  const keyAfter = (loaded: readonly Page[]) => pageKey(loaded.length, loaded.at(-1) ?? null);
+  const refetchLoaded = async () => {
+    const loaded: readonly Page[] = cache.get(id)?.data ?? fallbackData;
+    const pages: Page[] = [];
+    for (let key = first; key !== null && pages.length < Math.max(1, loaded.length); key = keyAfter(pages)) pages.push(await fetchPage(key));
+    return pages;
+  };
+  const { data, error, isValidating } = useSWR<readonly Page[], Error>(list, () => (refresh.current = refetchLoaded()), { ...revalidation, revalidateOnMount: !fresh });
   const pages = data ?? fallbackData;
-  const seedPages = async () => {
-    if (data !== undefined) return data;
-    let previous: Page | null = null;
-    for (const [index, page] of fallbackData.entries()) {
-      await write(pageKey(index, previous), page, { revalidate: false });
-      previous = page;
+  const next = requested?.list === id ? requested : null;
+  const loadingMore = next?.status === "loading";
+  const failure = next?.status === "failed" ? next.error : undefined;
+  const settle = (after: NextPage | null) => setRequested((now) => (now?.list === id ? after : now));
+  const fetchNext = async () => {
+    if (list === null || loadingMore) return;
+    setRequested({ list: id, status: "loading" });
+    try {
+      await refresh.current?.catch(() => undefined);
+      await mutate<readonly Page[]>(
+        list,
+        async (current) => {
+          const loaded = current ?? fallbackData;
+          const key = keyAfter(loaded);
+          return key === null ? loaded : [...loaded, await fetchPage(key)];
+        },
+        { revalidate: false },
+      );
+      settle(null);
+    } catch (thrown) {
+      settle({ list: id, status: "failed", error: thrown instanceof Error ? thrown : new Error(String(thrown)) });
     }
-    await mutate([...fallbackData], { revalidate: false });
-    return fallbackData;
   };
   return {
     pages,
-    error,
-    validating: isValidating,
-    loadingMore: isValidating && size > pages.length,
-    done: pageKey(pages.length, pages[pages.length - 1] ?? null) === null,
+    error: failure ?? error,
+    validating: isValidating || loadingMore,
+    loadingMore,
+    done: keyAfter(pages) === null,
     loadMore() {
-      void seedPages().then(() => setSize(pages.length + 1));
+      void fetchNext();
     },
     async restart() {
-      await setSize(1);
-      await mutate();
+      settle(null);
+      await mutate<readonly Page[]>(list, (current) => (current ?? fallbackData).slice(0, 1), { revalidate: true });
     },
     async revalidate() {
-      await mutate([...(await seedPages())]);
+      await (failure ? fetchNext() : mutate(list));
     },
     async replace(change, { revalidate = false } = {}) {
-      await seedPages();
-      await mutate((current) => [...change(current ?? fallbackData)], { revalidate });
+      await mutate<readonly Page[]>(list, (current) => change(current ?? fallbackData), { revalidate });
     },
   };
 }
