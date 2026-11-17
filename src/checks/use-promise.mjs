@@ -105,18 +105,6 @@ function keeps(fn, top) {
   });
 }
 
-/** @type {(callee: Node, lookup: (name: string) => Binding | undefined) => boolean} Whether a callee is React's createContext. */
-function isCreateContext(callee, lookup) {
-  const value = unwrap(callee);
-  if (value.type === "Identifier") {
-    const binding = lookup(value.name);
-    return binding?.kind === "import" && binding.module === "react" && binding.name === "createContext";
-  }
-  if (value.type !== "MemberExpression" || value.computed || value.property.name !== "createContext" || unwrap(value.object).type !== "Identifier") return false;
-  const binding = lookup(unwrap(value.object).name);
-  return binding?.kind === "import" && binding.module === "react" && (binding.name === "*" || binding.name === "default");
-}
-
 /** @type {(program: Node) => { exported: Set<Node>, trusted: Set<Node> }} Functions a module boundary can call, and those among them that are components, whose props a Server Component may pass. */
 function boundary(program) {
   /** @type {Map<string, Node>} */
@@ -294,7 +282,6 @@ export default {
           }
           case "NewExpression": return "created";
           case "CallExpression": {
-            if (isCreateContext(value.callee, lookup)) return "ok";
             let callee = unwrap(value.callee);
             while (callee.type === "MemberExpression") callee = unwrap(callee.object);
             const binding = callee.type === "Identifier" ? lookup(callee.name) : undefined;
