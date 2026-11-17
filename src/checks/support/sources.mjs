@@ -28,9 +28,6 @@ const TOP_LEVEL_RETURN = "A 'return' statement can only be used within a functio
  * One piece of the component that parses as TypeScript on its own.
  * @typedef {{ patches: Patch[], lang: "ts" | "tsx", frontmatter: boolean }} Unit
  *
- * An HTML element the markup opens, by name, with the `encoding` that makes a MathML `annotation-xml` hold HTML.
- * @typedef {{ name: string, encoding?: string }} Tag
- *
  * @typedef {import("parse5").DefaultTreeAdapterMap["node"]} HtmlNode
  *
  * An HTML comment in the markup, which ships to every visitor. `start` is where its text starts.
@@ -88,6 +85,11 @@ function lay(text, patches) {
   return laid + blank.slice(at);
 }
 
+/** The elements a browser closes with no end tag. */
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"]);
+const ATTRIBUTE_NAME = /^[^\s"'>/=]+$/;
+const COMMENT_ENDS = ["-->", "--!>", ">"];
+
 /** How a browser reads HTML that reaches it as written. Without JavaScript, noscript content is markup, so its comments count. */
 const BROWSER = { scriptingEnabled: false, sourceCodeLocationInfo: true };
 const UNREADABLE = "Move that code into the frontmatter, and use its result in the markup.";
@@ -137,12 +139,37 @@ function astroUnits(text, markup) {
     return value && text.slice(value.start, value.end) === attribute.value ? value : null;
   };
 
-  /** @type {(start: number, html: string, tags: readonly Tag[], at?: (offset: number) => number) => void} Notes each comment a browser finds in `html`, which sits at `start` in the text, inside `tags`. */
-  const read = (start, html, tags, at = (offset) => offset) => {
-    for (const found of htmlComments(tags, html)) addHtml(found.value, start + at(found.at));
+  /**
+   * The page a browser receives, written from the markup in order since the last output the check cannot know, such
+   * as an expression's or a component's. `sources` holds each character's offset in the text, or -1 for one the check
+   * writes, such as a start tag. `open` holds the start tags of the HTML elements around the node, with their
+   * attributes, which a new page opens with. So raw content sets how a browser reads its next siblings, and a `font`
+   * with `color` leaves SVG as it does in the page.
+   */
+  let page = "";
+  /** @type {number[]} */
+  let sources = [];
+  let written = false;
+  /** @type {string[]} */
+  const open = [];
+  /** @type {(html: string, at?: number | ((offset: number) => number)) => void} */
+  const emit = (html, at) => {
+    if (!markup) return;
+    page += html;
+    for (let offset = 0; offset < html.length; offset++) sources.push(at === undefined ? -1 : typeof at === "number" ? at + offset : at(offset));
+    written ||= at !== undefined && html.length > 0;
   };
-  /** @type {(value: string | undefined, start: number) => void} */
-  const addHtml = (value, start) => void html.push(comment(value, start));
+  /** Notes each comment a browser finds in the page so far, and starts a new page inside the open elements. */
+  const restart = () => {
+    if (written) {
+      for (const found of htmlComments(page)) {
+        const start = sources[found.at] ?? -1;
+        if (start >= 0) html.push(comment(found.value, start));
+      }
+    }
+    [page, sources, written] = ["", [], false];
+    emit(open.join(""));
+  };
 
   /** @param {import("@astrojs/compiler/types").AttributeNode} attribute */
   const attribute = (attribute) => {
@@ -190,50 +217,76 @@ function astroUnits(text, markup) {
   };
 
   /**
-   * `scripts` is false inside noscript, where no script runs. `tags` are the HTML elements open around the node, which
-   * set how a browser reads raw HTML there; a component or fragment opens none.
-   * @type {(node: import("@astrojs/compiler/types").Node, scripts: boolean, tags: readonly Tag[]) => void}
+   * `scripts` is false inside noscript, where no script runs. `next` is the node's next sibling.
+   * @type {(node: import("@astrojs/compiler/types").Node, scripts: boolean, next?: import("@astrojs/compiler/types").Node) => void}
    */
-  const visit = (node, scripts, tags) => {
+  const visit = (node, scripts, next) => {
+    /** @type {(children: import("@astrojs/compiler/types").Node[], scripts: boolean) => void} */
+    const visitAll = (children, scripts) => children.forEach((child, at) => visit(child, scripts, children[at + 1]));
     if (node.type === "frontmatter" && node.position) {
       const start = index(node.position.start.offset + "---".length);
       const end = start + node.value.length;
       units.push({ patches: [original(start, end)], lang: "ts", frontmatter: true });
       if (!text.startsWith("---", end)) problems.push({ message: "the frontmatter has no closing --- fence" });
     }
+    if (node.type === "doctype") emit(`<!DOCTYPE ${node.value}>`);
     if (markup && node.type === "comment" && node.position) {
       const start = index(node.position.start.offset);
-      const open = text.lastIndexOf("<", start);
-      const [first] = htmlComments(tags, text.slice(open, start + (node.value ?? "").length + "-->".length));
-      if (first?.at === 0) addHtml(node.value, open);
+      const from = text.lastIndexOf("<", start);
+      const valueEnd = start + (node.value ?? "").length;
+      const end =
+        next?.type === "text" && next.position ? index(next.position.start.offset)
+        : node.value ? valueEnd + (COMMENT_ENDS.find((ending) => text.startsWith(ending, valueEnd))?.length ?? 0)
+        : text.indexOf(">", from) + 1;
+      emit(text.slice(from, end), from);
     }
     if (markup && node.type === "text" && node.position) {
       const start = index(node.position.start.offset);
       if (text.slice(start, start + node.value.length) !== node.value) return unreadable(node);
-      read(start, node.value, tags);
+      emit(node.value, start);
     }
     if (markup && node.type === "expression") {
       expression(node);
-      return node.children.forEach((child) => child.type !== "text" && visit(child, scripts, tags));
+      restart();
+      for (const child of node.children) {
+        if (child.type === "text") continue;
+        visit(child, scripts);
+        restart();
+      }
+      return;
     }
-    let inner = tags;
     if (node.type === "element" || node.type === "component" || node.type === "custom-element" || node.type === "fragment") {
       if (markup) node.attributes.forEach(attribute);
-      if (node.name === "script") return scripts ? script(node) : undefined;
-      if (node.type === "element" || node.type === "custom-element") {
-        const encoding = node.attributes.find((attribute) => attribute.name.toLowerCase() === "encoding" && attribute.kind === "quoted")?.value;
-        inner = [...tags, encoding === undefined ? { name: node.name } : { name: node.name, encoding }];
+      const opens = node.type === "element" || node.type === "custom-element";
+      const injected = node.attributes.find((attribute) => attribute.name === "set:html");
+      const unknown = node.type === "component" || (injected !== undefined && injected.kind !== "quoted" && injected.kind !== "empty");
+      if (unknown) restart();
+      if (opens) {
+        const tag = startTag(node);
+        emit(tag);
+        open.push(tag);
       }
-      const injected = node.attributes.find((attribute) => attribute.name === "set:html" && attribute.kind === "quoted");
-      if (markup && injected) {
-        const value = valueOf(injected);
-        const decoded = value && decodeAttribute(text.slice(value.start, value.end));
-        if (!value || !decoded || decoded.value !== injected.value) return unreadable(injected);
-        read(value.start, decoded.value, inner, (offset) => decoded.sources[offset] ?? 0);
+      if (node.name === "script") {
+        if (scripts) script(node);
+        visitAll(node.children, scripts);
+      } else {
+        if (markup && injected?.kind === "quoted") {
+          const value = valueOf(injected);
+          const decoded = value && decodeAttribute(text.slice(value.start, value.end));
+          if (!value || !decoded || decoded.value !== injected.value) unreadable(injected);
+          else emit(decoded.value, (offset) => value.start + (decoded.sources[offset] ?? 0));
+        }
+        if (unknown) restart();
+        visitAll(node.children, scripts && node.name !== "noscript");
       }
-      if (node.name === "noscript") return node.children.forEach((child) => visit(child, false, inner));
+      if (opens) {
+        open.pop();
+        if (!VOID.has(node.name.toLowerCase())) emit(`</${node.name}>`);
+      }
+      if (unknown) restart();
+      return;
     }
-    if ("children" in node) node.children.forEach((child) => visit(child, scripts, inner));
+    if ("children" in node) visitAll(node.children, scripts);
   };
 
   /** @param {{ attributes: import("@astrojs/compiler/types").AttributeNode[], children: import("@astrojs/compiler/types").Node[] }} node */
@@ -263,29 +316,43 @@ function astroUnits(text, markup) {
     }
   };
 
-  visit(ast, true, []);
+  visit(ast, true);
+  restart();
+  html.sort((a, b) => a.start - b.start);
   return { units, html, problems };
 }
 
 /**
- * @param {readonly Tag[]} tags
- * @param {string} html
- * @returns {Array<{ at: number, value: string }>} Each comment a browser finds in `html` written inside `tags`, at its
- * offset in `html`. The whole page parses, the tags first, so noscript, foreign content and an end tag in `html` act as
- * they do in the page.
+ * @param {string} page
+ * @returns {Array<{ at: number, value: string }>} Each comment a browser finds in `page`, at its offset there. Without
+ * JavaScript, noscript content is markup, so its comments count.
  */
-function htmlComments(tags, html) {
-  const opening = tags.map(({ name, encoding }) => `<${name}${encoding === undefined ? "" : ` encoding="${encoding.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}"`}>`).join("");
+function htmlComments(page) {
   /** @type {Array<{ at: number, value: string }>} */
   const found = [];
   /** @param {HtmlNode} node */
   const visit = (node) => {
-    if (node.nodeName === "#comment" && "data" in node && node.sourceCodeLocation) found.push({ at: node.sourceCodeLocation.startOffset - opening.length, value: node.data });
+    if (node.nodeName === "#comment" && "data" in node && node.sourceCodeLocation) found.push({ at: node.sourceCodeLocation.startOffset, value: node.data });
     if ("childNodes" in node) node.childNodes.forEach(visit);
     if ("content" in node) visit(node.content);
   };
-  visit(parseHtml(`${opening}${html}`, BROWSER));
+  visit(parseHtml(page, BROWSER));
   return found;
+}
+
+/**
+ * @param {{ name: string, attributes: import("@astrojs/compiler/types").AttributeNode[] }} node
+ * @returns {string} The element's start tag as a browser parses it. An attribute whose value is an expression keeps its
+ * name, which is what sets parsing, as a `font`'s `color` does. A spread's names are unknown, so it has none.
+ */
+function startTag(node) {
+  const attributes = node.attributes.flatMap((attribute) => {
+    if (attribute.kind === "spread" || !ATTRIBUTE_NAME.test(attribute.name)) return [];
+    if (attribute.kind === "empty") return [` ${attribute.name}`];
+    const value = attribute.kind === "quoted" ? attribute.value.replaceAll("&", "&amp;").replaceAll('"', "&quot;") : "";
+    return [` ${attribute.name}="${value}"`];
+  });
+  return `<${node.name}${attributes.join("")}>`;
 }
 
 /**
