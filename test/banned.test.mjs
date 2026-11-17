@@ -268,7 +268,7 @@ test("wiring fails a repo plugin rule that banned replaces, in any plugin packag
 
 const CONSOLE = { global: "console", fix: "Use the logger." };
 
-test("banned reads an Astro component's frontmatter and scripts on their own lines, and a frontmatter return", (t) => {
+test("banned reads an Astro component's frontmatter and scripts on their own lines, and a frontmatter return, but not a capitalized SCRIPT component", (t) => {
   fails(
     t,
     [CONSOLE],
@@ -284,7 +284,8 @@ test("banned reads an Astro component's frontmatter and scripts on their own lin
         '    console.warn("module");',
         "  </script>",
         "</Layout>",
-        '<SCRIPT TYPE="module">console.error("upper")</SCRIPT >',
+        '<script TYPE="module">console.error("upper")</script >',
+        '<SCRIPT>console.error("a component, as Astro reads a capitalized tag")</SCRIPT>',
         "",
       ].join("\n"),
     },

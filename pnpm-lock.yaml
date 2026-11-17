@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@astrojs/compiler':
+        specifier: 4.0.0
+        version: 4.0.0
       knip:
         specifier: 6.45.1
         version: 6.45.1
@@ -44,6 +47,9 @@ importers:
         version: typescript@6.0.3
 
 packages:
+
+  '@astrojs/compiler@4.0.0':
+    resolution: {integrity: sha512-eouss7G8ygdZqHuke033VMcVw5HTZUu+PXd/h06DGDUg/jt5btPYPqh66ENWw/mU78rBrf/oeC4oqoBwMtDMNA==}
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -769,6 +775,8 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@astrojs/compiler@4.0.0': {}
 
   '@emnapi/core@1.11.2':
     dependencies:
