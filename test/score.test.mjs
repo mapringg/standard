@@ -138,13 +138,14 @@ test("score prints one column for this repo and ends with its count", (t) => {
       "  typecheck        n/a",
       "  tests            on",
       "  pr-tests         on",
+      "  boundaries       on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
       `duplicates in ${name}: n/a, git tracks no TypeScript source to scan`,
       `typecheck in ${name}: n/a, git tracks no tsconfig.json`,
       "",
-      `${name}: 17 of 18 pass`,
+      `${name}: 18 of 19 pass`,
       "",
     ].join("\n"),
   );
@@ -170,7 +171,7 @@ test("pending stays in the denominator and fails", (t) => {
   const { status, repos } = scoreJson(repoWith(t, { ...WIRED, "scripts/check-pr-convention.mjs": "old" }, { pending: ["pr-body"] }), []);
   assert.equal(statuses(repos[0])["pr-body"], "pending");
   assert.equal(statuses(repos[0]).retired, "ok");
-  assert.deepEqual([repos[0].passing, repos[0].total], [17, 18]);
+  assert.deepEqual([repos[0].passing, repos[0].total], [18, 19]);
   assert.equal(status, 1);
 });
 
@@ -189,7 +190,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -233,7 +234,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.10.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.11.0 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -269,6 +270,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     typecheck: "n/a",
     tests: "n/a",
     "pr-tests": "absent",
+    boundaries: "n/a",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 16]);
 });
@@ -554,14 +556,14 @@ test("--remote fails closed on classic protection or pull request rules of the w
 });
 
 test("--remote fails current when a newer release tag than the pin exists", (t) => {
-  const gh = fakeGh(t, GOOD_GITHUB, ["v0.4.0", "v0.11.0", "v0.9.1", "v1.0.0-rc.1"]);
+  const gh = fakeGh(t, GOOD_GITHUB, ["v0.4.0", "v0.12.0", "v0.9.1", "v1.0.0-rc.1"]);
   const { status, repos } = scoreJson(repoWith(t, WIRED), ["--remote"], gh.env);
   assert.deepEqual(repos[0].cells.at(-1), {
     group: "github",
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.11.0, the latest release; the repo pins 0.10.0."],
+    notes: ["Bump @mapringg/standard to v0.12.0, the latest release; the repo pins 0.11.0."],
   });
   assert.equal(status, 1);
 });

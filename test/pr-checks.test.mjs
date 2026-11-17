@@ -392,6 +392,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "typecheck: skipped, git tracks no tsconfig.json",
       "tests: OK",
       "pr-tests: OK (#123)",
+      "boundaries: skipped, git tracks no JavaScript or TypeScript source",
     ].join("\n"),
   );
   assert.equal(status, 0);

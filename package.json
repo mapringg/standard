@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "One repository standard for every project, run by one command.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -28,6 +28,7 @@
   "dependencies": {
     "knip": "6.45.1",
     "oxc-parser": "0.158.0",
+    "oxc-resolver": "11.24.2",
     "yaml": "2.9.1"
   },
   "devDependencies": {
