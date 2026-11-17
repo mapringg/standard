@@ -8,6 +8,7 @@ import useSWR, {
   type Cache,
   type SWRConfiguration,
 } from "swr";
+import { defaultConfigOptions, type ProviderConfiguration } from "swr/_internal";
 
 export type SeedKey = readonly [resource: string, ...parts: readonly unknown[]];
 
@@ -217,6 +218,25 @@ export function useServerSeededInfinite<Key extends SeedKey, Page>(
   };
 }
 
+type Listen = ProviderConfiguration["initFocus"];
+
+function releaseLatest(listen: Listen): Listen {
+  let release: ReturnType<Listen>;
+  return (callback) => {
+    release = listen(callback);
+    return () => release?.();
+  };
+}
+
+function scope(): SWRConfiguration {
+  return {
+    provider: () => new Map(),
+    initFocus: releaseLatest(defaultConfigOptions.initFocus),
+    initReconnect: releaseLatest(defaultConfigOptions.initReconnect),
+  };
+}
+
 export function SwrScope({ children }: { children: ReactNode }): ReactNode {
-  return createElement(SWRConfig, { value: { provider: () => new Map() } }, children);
+  const [value] = useState(scope);
+  return createElement(SWRConfig, { value }, children);
 }
