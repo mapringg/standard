@@ -155,48 +155,91 @@ function baseOf(node, file) {
 }
 
 /**
- * @param {any} program
- * @param {string} file Absolute.
- * @returns {Map<string, string | null>} Each name a createRequire call binds, to the file it resolves from, or null when that is computed or the name is bound twice.
+ * @typedef {{ kind: "creator" | "namespace" | "other" } | { kind: "require", base: string | null }} Binding What a name means in a scope: the
+ *   createRequire import, a namespace of node:module, a require that createRequire made from base, or anything else.
+ * @typedef {{ parent: Scope | null, names: Map<string, Binding> }} Scope
  */
-function requireBindings(program, file) {
-  const creators = new Set();
-  const namespaces = new Set();
-  for (const statement of program.body) {
-    if (statement.type !== "ImportDeclaration" || !["module", "node:module"].includes(statement.source.value)) continue;
-    for (const specifier of statement.specifiers) {
-      if (specifier.type === "ImportSpecifier" && (specifier.imported.name ?? specifier.imported.value) === "createRequire") creators.add(specifier.local.name);
-      else namespaces.add(specifier.local.name);
+
+const OTHER = /** @type {Binding} */ ({ kind: "other" });
+const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+const LOOPS = new Set(["ForStatement", "ForInStatement", "ForOfStatement"]);
+
+/**
+ * @param {Scope} scope
+ * @param {string} name
+ * @returns {Scope | null} The nearest scope that binds the name, or null for a global.
+ */
+function ownerOf(scope, name) {
+  for (let at = /** @type {Scope | null} */ (scope); at; at = at.parent) if (at.names.has(name)) return at;
+  return null;
+}
+
+/**
+ * @param {any} pattern
+ * @returns {string[]} The names a binding pattern declares.
+ */
+function namesOf(pattern) {
+  switch (pattern?.type) {
+    case "Identifier":
+      return [pattern.name];
+    case "ObjectPattern":
+      return pattern.properties.flatMap((/** @type {any} */ property) => namesOf(property.type === "RestElement" ? property.argument : property.value));
+    case "ArrayPattern":
+      return pattern.elements.flatMap(namesOf);
+    case "AssignmentPattern":
+      return namesOf(pattern.left);
+    case "RestElement":
+      return namesOf(pattern.argument);
+    case "TSParameterProperty":
+      return namesOf(pattern.parameter);
+    default:
+      return [];
+  }
+}
+
+/**
+ * @param {Scope} scope
+ * @param {readonly any[]} statements
+ * Binds what the statements declare in their block: let, const, class, function and imports. A declare-only statement binds nothing at runtime.
+ */
+function declareBlock(scope, statements) {
+  for (const outer of statements) {
+    const statement = outer.type.startsWith("Export") && outer.declaration ? outer.declaration : outer;
+    if (statement.declare) continue;
+    if (statement.type === "VariableDeclaration" && statement.kind !== "var") {
+      for (const { id } of statement.declarations) for (const name of namesOf(id)) scope.names.set(name, OTHER);
+    } else if (["FunctionDeclaration", "ClassDeclaration", "TSEnumDeclaration", "TSImportEqualsDeclaration"].includes(statement.type) && statement.id) {
+      scope.names.set(statement.id.name, OTHER);
+    } else if (statement.type === "ImportDeclaration") {
+      const module = ["module", "node:module"].includes(statement.source.value);
+      for (const specifier of statement.specifiers) {
+        const creator = specifier.type === "ImportSpecifier" && (specifier.imported.name ?? specifier.imported.value) === "createRequire";
+        const kind = !module || statement.importKind === "type" ? "other" : creator ? "creator" : specifier.type === "ImportSpecifier" ? "other" : "namespace";
+        scope.names.set(specifier.local.name, { kind });
+      }
     }
   }
-  /** @type {Map<string, string | null>} */
-  const bindings = new Map();
-  if (creators.size === 0 && namespaces.size === 0) return bindings;
-  /** @param {any} callee */
-  const creates = (callee) =>
-    (callee.type === "Identifier" && creators.has(callee.name)) ||
-    (callee.type === "MemberExpression" && callee.object.type === "Identifier" && namespaces.has(callee.object.name) && callee.property.name === "createRequire");
-  /** @param {unknown} node */
-  const visit = (node) => {
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node === null || typeof node !== "object") return;
-    const any = /** @type {any} */ (node);
-    if (any.type === "VariableDeclarator" && any.id.type === "Identifier" && any.init?.type === "CallExpression" && creates(any.init.callee)) {
-      const base = baseOf(any.init.arguments[0], file);
-      bindings.set(any.id.name, bindings.has(any.id.name) && bindings.get(any.id.name) !== base ? null : base);
-    }
-    for (const [key, value] of Object.entries(node)) if (key !== "loc" && key !== "range") visit(value);
-  };
-  visit(program);
-  return bindings;
+}
+
+/**
+ * @param {Scope} scope
+ * @param {unknown} node
+ * Binds every var under the node, up to a nested function, in the function's scope.
+ */
+function declareVars(scope, node) {
+  if (Array.isArray(node)) return node.forEach((item) => declareVars(scope, item));
+  if (node === null || typeof node !== "object") return;
+  const any = /** @type {any} */ (node);
+  if (FUNCTIONS.has(any.type)) return;
+  if (any.type === "VariableDeclaration" && any.kind === "var" && !any.declare) for (const { id } of any.declarations) for (const name of namesOf(id)) scope.names.set(name, OTHER);
+  for (const [key, value] of Object.entries(any)) if (key !== "loc" && key !== "range" && typeof value === "object") declareVars(scope, value);
 }
 
 /**
  * @param {any} node
- * @param {ReadonlyMap<string, string | null>} bindings
- * @returns {Request | null}
+ * @returns {Request | null} An import declaration, export from, import() or import x = require().
  */
-function requestOf(node, bindings) {
+function requestOf(node) {
   switch (node.type) {
     case "ImportDeclaration":
     case "ExportAllDeclaration":
@@ -212,19 +255,97 @@ function requestOf(node, bindings) {
       const specifier = node.moduleReference.type === "TSExternalModuleReference" ? literal(node.moduleReference.expression) : null;
       return specifier === null ? null : { specifier, kind: "require" };
     }
-    case "CallExpression": {
-      if (node.callee.type !== "Identifier" || node.arguments.length !== 1) return null;
-      const name = node.callee.name;
-      if (name !== "require" && !bindings.has(name)) return null;
-      const specifier = literal(node.arguments[0]);
-      if (specifier === null) return null;
-      if (!bindings.has(name)) return { specifier, kind: "require" };
-      const base = bindings.get(name);
-      return base ? { specifier, kind: "require", base } : null;
-    }
     default:
       return null;
   }
+}
+
+/**
+ * @param {any} program
+ * @param {string} file Absolute.
+ * @returns {Request[]} Every import with a fixed specifier. A require() call reads its callee's nearest binding: the global require,
+ *   or one that createRequire made from a fixed anchor. The calls wait for the whole walk, so a function may use a require declared below it.
+ */
+function requestsOf(program, file) {
+  /** @type {Request[]} */
+  const requests = [];
+  /** @type {{ node: any, scope: Scope }[]} */
+  const calls = [];
+  /**
+   * @param {Scope | null} parent
+   * @returns {Scope}
+   */
+  const open = (parent) => ({ parent, names: new Map() });
+  /** @param {any} callee @param {Scope} scope */
+  const creates = (callee, scope) => {
+    if (callee.type === "Identifier") return ownerOf(scope, callee.name)?.names.get(callee.name)?.kind === "creator";
+    if (callee.type !== "MemberExpression" || callee.object.type !== "Identifier" || callee.property.name !== "createRequire") return false;
+    return ownerOf(scope, callee.object.name)?.names.get(callee.object.name)?.kind === "namespace";
+  };
+  /** @param {unknown} node @param {Scope} scope */
+  const children = (node, scope) => {
+    for (const [key, value] of Object.entries(/** @type {object} */ (node))) if (key !== "loc" && key !== "range" && typeof value === "object") visit(value, scope);
+  };
+  /** @param {unknown} node @param {Scope} scope */
+  const visit = (node, scope) => {
+    if (Array.isArray(node)) return node.forEach((item) => visit(item, scope));
+    if (node === null || typeof node !== "object") return;
+    const any = /** @type {any} */ (node);
+    if (FUNCTIONS.has(any.type)) {
+      const inner = open(scope);
+      if (any.type === "FunctionExpression" && any.id) inner.names.set(any.id.name, OTHER);
+      for (const param of any.params) for (const name of namesOf(param)) inner.names.set(name, OTHER);
+      if (any.body?.type === "BlockStatement") {
+        declareVars(inner, any.body.body);
+        declareBlock(inner, any.body.body);
+        visit(any.params, inner);
+        visit(any.body.body, inner);
+      } else {
+        visit(any.params, inner);
+        visit(any.body, inner);
+      }
+      return;
+    }
+    if (any.type === "BlockStatement" || any.type === "StaticBlock" || any.type === "SwitchStatement") {
+      const inner = open(scope);
+      const statements = any.type === "SwitchStatement" ? any.cases.flatMap((/** @type {any} */ each) => each.consequent) : any.body;
+      if (any.type === "StaticBlock") declareVars(inner, statements);
+      declareBlock(inner, statements);
+      if (any.type === "SwitchStatement") visit(any.discriminant, scope);
+      visit(any.type === "SwitchStatement" ? any.cases : any.body, inner);
+      return;
+    }
+    if (any.type === "CatchClause" || LOOPS.has(any.type) || (any.type === "ClassExpression" && any.id)) {
+      const inner = open(scope);
+      const head = any.init ?? any.left;
+      const loop = head?.type === "VariableDeclaration" && head.kind !== "var" ? head.declarations.map((/** @type {any} */ { id }) => id) : [];
+      for (const name of (any.type === "CatchClause" ? [any.param] : any.type === "ClassExpression" ? [any.id] : loop).flatMap(namesOf)) inner.names.set(name, OTHER);
+      children(any, inner);
+      return;
+    }
+    if (any.type === "VariableDeclarator" && any.id.type === "Identifier" && any.init?.type === "CallExpression" && creates(any.init.callee, scope)) {
+      const owner = ownerOf(scope, any.id.name);
+      const base = baseOf(any.init.arguments[0], file);
+      const before = owner?.names.get(any.id.name);
+      if (owner) owner.names.set(any.id.name, { kind: "require", base: before?.kind === "require" && before.base !== base ? null : base });
+    }
+    if (any.type === "CallExpression" && any.callee.type === "Identifier" && any.arguments.length === 1) calls.push({ node: any, scope });
+    const request = requestOf(any);
+    if (request) requests.push(request);
+    children(any, scope);
+  };
+  const root = open(null);
+  declareVars(root, program.body);
+  declareBlock(root, program.body);
+  visit(program.body, root);
+  for (const { node, scope } of calls) {
+    const specifier = literal(node.arguments[0]);
+    if (specifier === null) continue;
+    const binding = ownerOf(scope, node.callee.name)?.names.get(node.callee.name);
+    if (binding === undefined && node.callee.name === "require") requests.push({ specifier, kind: "require" });
+    else if (binding?.kind === "require" && binding.base) requests.push({ specifier, kind: "require", base: binding.base });
+  }
+  return requests;
 }
 
 /**
@@ -236,23 +357,9 @@ function requestOf(node, bindings) {
 function importsOf(file, text, absolute) {
   const { errors, program } = parseSync(file, text);
   if (errors.length > 0) return { error: errors[0].message };
-  const bindings = requireBindings(program, absolute);
   /** @type {Map<string, Request>} */
   const requests = new Map();
-  /** @param {unknown} node */
-  const visit = (node) => {
-    if (Array.isArray(node)) {
-      for (const item of node) visit(item);
-      return;
-    }
-    if (node === null || typeof node !== "object" || !("type" in node)) return;
-    const request = requestOf(node, bindings);
-    if (request) requests.set(`${request.kind} ${request.base ?? ""} ${request.specifier}`, request);
-    for (const [key, value] of Object.entries(node)) {
-      if (key !== "loc" && key !== "range" && typeof value === "object" && value !== null) visit(value);
-    }
-  };
-  visit(program);
+  for (const request of requestsOf(program, absolute)) requests.set(`${request.kind} ${request.base ?? ""} ${request.specifier}`, request);
   return { requests: [...requests.values()] };
 }
 

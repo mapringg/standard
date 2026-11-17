@@ -218,3 +218,61 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
     });
   });
 }
+
+test("boundaries resolves each require call through its nearest binding, so a parameter shadows it and each scope keeps its own anchor", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/scripts/param-shadow.mjs": 'import { createRequire } from "node:module";\nconst req = createRequire(import.meta.url);\nfunction f(req) { req("./not-a-module"); }\nf((x) => x);\n',
+    "apps/web/scripts/creator-shadow.mjs": 'import { createRequire as cr } from "node:module";\nfunction f(cr) {\n  const req = cr(import.meta.url);\n  req("./not-a-module");\n}\nf(() => (x) => x);\n',
+    "apps/web/scripts/scope-collision.mjs": [
+      'import { createRequire } from "node:module";',
+      'const req = createRequire(new URL("../../api/package.json", import.meta.url));',
+      'req("./src/auth/session.ts");',
+      "function f() {",
+      "  const req = createRequire(import.meta.url);",
+      '  req("./private.ts");',
+      "}",
+      "f();",
+      'function later() { return late("./src/db/client.ts"); }',
+      'const late = createRequire(new URL("../../api/package.json", import.meta.url));',
+      "later();",
+      "",
+    ].join("\n"),
+    "apps/web/scripts/private.ts": "export const value = 1;\n",
+  });
+  const path = (target, specifier) => `boundaries: apps/web/scripts/scope-collision.mjs imports ${specifier}: ${target} belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.`;
+  assert.deepEqual(findings(cwd), {
+    lines: [path("apps/api/src/auth/session.ts", "./src/auth/session.ts"), path("apps/api/src/db/client.ts", "./src/db/client.ts")],
+    status: 1,
+  });
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries takes the exports target TypeScript ${major} takes when an earlier one is missing: inside a nested branch, after default, and along an array`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": {
+        name: "api",
+        type: "module",
+        exports: {
+          "./nested": { types: { import: "./missing.d.ts", default: "./src/required.ts" }, import: "./src/other.ts" },
+          "./default-first": { default: "./missing.d.ts", import: "./src/required.ts" },
+          "./array": ["./missing.d.ts", "./src/required.ts"],
+        },
+      },
+      "apps/api/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/api/src/other.ts": 'export const value: "other" = "other";\n',
+      "apps/node/package.json": { name: "node-app", dependencies: { "api-alias": "workspace:api@*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/nested.mts": 'import { value } from "api-alias/nested";\nexport const a: "required" = value;\n',
+      "apps/node/src/default-first.mts": 'import { value } from "api-alias/default-first";\nexport const b: "required" = value;\n',
+      "apps/node/src/array.mts": 'import { value } from "api-alias/array";\nexport const c: "required" = value;\n',
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api-alias"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const required = (file, specifier) => `boundaries: apps/node/src/${file} imports ${specifier}: apps/api/src/required.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.`;
+    assert.deepEqual(findings(cwd), {
+      lines: [required("array.mts", "api-alias/array"), required("default-first.mts", "api-alias/default-first"), required("nested.mts", "api-alias/nested")],
+      status: 1,
+    });
+  });
+}

@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isBuiltin } from "node:module";
 import { posix } from "node:path";
 
@@ -75,27 +75,105 @@ function oxcProject(tsconfig, options) {
       const conditions = conditionsFor(mode);
       const found = oxc(factory(conditions, viaPaths), file, specifier);
       if (found !== null || tsconfig === null || /^[./]/.test(specifier)) return found;
-      // TypeScript skips an exports condition whose target does not exist and tries the next one. oxc-resolver stops at the first,
-      // so drop the fewest conditions that reach an existing target: exactly the matching keys before it.
-      for (let size = 1; size <= conditions.length; size++) {
-        for (const dropped of combinations(conditions, size)) {
-          const fallback = oxc(factory(conditions.filter((condition) => !dropped.includes(condition)), viaPaths), file, specifier);
-          if (fallback !== null) return fallback;
-        }
-      }
-      return null;
+      // oxc-resolver stops at the first exports target that matches. TypeScript skips one whose file does not exist and tries the next.
+      return fallThrough(file, specifier, new Set([...conditions, "default"]));
     },
   };
 }
 
 /**
- * @param {readonly string[]} items
- * @param {number} size
- * @returns {string[][]} Every choice of size items, in order.
+ * @param {string} path Absolute.
+ * @returns {Record<string, any> | null} Null when it is missing or unreadable, as for the resolver.
  */
-function combinations(items, size) {
-  if (size === 0) return [[]];
-  return items.flatMap((item, index) => combinations(items.slice(index + 1), size - 1).map((rest) => [item, ...rest]));
+function manifest(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} file Absolute.
+ * @param {string} specifier A bare or # specifier.
+ * @returns {{ dir: string, map: Record<string, unknown>, key: string } | null} The package whose exports, or the scope whose imports, the specifier names.
+ */
+function mappingOf(file, specifier) {
+  const name = specifier.split("/").slice(0, specifier.startsWith("@") ? 2 : 1).join("/");
+  let scoped = false;
+  for (let dir = posix.dirname(file); ; dir = posix.dirname(dir)) {
+    const own = scoped ? null : manifest(posix.join(dir, "package.json"));
+    if (own) {
+      scoped = true;
+      if (specifier.startsWith("#")) return own.imports ? { dir, map: own.imports, key: specifier } : null;
+      if (own.name === name && own.exports !== undefined) return { dir, map: exportsMap(own.exports), key: `.${specifier.slice(name.length)}` };
+    }
+    const installed = posix.join(dir, "node_modules", name, "package.json");
+    const dependency = specifier.startsWith("#") ? null : manifest(installed);
+    if (dependency) return dependency.exports === undefined ? null : { dir: posix.dirname(realpathSync(installed)), map: exportsMap(dependency.exports), key: `.${specifier.slice(name.length)}` };
+    if (dir === "/") return null;
+  }
+}
+
+/**
+ * @param {unknown} exports
+ * @returns {Record<string, unknown>} Exports with the "." sugar expanded.
+ */
+function exportsMap(exports) {
+  const subpaths = exports !== null && typeof exports === "object" && !Array.isArray(exports) && Object.keys(exports).some((key) => key.startsWith("."));
+  return subpaths ? /** @type {Record<string, unknown>} */ (exports) : { ".": exports };
+}
+
+/**
+ * @param {string} file
+ * @param {string} specifier
+ * @param {ReadonlySet<string>} conditions
+ * @returns {string | null} The target TypeScript takes: the first, in the map's order, whose conditions all match and whose file exists.
+ */
+function fallThrough(file, specifier, conditions) {
+  const mapping = mappingOf(file, specifier);
+  if (mapping === null) return null;
+  const { dir, map, key } = mapping;
+  if (Object.hasOwn(map, key) && !key.includes("*")) return target(dir, map[key], "", conditions);
+  let best = null;
+  for (const pattern of Object.keys(map)) {
+    const [prefix, suffix, extra] = pattern.split("*");
+    if (suffix === undefined || extra !== undefined || !key.startsWith(prefix) || !key.endsWith(suffix) || key.length < pattern.length) continue;
+    if (best === null || prefix.length > best.prefix.length || (prefix.length === best.prefix.length && pattern.length > best.pattern.length)) best = { pattern, prefix, suffix };
+  }
+  return best && target(dir, map[best.pattern], key.slice(best.prefix.length, key.length - best.suffix.length), conditions);
+}
+
+/**
+ * @param {string} dir
+ * @param {unknown} value
+ * @param {string} star
+ * @param {ReadonlySet<string>} conditions
+ * @returns {string | null}
+ */
+function target(dir, value, star, conditions) {
+  if (typeof value === "string") {
+    if (!value.startsWith("./")) return null;
+    const path = posix.join(dir, value.replaceAll("*", star));
+    const alias = Object.entries(EXTENSION_ALIAS).find(([extension]) => path.endsWith(extension));
+    const candidates = alias ? alias[1].map((extension) => path.slice(0, -alias[0].length) + extension) : [path];
+    const found = candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+    return found ? realpathSync(found) : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = target(dir, item, star, conditions);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (value === null || typeof value !== "object") return null;
+  for (const [condition, branch] of Object.entries(value)) {
+    if (condition !== "default" && !conditions.has(condition)) continue;
+    const found = target(dir, branch, star, conditions);
+    if (found !== null) return found;
+  }
+  return null;
 }
 
 /**
