@@ -244,14 +244,12 @@ function workflowMiss(path, text) {
 }
 
 /**
- * Like the standard check step, the command must run as written: one line of commands joined by &&,
- * one of them exactly pnpm typecheck or pnpm run typecheck. Quotes, ; and || could keep a failure from failing the line.
+ * Like the standard check step, the whole text must be the command, so nothing before it can exit or swallow its failure.
  * @param {string} text
  * @returns {boolean}
  */
 export function runsTypecheck(text) {
-  const commands = text.trim().split("&&").map((command) => command.trim());
-  return !/[\n;|&'"`$<>()#\\]/.test(commands.join(" ")) && commands.some((command) => /^pnpm (?:run )?typecheck$/.test(command));
+  return /^pnpm (?:run )?typecheck$/.test(text.trim());
 }
 
 /**
