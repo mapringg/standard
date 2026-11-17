@@ -206,7 +206,7 @@ export default {
   name: "no-comments",
   since: "0.13.0",
   doc: {
-    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc heading, and license headers. Generated files are skipped.",
+    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and license headers. Generated files are skipped.",
     fix: "Move the why into a name, test or type, or into a doc that a `See:` comment points at.",
     config: [],
   },

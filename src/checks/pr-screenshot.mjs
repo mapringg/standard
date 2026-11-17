@@ -10,8 +10,8 @@ export default {
   name: "pr-screenshot",
   since: "0.2.0",
   doc: {
-    enforces: "A pull request that changes a file matching `pr.screenshots.when` has an image in Evidence. It warns; `standard merge` enforces it.",
-    fix: "Upload a screenshot with the `pr.screenshots.uploader` script and add it to Evidence.",
+    enforces: "A pull request that changes a file matching `pr.screenshots.when` has an image in Evidence. Files no page renders never ask for one: `.oxlintrc*`, `.oxfmtrc*`, `tsconfig*.json`, `*.test.*` and anything in `__tests__`. It warns; `standard merge` enforces it.",
+    fix: "Upload a screenshot with the `pr.screenshots.uploader` script and add it to Evidence, or exclude a tooling folder with a `!` entry in `when`.",
     config: ["pr.screenshots"],
   },
   subject: "pr",

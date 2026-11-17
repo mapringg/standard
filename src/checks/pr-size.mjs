@@ -57,7 +57,7 @@ export default {
   name: "pr-size",
   since: "0.3.0",
   doc: {
-    enforces: "Labels the pull request `size:XS` to `size:XXL` by changed lines, leaving out the lockfile, renames, binaries and tests. It never fails.",
+    enforces: "Reports the pull request's size from its changed lines, leaving out the lockfile, renames and binaries, and tests unless only tests changed. With `GH_TOKEN` and `GITHUB_REPOSITORY` set it labels the pull request `size:XS` to `size:XXL`. It never fails.",
     fix: "Split a large pull request into a stack.",
     config: [],
   },

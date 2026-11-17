@@ -42,9 +42,17 @@ test("explain prints one line per check, and explain <check> prints it in full",
     "  Config: none",
     "  Since: 0.8.0",
     "  Runs on: the tree",
-    "  Baseline: none, so every finding fails",
+    "  Baseline: none",
     "  Replaces: scripts/check-dead-code.mjs, scripts/check-dead-code.test.mjs, scripts/baselines/dead-code.json",
   ]);
+});
+
+test("explain keeps a warning-only check's baseline apart from whether it fails", () => {
+  const { stdout } = standard(process.cwd(), ["explain", "pr-body"]);
+  assert.match(stdout, /^  Enforces: .*It warns and never fails;/m);
+  assert.match(stdout, /^  Baseline: none$/m);
+  assert.doesNotMatch(stdout, /every finding fails/);
+  assert.match(standard(process.cwd(), ["explain", "react"]).stdout, /^  Baseline: \.standard\/baselines\/react\.json records today's findings, and the check fails only new ones$/m);
 });
 
 test("explain refuses an unknown check and a flag other than --markdown", () => {

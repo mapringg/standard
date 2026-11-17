@@ -37,7 +37,7 @@ export function explainOne(checks, name) {
     `  Config: ${keys(each.config)}`,
     `  Since: ${each.since}`,
     `  Runs on: ${check.subject === "pr" ? "pull requests" : check.subject === "commit" ? "commits" : "the tree"}`,
-    `  Baseline: ${each.baselineFree ? "none, so every finding fails" : `.standard/baselines/${each.name}.json records today's findings, and the check fails only new ones`}`,
+    `  Baseline: ${each.baselineFree ? "none" : `.standard/baselines/${each.name}.json records today's findings, and the check fails only new ones`}`,
     `  Replaces: ${check.retired.length > 0 ? check.retired.join(", ") : "nothing"}`,
   ];
 }

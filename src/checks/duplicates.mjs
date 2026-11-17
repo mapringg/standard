@@ -368,7 +368,7 @@ export default {
   name: "duplicates",
   since: "0.8.0",
   doc: {
-    enforces: "No two TypeScript functions or blocks repeat the same normalized syntax tree.",
+    enforces: "No two function bodies or conditional expressions of 8 or more AST nodes match once types are dropped and the names they declare are renamed. It reads tracked `.ts` and `.tsx` files, except `.d.ts`, `*.test.*`, `*.spec.*`, `*.stories.*` and `test`, `tests` and `__tests__` folders.",
     fix: "Move the shared logic to the module that owns it and import it everywhere.",
     config: [],
   },

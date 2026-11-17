@@ -69,6 +69,18 @@ test("duplicates passes code that differs in a literal or a free name, and units
   assert.equal(status, 0);
 });
 
+test("duplicates passes a repeated statement block inside functions that differ, since only functions and conditional expressions are units", (t) => {
+  const block = 'if (ready) {\n    log("a", 1);\n    log("b", 2);\n    log("c", 3);\n  }';
+  const { stdout, status } = duplicates(
+    repoWith(t, {
+      "src/a.ts": `declare function log(name: string, at: number): void;\nexport function a(ready: boolean, x: number) {\n  ${block}\n  return x + 1;\n}\n`,
+      "src/b.ts": `declare function log(name: string, at: number): void;\nexport function b(ready: boolean, y: string) {\n  ${block}\n  return y.trim();\n}\n`,
+    }),
+  );
+  assert.equal(stdout, "duplicates: OK\n");
+  assert.equal(status, 0);
+});
+
 test("duplicates scans only tracked .ts and .tsx sources outside tests, stories and declarations", (t) => {
   const cwd = repoWith(t, {
     "src/a.ts": TOTAL,
