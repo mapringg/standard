@@ -28,6 +28,8 @@ const WORKSPACE = {
 function repoWith(t, files) {
   const cwd = tempRepo(t, {});
   write(cwd, { ...WORKSPACE, ...files });
+  mkdirSync(join(cwd, "node_modules"), { recursive: true });
+  symlinkSync(join(import.meta.dirname, "../node_modules/typescript"), join(cwd, "node_modules/typescript"));
   for (const [from, to] of [["apps/web/node_modules/api", "../../api"], ["apps/web/node_modules/tokens", "../../../packages/tokens"]]) {
     mkdirSync(join(cwd, from, ".."), { recursive: true });
     symlinkSync(to, join(cwd, from));
@@ -168,3 +170,194 @@ for (const [major, compiler] of Object.entries(COMPILERS)) {
   });
 }
 
+
+test("boundaries resolves a createRequire require from its anchor, under any name, and skips one with a computed anchor", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/scripts/anchor.mjs": [
+      'import { createRequire } from "node:module";',
+      'const require = createRequire(new URL("../../api/package.json", import.meta.url));',
+      'require("./src/auth/session.ts");',
+      "const req = createRequire(import.meta.url);",
+      'req("../../api/src/db/client.ts");',
+      'const computed = createRequire(process.cwd() + "/x.js");',
+      'computed("./absent.cjs");',
+      "",
+    ].join("\n"),
+    "scripts/browser.mjs": 'import { createRequire } from "node:module";\nconst load = createRequire(new URL("../apps/web/package.json", import.meta.url));\nexport const browser = load("only-web");\n',
+    "apps/web/node_modules/only-web/package.json": { name: "only-web", main: "index.js" },
+    "apps/web/node_modules/only-web/index.js": "module.exports = 1;\n",
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/scripts/anchor.mjs imports ./src/auth/session.ts: apps/api/src/auth/session.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+      'boundaries: apps/web/scripts/anchor.mjs imports ../../api/src/db/client.ts: apps/api/src/db/client.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+    ],
+    status: 1,
+  });
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries follows TypeScript ${major} past an exports condition whose target is missing, and fails an alias of a workspace package that does not resolve`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": { name: "api", exports: { "./fallback": { types: "./missing.d.ts", import: "./src/required.ts" }, "./gone": { types: "./missing.d.ts" } } },
+      "apps/api/src/required.ts": "export const value = 1;\n",
+      "apps/node/package.json": { name: "node-app", dependencies: { api: "workspace:*", "api-alias": "workspace:api@*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/direct.mts": 'import { value } from "api/fallback";\nexport const a = value;\n',
+      "apps/node/src/alias.mts": 'import { value } from "api-alias/fallback";\nexport const b = value;\n',
+      "apps/node/src/gone.mts": 'import { value } from "api-alias/gone";\nexport const c = value;\n',
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api-alias"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    assert.deepEqual(findings(cwd), {
+      lines: [
+        'boundaries: apps/node/src/alias.mts imports api-alias/fallback: apps/api/src/required.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+        'boundaries: apps/node/src/gone.mts imports api-alias/gone: "api-alias/gone" is not in the exports of the workspace package api-alias. Import a subpath its exports list, or add this one there.',
+      ],
+      status: 1,
+    });
+  });
+}
+
+test("boundaries resolves each require call through its nearest binding, so a parameter shadows it and each scope keeps its own anchor", (t) => {
+  const cwd = repoWith(t, {
+    "apps/web/scripts/param-shadow.mjs": 'import { createRequire } from "node:module";\nconst req = createRequire(import.meta.url);\nfunction f(req) { req("./not-a-module"); }\nf((x) => x);\n',
+    "apps/web/scripts/creator-shadow.mjs": 'import { createRequire as cr } from "node:module";\nfunction f(cr) {\n  const req = cr(import.meta.url);\n  req("./not-a-module");\n}\nf(() => (x) => x);\n',
+    "apps/web/scripts/scope-collision.mjs": [
+      'import { createRequire } from "node:module";',
+      'const req = createRequire(new URL("../../api/package.json", import.meta.url));',
+      'req("./src/auth/session.ts");',
+      "function f() {",
+      "  const req = createRequire(import.meta.url);",
+      '  req("./private.ts");',
+      "}",
+      "f();",
+      'function later() { return late("./src/db/client.ts"); }',
+      'const late = createRequire(new URL("../../api/package.json", import.meta.url));',
+      "later();",
+      "",
+    ].join("\n"),
+    "apps/web/scripts/private.ts": "export const value = 1;\n",
+  });
+  const path = (target, specifier) => `boundaries: apps/web/scripts/scope-collision.mjs imports ${specifier}: ${target} belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.`;
+  assert.deepEqual(findings(cwd), {
+    lines: [path("apps/api/src/auth/session.ts", "./src/auth/session.ts"), path("apps/api/src/db/client.ts", "./src/db/client.ts")],
+    status: 1,
+  });
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries takes the exports target TypeScript ${major} takes when an earlier one is missing: inside a nested branch, after default, and along an array`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": {
+        name: "api",
+        type: "module",
+        exports: {
+          "./nested": { types: { import: "./missing.d.ts", default: "./src/required.ts" }, import: "./src/other.ts" },
+          "./default-first": { default: "./missing.d.ts", import: "./src/required.ts" },
+          "./array": ["./missing.d.ts", "./src/required.ts"],
+        },
+      },
+      "apps/api/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/api/src/other.ts": 'export const value: "other" = "other";\n',
+      "apps/node/package.json": { name: "node-app", dependencies: { "api-alias": "workspace:api@*" } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/nested.mts": 'import { value } from "api-alias/nested";\nexport const a: "required" = value;\n',
+      "apps/node/src/default-first.mts": 'import { value } from "api-alias/default-first";\nexport const b: "required" = value;\n',
+      "apps/node/src/array.mts": 'import { value } from "api-alias/array";\nexport const c: "required" = value;\n',
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api-alias"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const required = (file, specifier) => `boundaries: apps/node/src/${file} imports ${specifier}: apps/api/src/required.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.`;
+    assert.deepEqual(findings(cwd), {
+      lines: [required("array.mts", "api-alias/array"), required("default-first.mts", "api-alias/default-first"), required("nested.mts", "api-alias/nested")],
+      status: 1,
+    });
+  });
+}
+
+test("boundaries reads only a const loader that an imported or const createRequire makes, and a default sees only the parameters", (t) => {
+  const api = 'new URL("../../api/package.json", import.meta.url)';
+  const cwd = repoWith(t, {
+    "apps/web/scripts/reanchor.mjs": `import { createRequire } from "node:module";\nlet r = createRequire(import.meta.url);\nr = createRequire(${api});\nr("./src/db/client.ts");\n`,
+    "apps/web/scripts/reassigned.mjs": `import { createRequire } from "node:module";\nlet r = createRequire(${api});\nr = (x) => x;\nr("./missing.ts");\n`,
+    "apps/web/scripts/destructured.mjs": `import { createRequire } from "node:module";\nconst { r } = { r: createRequire(${api}) };\nr("./missing.ts");\n`,
+    "apps/web/scripts/creator-destructured.mjs": `import * as m from "node:module";\nconst { createRequire } = m;\nconst r = createRequire(${api});\nr("./missing.ts");\n`,
+    "apps/web/scripts/default-param.mjs": `import { createRequire } from "node:module";\nconst r = createRequire(${api});\nfunction f(x = r("./src/db/client.ts")) {\n  const r = (y) => y;\n  return x;\n}\nf();\n`,
+    "apps/web/scripts/const-module.cjs": 'const m = require("node:module");\nconst r = m.createRequire(__filename);\nr("./missing.cjs");\n',
+    "apps/web/scripts/with-scope.cjs": 'with ({ require: (x) => x }) {\n  require("./missing.cjs");\n}\n',
+  });
+  assert.deepEqual(findings(cwd), {
+    lines: [
+      'boundaries: apps/web/scripts/const-module.cjs imports ./missing.cjs: "./missing.cjs" in apps/web/scripts/const-module.cjs does not resolve. Fix the path so it names a file.',
+      'boundaries: apps/web/scripts/default-param.mjs imports ./src/db/client.ts: apps/api/src/db/client.ts belongs to apps/api, so import it as "api" or a subpath its exports list, not by path.',
+    ],
+    status: 1,
+  });
+});
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries stops as TypeScript ${major} does at a null or invalid exports target, and follows an imports target to another package`, (t) => {
+    const cwd = repoWith(t, {
+      "apps/api/package.json": {
+        name: "api",
+        type: "module",
+        exports: {
+          "./null-condition": { types: null, import: "./src/required.ts" },
+          "./null-array": [null, "./src/required.ts"],
+          "./inner-parent": { types: "./missing.d.ts", import: "./sub/../src/required.ts" },
+          "./escape": { types: "./missing.d.ts", import: "./../outside.ts" },
+        },
+      },
+      "apps/api/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/outside.ts": 'export const value: "required" = "required";\n',
+      "apps/node/package.json": { name: "node-app", type: "module", dependencies: { api: "workspace:*" }, imports: { "#other": { types: "./missing.d.ts", import: "other" } } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/node_modules/other/package.json": { name: "other", type: "module", exports: "./index.ts" },
+      "apps/node/node_modules/other/index.ts": 'export const value: "other" = "other";\n',
+      "apps/node/src/private.mts": 'import { value } from "#other";\nexport const v: "other" = value;\n',
+      ...Object.fromEntries(["null-condition", "null-array", "inner-parent", "escape"].map((name) => [`apps/node/src/${name}.mts`, `import { value } from "api/${name}";\nexport const v = value;\n`])),
+    });
+    symlinkSync(join(cwd, "apps/api"), join(cwd, "apps/node/node_modules/api"));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const unexported = (name) => `boundaries: apps/node/src/${name}.mts imports api/${name}: "api/${name}" is not in the exports of the workspace package api. Import a subpath its exports list, or add this one there.`;
+    assert.deepEqual(findings(cwd), {
+      lines: ["escape", "inner-parent", "null-array", "null-condition"].map(unexported),
+      status: 1,
+    });
+  });
+}
+
+for (const [major, compiler] of Object.entries(COMPILERS)) {
+  test(`boundaries takes the declaration TypeScript ${major} takes: a versioned types condition, typesVersions, a declaration after a JavaScript target, and an imports fallback past a missing package`, (t) => {
+    const literal = (value) => `export declare const value: "${value}";\n`;
+    const cwd = repoWith(t, {
+      "packages/versioned/package.json": { name: "versioned", type: "module", exports: { "types@>=5.2": "./modern/index.d.ts", types: "./legacy/index.d.ts", default: "./index.js" } },
+      "packages/versioned/modern/index.d.ts": literal("modern"),
+      "packages/versioned/legacy/index.d.ts": literal("legacy"),
+      "packages/versioned/index.js": 'export const value = "modern";\n',
+      "packages/routed/package.json": { name: "routed", type: "module", types: "./index.d.ts", typesVersions: { ">=5.2": { "*": ["modern/*"] } } },
+      "packages/routed/index.d.ts": literal("legacy"),
+      "packages/routed/modern/index.d.ts": literal("modern"),
+      "packages/js-first/package.json": { name: "js-first", type: "module", exports: { import: "./untyped.js", default: "./types.d.ts" } },
+      "packages/js-first/untyped.js": 'export const value = "modern";\n',
+      "packages/js-first/types.d.ts": literal("modern"),
+      "apps/node/package.json": { name: "node-app", type: "module", imports: { "#x": { types: "optional-types", default: "./src/required.ts" } } },
+      "apps/node/tsconfig.json": { compilerOptions: { module: "nodenext", strict: true } },
+      "apps/node/src/required.ts": 'export const value: "required" = "required";\n',
+      "apps/node/src/fallback.mts": 'import { value } from "#x";\nexport const v: "required" = value;\n',
+      ...Object.fromEntries(["versioned", "routed", "js-first"].map((name) => [`apps/node/src/${name}.mts`, `import { value } from "${name}-alias";\nexport const v: "modern" = value;\n`])),
+    });
+    mkdirSync(join(cwd, "apps/node/node_modules"));
+    for (const name of ["versioned", "routed", "js-first"]) symlinkSync(join(cwd, "packages", name), join(cwd, `apps/node/node_modules/${name}-alias`));
+    symlinkSync(compiler, join(cwd, "apps/node/node_modules/typescript"));
+    const path = (name, target) => `boundaries: apps/node/src/${name}.mts imports ${name}-alias: packages/${name}/${target} belongs to packages/${name}, so import it as "${name}" or a subpath its exports list, not by path.`;
+    assert.deepEqual(findings(cwd), {
+      lines: [path("js-first", "types.d.ts"), path("routed", "modern/index.d.ts"), path("versioned", "modern/index.d.ts")],
+      status: 1,
+    });
+  });
+}
