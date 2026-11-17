@@ -137,18 +137,19 @@ const APACHE = [
 const block = (lines) => `/*\n${lines.map((line) => ` *${line && ` ${line}`}`).join("\n")}\n */\n`;
 const slashes = (lines) => lines.map((line) => `//${line && ` ${line}`}\n`).join("");
 
-test("no-comments passes a header of only license text above the code", (t) => {
+test("no-comments passes a leading license tag that names a license expression alone, and skips vendored files", (t) => {
   passes(t, {
-    "src/spdx.ts": "// SPDX-License-Identifier: MIT\n// Copyright 2026 Someone\nexport const a = 1;\n",
-    "src/spdx-only.ts": "/* SPDX-License-Identifier: Apache-2.0 OR MIT */\nexport const a = 1;\n",
-    "src/vendor.js": "/**\n * @license\n * Copyright Someone. MIT.\n */\nexport const a = 1;\n",
-    "src/owner.ts": "// SPDX-License-Identifier: MIT\n// SPDX-FileCopyrightText: 2024-2026 Acme Inc. and contributors\n// Copyright © 2026 Jane Doe <jane@example.com>. All rights reserved.\nexport const a = 1;\n",
-    "src/mit.ts": `${block(MIT)}\nexport const a = 1;\n`,
-    "src/apache.ts": `// SPDX-License-Identifier: Apache-2.0\n${slashes(APACHE)}\nexport const a = 1;\n`,
+    ".gitattributes": "vendor/** linguist-vendored\nsrc/third-party.js linguist-vendored=true\n",
+    "src/spdx.ts": "// SPDX-License-Identifier: MIT\nexport const a = 1;\n",
+    "src/spdx-block.ts": "/* SPDX-License-Identifier: Apache-2.0 OR MIT */\nexport const a = 1;\n",
+    "src/tag.js": "/**\n * @license MIT\n */\nexport const a = 1;\n",
+    "vendor/mit.ts": `${block(MIT)}\nexport const a = 1;\n`,
+    "vendor/util.js": "// Reads the cache before the network.\nexport const a = 1;\n",
+    "src/third-party.js": `// SPDX-License-Identifier: Apache-2.0\n${slashes(APACHE)}\nexport const a = 1;\n`,
   });
 });
 
-test("no-comments fails a license comment below the code, and any other prose in or after a license header", (t) => {
+test("no-comments fails a copyright line or license notice in the repository's own code, and any prose with a license tag", (t) => {
   fails(
     t,
     {
@@ -156,11 +157,11 @@ test("no-comments fails a license comment below the code, and any other prose in
       "src/b.ts": "// SPDX-License-Identifier: MIT\nexport const b = 1;\n// explains\n",
       "src/c.ts": "// SPDX-License-Identifier: MIT\n// Explain the implementation.\nexport const c = 1;\n",
       "src/d.ts": "/**\n * @license MIT\n * Caches the parsed tree per file.\n */\nexport const d = 1;\n",
-      "src/e.ts": `${block([...MIT, "", "Reads the cache first."])}export const e = 1;\n`,
+      "src/e.ts": `${block(MIT)}export const e = 1;\n`,
       "src/f.ts": "// SPDX-License-Identifier: MIT -- reads the cache first\nexport const f = 1;\n",
-      "src/g.ts": "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Someone. Explain the implementation.\nexport const g = 1;\n",
-      "src/h.ts": "// SPDX-License-Identifier: MIT\n// SPDX-FileCopyrightText: 2026 Someone. Reads the cache first.\nexport const h = 1;\n",
-      "src/i.ts": "// SPDX-License-Identifier: MIT\n// Copyright 2026 Someone because the cache must stay warm\nexport const i = 1;\n",
+      "src/g.ts": "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Someone: Explain the implementation.\nexport const g = 1;\n",
+      "src/h.ts": "// SPDX-License-Identifier: MIT\n// SPDX-FileCopyrightText: 2024-2026 The Regents of the University of California\nexport const h = 1;\n",
+      "src/i.ts": "// SPDX-License-Identifier: MIT\n// Copyright (c) 2026 Someone (Explain the implementation.)\nexport const i = 1;\n",
     },
     `src/a.ts comment: src/a.ts has a comment on line 2. ${COMMENT}`,
     `src/b.ts comment: src/b.ts has a comment on line 3. ${COMMENT}`,
