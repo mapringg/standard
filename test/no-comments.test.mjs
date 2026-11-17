@@ -434,6 +434,19 @@ test("no-comments passes comment-like text in a title under a font with color in
   passes(t, { "src/pages/a.astro": '<svg><font color="red"><title><!-- text --></title></font></svg>\n' });
 });
 
+test("no-comments leaves title text under a font spread undecided, but checks code and later markup", (t) => {
+  passes(t, {
+    "src/pages/static.astro": '<svg><font {...{color:"red"}}><title><!-- prose --></title></font></svg>\n',
+    "src/pages/dynamic.astro": '<math><font {...props}><title><!-- prose --></title></font></math>\n',
+  });
+  fails(
+    t,
+    { "src/pages/a.astro": '<svg><font {...props}><title><!-- prose --></title>{/* code */ 1}</font></svg>\n<!-- sibling -->\n' },
+    `src/pages/a.astro html-comment: src/pages/a.astro has a comment on line 2. ${HTML}`,
+    `src/pages/a.astro comment: src/pages/a.astro has a comment on line 1. ${COMMENT}`,
+  );
+});
+
 test("no-comments passes comment-like text after a constant set:html that opens a textarea", (t) => {
   passes(t, { "src/pages/a.astro": '<div set:html="&lt;textarea&gt;"/><!-- prose -->\n' });
 });
