@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { git, standard, tempRepo, write } from "./helpers.mjs";
 
 const COMMENT = "Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in docs/*.md or apps/*/docs/*.md and point at it alone on a line with // See: <path>.md#<heading>.";
+const HTML = "An HTML comment ships to every visitor. Move the why into a name or a doc, and delete the comment.";
 const LICENSE = "Keep only a leading `SPDX-License-Identifier: <expression>` line, whose expression names SPDX license ids such as `MIT` or `Apache-2.0 OR MIT`. If this is third-party code that must keep its copyright or notice, mark its path `linguist-vendored` in `.gitattributes`.";
 
 function check(t, files) {
@@ -235,7 +236,7 @@ test("wiring fails a repo plugin's no-comments rule and its test, which no-comme
   assert.doesNotMatch(stdout, /safety-comment/);
 });
 
-test("no-comments fails comments in an Astro component's frontmatter and scripts, and passes its markup and HTML comments", (t) => {
+test("no-comments fails comments in an Astro component's frontmatter, scripts and markup", (t) => {
   fails(
     t,
     {
@@ -254,6 +255,7 @@ test("no-comments fails comments in an Astro component's frontmatter and scripts
       ].join("\n"),
     },
     `src/pages/index.astro comment: src/pages/index.astro has comments on lines 2, 8. ${COMMENT}`,
+    `src/pages/index.astro html-comment: src/pages/index.astro has a comment on line 5. ${HTML}`,
   );
 });
 
@@ -274,5 +276,64 @@ test("no-comments reads Astro frontmatter past a fence line in a string, and ski
       ].join("\n"),
     },
     `src/pages/index.astro comment: src/pages/index.astro has a comment on line 5. ${COMMENT}`,
+  );
+});
+
+test("no-comments fails HTML comments and markup expression comments in an Astro component, and passes a pointer and a directive there", (t) => {
+  fails(
+    t,
+    {
+      "docs/layout.md": "# Layout\n\n## Font preloads\n",
+      "src/pages/markup.astro": [
+        "---",
+        "const items = [1];",
+        "---",
+        "<!-- ships to visitors -->",
+        "<!--",
+        "  spans lines",
+        "-->",
+        "<!--[if IE]><p>old</p><![endif]-->",
+        "<?prose in a bogus comment?>",
+        '<p title="<!-- an attribute value -->">สวัสดี {/* in an expression */}</p>',
+        "<ul>{items.map((item) => {",
+        "  // inside the arrow",
+        "  return <li>{/* nested */ item}</li>;",
+        "})}</ul>",
+        "<Card data={/* attribute */ 1} {/* spread */ ...items} label=`a${/* template */ 1}` slot={<i>{/* jsx */}</i>} />",
+        "<noscript><!-- in noscript --></noscript>",
+        "<pre is:raw><!-- raw --> {/* literal text */}</pre>",
+        '<div set:html="<!-- injected -->"></div>',
+        "<style>/* css */ p { color: red; }</style>",
+        '<script type="application/ld+json">{"a": "/* data */"}</script>',
+        "<title><!-- title text --></title>",
+        '<div set:text="<!-- escaped text -->"></div>',
+        "{/* See: docs/layout.md#font-preloads */}",
+        "{/* oxlint-disable-next-line no-img-element -- intrinsic sizing */}",
+        "<img />",
+        "{/* See: docs/missing.md */}",
+        "</ prose in an end tag>",
+        "",
+      ].join("\n"),
+    },
+    `src/pages/markup.astro html-comment: src/pages/markup.astro has comments on lines 4, 5, 8, 9, 16, 17, 18, 27. ${HTML}`,
+    `src/pages/markup.astro comment: src/pages/markup.astro has comments on lines 10, 12, 13, 15. ${COMMENT}`,
+    "src/pages/markup.astro doc-pointer: src/pages/markup.astro has a comment on line 26. Point at a tracked doc that matches docs/*.md or apps/*/docs/*.md, with a path from the repository root; docs/missing.md is not one.",
+  );
+});
+
+test("no-comments gives the license fix only to a notice marker or a license header, not to prose that says license", (t) => {
+  fails(
+    t,
+    {
+      "src/a.ts": "// Validate the license field before saving the driver record.\nexport const a = 1;\n",
+      "src/b.ts": "export const b = 1;\n// The driving licence number must have eight digits.\n",
+      "src/c.ts": "// Copyright 2026 Someone\n// Licensed under the Apache License, Version 2.0.\n// Reads the cache first.\nexport const c = 1;\n",
+      "src/d.ts": "export const d = 1;\n/* \u00a9 2026 Someone */\n",
+    },
+    `src/a.ts comment: src/a.ts has a comment on line 1. ${COMMENT}`,
+    `src/b.ts comment: src/b.ts has a comment on line 2. ${COMMENT}`,
+    `src/c.ts license: src/c.ts has comments on lines 1, 2. ${LICENSE}`,
+    `src/c.ts comment: src/c.ts has a comment on line 3. ${COMMENT}`,
+    `src/d.ts license: src/d.ts has a comment on line 2. ${LICENSE}`,
   );
 });
