@@ -19,6 +19,8 @@ const APPS = {
 const API = { "api-modules": ["apps/web/src/api/**"] };
 const LISTED_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in .standard/config.json with its reason: pages, live, client-state or unreachable.";
 const FETCH_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in .standard/config.json with its reason.";
+/** TypeScript 7's API server prints this when the check closes it, after the run has finished. */
+const TSGO_SHUTDOWN = /^context canceled\n/m;
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
 
 function repoWith(t, config, files) {
@@ -32,7 +34,8 @@ function repoWith(t, config, files) {
 
 function check(t, config, files, ...flags) {
   const cwd = repoWith(t, config, files);
-  return { cwd, ...standard(cwd, ["check", "client-data", ...flags]) };
+  const run = standard(cwd, ["check", "client-data", ...flags]);
+  return { cwd, ...run, stderr: run.stderr.replace(TSGO_SHUTDOWN, "") };
 }
 
 function fails(t, config, files, ...fixes) {
