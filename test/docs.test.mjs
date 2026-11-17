@@ -336,12 +336,42 @@ test("docs passes a bare file name that tracked source writes, and fails one sou
     {
       "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
       "package.json": JSON.stringify({ scripts: {} }),
-      "scripts/verify.mjs": 'writeFileSync(join(out, "result.json"), "{}");\nreadFileSync("evidence/cleanup.json");\n',
-      "docs/guide.md": "# Guide\n\nThe run writes `result.json` and `cleanup.json`.\n",
+      "scripts/verify.mjs": 'writeFileSync(join(out, "result.json"), "{}");\nreadFileSync("evidence/cleanup.json");\nmkdirSync("trace.json/archive");\nrm("log.json.bak");\n',
+      "docs/guide.md": "# Guide\n\nThe run writes `result.json` and `cleanup.json`, then `trace.json` and `log.json`.\n",
     },
-    reference("docs/guide.md", "line 3 `cleanup.json` (no tracked file ends with this path)"),
+    reference(
+      "docs/guide.md",
+      "line 3 `cleanup.json` (no tracked file ends with this path)",
+      "line 3 `trace.json` (no tracked file ends with this path)",
+      "line 3 `log.json` (no tracked file ends with this path)",
+    ),
   );
 });
+
+test("docs reports a path beneath a tracked file as missing", (t) => {
+  fails(
+    t,
+    { "AGENTS.md": "# Guide\n\nRead `package.json/child/missing.json`.\n", "package.json": "{}" },
+    "AGENTS.md reference: AGENTS.md names things that do not exist: line 3 `package.json/child/missing.json` (no tracked file ends with this path). Fix each name, or move facts about an outside system to docs/external/.",
+  );
+});
+
+for (const [name, lang, body, miss, shown] of [
+  ["a TypeScript template string", "ts", "const example = `\npnpm missing\n`;", null],
+  ["a TypeScript comment", "ts", "/*\npnpm missing\n*/", null],
+  ["a JSON string", "json", '{ "example": "pnpm missing" }', null],
+  ["a block with no language", "", "pnpm missing", null],
+  ["a bash block", "bash", "pnpm missing", "package.json has no script missing", "pnpm missing"],
+  ["a console prompt", "console", "$ pnpm missing\ncommand failed", "package.json has no script missing", "pnpm missing"],
+  ["console output", "console", "$ echo example\npnpm missing", null],
+  ["a console prompt continued after a > prompt", "console", '$ pnpm --filter \\\n> "@scope/web" missing', "@scope/web has no script missing", 'pnpm --filter "@scope/web" missing'],
+]) {
+  test(`docs reads pnpm commands only in shell code blocks and console prompts: ${name}`, (t) => {
+    const files = { ...WEB, "docs/guide.md": `# Guide\n\n\`\`\`${lang}\n${body}\n\`\`\`\n` };
+    if (miss === null) passes(t, files);
+    else fails(t, files, reference("docs/guide.md", `line 4 \`${shown}\` (${miss})`));
+  });
+}
 
 test("docs checks no reference inside an HTML comment", (t) => {
   passes(t, { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Guide\n<!--\nUse `missingThing()` and [x](missing.md).\n-->\n" });
