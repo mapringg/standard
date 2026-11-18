@@ -87,3 +87,12 @@ test("tests rule follows setup hooks in the order they run", (t) => {
     ["order.test.ts"],
   );
 });
+
+test("tests rule accepts the MSW 3 strict listen option", (t) => {
+  const result = lint(t, {
+    "packages/i18n/src/add.ts": source,
+    "packages/i18n/src/frame.test-utils.ts":
+      'import { setupServer } from "msw/node";\nexport const server = setupServer();\nserver.listen({ onUnhandledFrame: "error" });\n',
+  });
+  deepEqual(only(result, "tests"), []);
+});
