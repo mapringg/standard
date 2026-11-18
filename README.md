@@ -57,7 +57,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `docs` | Every tracked Markdown file is a kind of doc the standard names by path, carries no `check-docs: external` marker, and is reached by links from an AGENTS.md, a CLAUDE.md, `.gemini/styleguide.md` or a SKILL.md unless it is a README or a pull request template. A file named like a log or plan fails in any folder. The paths, links, heading anchors, `pnpm` scripts and code symbols a doc names exist; an external doc's are checked only for links and paths under a tracked top-level entry. Each kind with docs has a line budget in `budgets` and fits it. | Move, delete, link, correct or cut the doc as the finding says. | `budgets` | 0.15.0 | yes |
 | `docs-prose` | Docs of every kind use no en or em dash and none of a fixed list of filler words outside code, headings in sentence case, and prose sentences of at most 40 words, where a code span or a link is one word. A capitalized heading word passes when it is all capitals, has an inner capital or dot, starts a sentence, or some doc's prose writes it capitalized mid-sentence. The headings `pr-body` requires pass. | Rewrite the sentence or heading as the finding says. | none | 0.15.0 | no |
 | `no-doc-pointers` | Source holds no `See:` comment that points at a doc, which `no-comments` still allows. Its baseline records today's pointers, so none can be added and each one deleted stays deleted. It skips the files `no-comments` skips. | Put the decision in a name, a type or a test, and delete the pointer. | none | 0.15.0 | no |
-| `config` | Config uses known rule ids and every override glob changes a finding. | Delete unused overrides or correct their globs and severities. | `rules`, `overrides` | 0.16.0 | yes |
+| `config` | Config uses known rule ids and every exception glob changes a finding. | Delete unused exceptions and keep plugin rules enabled in oxlint. | `allow` | 0.16.0 | yes |
 <!-- explain:end -->
 
 `commit-subject` checks commit messages. A message is one subject line. The subject starts with a capital imperative verb, has three or more words and at most 80 characters, and has no prefix, no trailing period, no body and no trailers.
@@ -571,18 +571,17 @@ Each package owns environment reads in `src/env.ts`, JSON parsing in `src/lib/js
 
 ### Configuration in 0.16.0
 
-An empty `.standard/config.json` enables every check. The new format has three keys: `$schema`, `rules` and `overrides`. Rule names autocomplete from the shipped schema. Use oxlint severities: `"off"`, `"warn"`, `"error"` or `0`, `1`, `2`. Overrides apply in order. Each `files` glob must match tracked files and change at least one finding; delete an override when it stops doing work.
+An empty `.standard/config.json` enables every check. The schema has four keys: `$schema`, `ticket`, `skip` and `allow`. `skip` is temporary rollout debt and may only shrink. `allow` is the only file exception, for CLI checks and `standard/<rule>` plugin rules alike.
 
 ```json
 {
   "$schema": "../node_modules/@mapringg/standard/schema.json",
-  "rules": { "cache-components": "off" },
-  "overrides": [{ "files": ["src/legacy/**"], "rules": { "boundaries": "warn" } }]
+  "ticket": "ABC",
+  "skip": ["cache-components"],
+  "allow": { "standard/log": ["src/legacy.ts"] }
 }
 ```
 
-The schema contains no ticket setting, rollout list or `except` map. The earlier config format still runs with a deprecation notice during adoption; mixing its keys with the new keys fails. Fixed paths, module entries, Next layering, API paths, cached-module names, hook commands and screenshot requirements are derived. The shared oxlint config enables all plugin rules. Configure plugin severities and file overrides in oxlint itself; configure repository checks here. Zod imports use `zod/mini`; memoization is left to React Compiler.
+Every allow glob must change a finding; unmatched, redundant and skipped-rule exceptions fail. Keep plugin rules at error in oxlint; the config guard rejects disabled or warning-level standard rules there. The guard skips commit-message runs. Checks keep their built-in advisory behavior. Malformed ticket lines warn during checks and block merge.
 
-Explicit new-config severities also apply to PR checks that were advisory in the earlier format. File overrides apply to findings that identify a tracked file; use a top-level rule severity for findings about the whole repository or PR. Initialize doc line budgets with `standard check docs --init`, and lower them with `standard check docs --write`.
-
-Checks retain their built-in advisory severity until a rule severity overrides it.
+Earlier repository-specific keys, including `pr.ticket-prefix` and `pending`, still parse with a deprecation notice during adoption. Mixing formats fails. Fixed paths, module entries, Next layering, API paths, cached-module names, hook commands and screenshot requirements are derived. Initialize doc line budgets with `standard check docs --init`, and lower them with `standard check docs --write`.

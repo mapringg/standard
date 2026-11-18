@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import { FILE, pendingProblem } from "./config.mjs";
-import { configuredSeverity, findingSeverity, severity } from "./rule-settings.mjs";
+import { excepted, findingPath } from "./rule-settings.mjs";
 
 import { ratchet } from "./ratchet.mjs";
 
@@ -99,12 +99,12 @@ export async function run({ checks, repo, scope, names = [], mode = "check" }) {
   if (unknown) {
     throw new Error(`standard check names "${unknown}", which is not a check in this version. Checks: ${known.join(", ")}.`);
   }
+  const selected = names.length > 0 ? checks.filter((check) => names.includes(check.name)) : checks;
   const guard = checks.find((check) => check.name === "config");
-  if (repo.config.rules !== undefined && guard?.subject === "tree") {
+  if (repo.config.allow !== undefined && selected.some((check) => check.subject !== "commit") && guard?.subject === "tree") {
     const findings = await guard.run(repo, checks);
     if (findings.length) return [{ check: "config", outcome: "ran", failed: true, findings, message: "" }];
   }
-  const selected = names.length > 0 ? checks.filter((check) => names.includes(check.name)) : checks;
   if (mode !== "check" && (selected.length !== 1 || selected[0].subject !== "tree")) {
     throw new Error(
       `--${mode} changes one baseline, so name exactly one tree check: standard check <name> --${mode}.`,
@@ -114,27 +114,14 @@ export async function run({ checks, repo, scope, names = [], mode = "check" }) {
     throw new Error(`${selected[0].name} allows no findings, so it has no baseline for --${mode}. Fix what it finds.`);
   }
   return Promise.all(selected.map(async (check) => {
-    if (repo.config.rules === undefined || check.name === "config") return runCheck(check, repo, scope, mode, checks);
-    if (severity(repo.config, check.name) === 0 && !(repo.config.overrides ?? []).some((entry) => entry.rules[check.name] !== undefined && !["off", 0].includes(entry.rules[check.name]))) {
-      return { check: check.name, outcome: "skipped", because: "disabled by rules" };
-    }
-    /** @type {Finding[]} */
-    const warnings = [];
     const files = repo.files();
     /** @param {Finding[]} findings */
-    const filter = (findings) => findings.flatMap((finding) => {
-      const level = findingSeverity(repo.config, check.name, finding, files);
-      if (level === 1) warnings.push({ ...finding, advisory: true });
-      const { advisory: _advisory, ...error } = finding;
-      return level === 2 ? [configuredSeverity(repo.config, check.name, finding, files) ? error : finding] : [];
-    });
+    const filter = (findings) => findings.filter((finding) => !excepted(repo.config, check.name, findingPath(finding, files)));
     /** @type {Check} */
     const configured = check.subject === "tree" ? { ...check, run: async (/** @type {Repo} */ repo, /** @type {Check[]} */ checks) => filter(await check.run(repo, checks)) }
       : check.subject === "pr" ? { ...check, run: async (pr, repo, checks) => filter(await check.run(pr, repo, checks)) }
       : { ...check, run: (/** @type {import("./subjects.mjs").Commit} */ commit, /** @type {Repo} */ repo) => filter(check.run(commit, repo)) };
-    if (configured.subject === "tree" && severity(repo.config, check.name) === 1 && !(repo.config.overrides ?? []).some((entry) => ["error", 2].includes(entry.rules[check.name]))) configured.baseline = false;
-    const result = await runCheck(configured, repo, scope, mode, checks);
-    return result.outcome === "ran" ? { ...result, message: warnings.length && /^OK(?:$| )/.test(result.message) ? "" : result.message, findings: [...result.findings, ...warnings] } : result;
+    return runCheck(configured, repo, scope, mode, checks);
   }));
 }
 

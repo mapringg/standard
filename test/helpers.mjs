@@ -34,7 +34,7 @@ export function standard(cwd, args, { env = {}, input } = {}) {
     input,
     encoding: "utf8",
   });
-  const notice = ".standard/config.json: legacy settings are deprecated in 0.16.0. Replace them with rules and overrides.\n";
+  const notice = ".standard/config.json: legacy settings are deprecated in 0.16.0. Use standard migrate to keep only $schema, ticket, skip and allow.\n";
   return { ...result, migrationNotice: result.stderr.includes(notice), stderr: result.stderr.replaceAll(notice, "") };
 }
 

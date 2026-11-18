@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
 
-import { severity } from "./rule-settings.mjs";
 import { FILE, pendingProblem } from "./config.mjs";
 import { gh } from "./github.mjs";
 import { hookProblems } from "./install.mjs";
@@ -37,7 +36,6 @@ import { PROBES } from "./wiring.mjs";
  * @returns {Pick<Cell, "status" | "pass" | "notes">}
  */
 function checkStatus(check, repo, pin) {
-  if (repo.config.rules !== undefined && severity(repo.config, check.name) === 0) return { status: "pending", pass: false, notes: ["Disabled by rules."] };
   if (repo.config.pending.includes(check.name)) {
     return { status: "pending", pass: false, notes: [`${FILE} pending lists it, so it does not run.`] };
   }

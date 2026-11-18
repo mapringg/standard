@@ -40,7 +40,7 @@ const COMMANDS = {
     const stray = flags.find((flag) => !MODES.includes(flag)) ?? flags[1];
     if (stray) throw new Error(`Unexpected argument ${stray}. Use --pr <number> or one of ${MODES.join(", ")}.`);
     const repo = loadRepo(process.cwd());
-    const budgetMode = repo.config.rules !== undefined && args.filter((arg) => !arg.startsWith("--")).join() === "docs" && flags.length === 1;
+    const budgetMode = repo.config.allow !== undefined && args.filter((arg) => !arg.startsWith("--")).join() === "docs" && flags.length === 1;
     if (budgetMode) repo.config = { ...repo.config, budgets: writeBudgets(repo, flags[0].slice(2)) };
     const event = process.env.GITHUB_EVENT_PATH;
     const results = await run({

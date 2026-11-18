@@ -549,9 +549,9 @@ test("the config fails on a bad pr key", (t) => {
 
 test("baseline-growth ratchets skip across the legacy-to-modern transition", (t) => {
   for (const base of [{ skip: ["banned"] }, { pending: ["banned"] }]) {
-    const kept = checkGrowth(t, { base: { ".standard/config.json": base }, head: { ".standard/config.json": { skip: ["banned"] } } });
+    const kept = checkGrowth(t, { base: { ...pinned("0.16.0"), ".standard/config.json": base }, head: { ...pinned("0.16.0"), ".standard/config.json": { skip: ["banned"] }, "change.txt": "changed" } });
     assert.equal(kept.status, 0, kept.stdout + kept.stderr);
-    const grown = checkGrowth(t, { base: { ".standard/config.json": base }, head: { ".standard/config.json": { skip: ["banned", "react"] } } });
+    const grown = checkGrowth(t, { base: { ...pinned("0.16.0"), ".standard/config.json": base }, head: { ...pinned("0.16.0"), ".standard/config.json": { skip: ["banned", "react"] } } });
     assert.equal(grown.status, 1);
     assert.match(grown.stdout, /react/);
   }

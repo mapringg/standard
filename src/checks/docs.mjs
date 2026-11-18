@@ -91,6 +91,6 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const corpus = loadCorpus(repo);
-    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus), ...budgetFindings(corpus, repo.config.budgets, repo.config.rules === undefined ? undefined : ".standard/baselines/docs.json (initialize with standard check docs --init)")];
+    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus), ...budgetFindings(corpus, repo.config.budgets, repo.config.allow === undefined ? undefined : ".standard/baselines/docs.json (initialize with standard check docs --init)")];
   },
 };

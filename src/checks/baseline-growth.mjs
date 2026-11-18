@@ -14,7 +14,8 @@ const BASELINES = /^\.standard\/baselines\/([^/]+)\.json$/;
 function rawPendingAt(repo, commit) {
   const text = repo.readAt(commit, FILE) ?? repo.readAt(commit, "standard.json");
   try {
-    const pending = text === null ? [] : JSON.parse(text).pending;
+    const raw = text === null ? {} : JSON.parse(text);
+    const pending = raw.skip ?? raw.pending;
     return Array.isArray(pending) ? pending.filter((name) => typeof name === "string") : [];
   } catch {
     return [];
@@ -39,7 +40,7 @@ function rawBudgetsAt(repo, commit) {
  * @returns {import("../registry.mjs").Finding[]} Each budget the PR raises or removes, and each it starts for a kind that already had docs.
  */
 function budgetGrowth(pr, repo, starts) {
-  const location = repo.config.rules === undefined ? FILE : ".standard/baselines/docs.json";
+  const location = repo.config.allow === undefined ? FILE : ".standard/baselines/docs.json";
   const [before, after] = [rawBudgetsAt(repo, pr.baseSha), rawBudgetsAt(repo, pr.headSha)];
   const existed = new Set(git(repo.root, "ls-tree", "-r", "-z", "--name-only", pr.baseSha).split("\0").filter(isDoc).map((path) => place(path).kind?.name));
   return KINDS.flatMap(({ name }) => {
@@ -91,11 +92,12 @@ export default {
     const after = rawPendingAt(repo, pr.headSha);
     const adopted = before.filter((name) => !after.includes(name));
     const findings = budgetGrowth(pr, repo, adopted.includes("docs") || arrived("docs") || arrived("config"));
+    const rollout = repo.config.allow === undefined ? "pending" : "skip";
     findings.push(...after
       .filter((name) => !before.includes(name) && !arrived(name))
       .map((name) => ({
-        key: `pending ${name}`,
-        fix: `${FILE} adds "${name}" to pending. pending only shrinks: fix what ${name} finds, or start its baseline in the PR that removes it from pending.`,
+        key: `${rollout} ${name}`,
+        fix: `${FILE} adds "${name}" to ${rollout}. ${rollout} only shrinks: fix what ${name} finds, or start its baseline in the PR that removes it from ${rollout}.`,
       })));
 
     const tracked = git(repo.root, "ls-tree", "-r", "--name-only", pr.headSha, "--", ".standard");
@@ -107,7 +109,7 @@ export default {
 
     for (const path of pr.changedFiles) {
       const check = BASELINES.exec(path)?.[1];
-      if (!check || adopted.includes(check) || check === "docs" && repo.config.rules !== undefined) continue;
+      if (!check || adopted.includes(check) || check === "docs" && repo.config.allow !== undefined) continue;
       const was = baselineEntries(repo.readAt(pr.baseSha, path));
       const now = repo.readAt(pr.headSha, path);
       if (now === null) continue;
