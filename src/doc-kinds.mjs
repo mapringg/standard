@@ -9,6 +9,7 @@ import { posix } from "node:path";
  * @property {readonly string[]} files
  * @property {readonly string[]} roots The docs agent tooling loads by itself. Links reach every other doc from them.
  * @property {boolean} exempt Other tooling shows it, so it needs no link, and its links reach nothing.
+ * @property {boolean} pointable Whether a no-comments `See:` pointer may name a doc of this kind.
  * @property {"all" | "local" | "none"} references What the reference rule checks. "local" checks links and the paths under a tracked top-level entry, since the rest name an outside system.
  *
  * @typedef {{ path: string, kind: Kind } | { path: string, kind: null, refused: boolean }} Placement
@@ -19,14 +20,17 @@ const AGENTS = ["**/AGENTS.md", "**/CLAUDE.md", ".gemini/styleguide.md"];
 
 /** @type {readonly Kind[]} In match order: verify before skills, external before conventions. */
 export const KINDS = [
-  { name: "verify", files: [".claude/skills/verify-*/**/*.md"], roots: SKILL, exempt: false, references: "all" },
-  { name: "skills", files: [".claude/skills/**/*.md"], roots: SKILL, exempt: false, references: "all" },
-  { name: "agents", files: AGENTS, roots: AGENTS, exempt: false, references: "all" },
-  { name: "external", files: ["docs/external/*.md", "apps/*/docs/external/*.md"], roots: [], exempt: false, references: "local" },
-  { name: "conventions", files: ["docs/*.md", "apps/*/docs/*.md"], roots: [], exempt: false, references: "all" },
-  { name: "readme", files: ["README.md", "apps/*/README.md", "packages/*/README.md"], roots: [], exempt: true, references: "all" },
-  { name: "template", files: [".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE/*.md"], roots: [], exempt: true, references: "none" },
+  { name: "verify", files: [".claude/skills/verify-*/**/*.md"], roots: SKILL, exempt: false, pointable: false, references: "all" },
+  { name: "skills", files: [".claude/skills/**/*.md"], roots: SKILL, exempt: false, pointable: false, references: "all" },
+  { name: "agents", files: AGENTS, roots: AGENTS, exempt: false, pointable: false, references: "all" },
+  { name: "external", files: ["docs/external/*.md", "apps/*/docs/external/*.md"], roots: [], exempt: false, pointable: true, references: "local" },
+  { name: "conventions", files: ["docs/*.md", "apps/*/docs/*.md"], roots: [], exempt: false, pointable: true, references: "all" },
+  { name: "readme", files: ["README.md", "apps/*/README.md", "packages/*/README.md"], roots: [], exempt: true, pointable: false, references: "all" },
+  { name: "template", files: [".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE/*.md"], roots: [], exempt: true, pointable: false, references: "none" },
 ];
+
+/** The globs a `See:` pointer may name. */
+export const POINTER_TARGETS = KINDS.filter((kind) => kind.pointable).flatMap((kind) => kind.files);
 
 const DOC = /\.mdx?$/i;
 const REFUSED = /^(?:changelog[^/]*|todo|roadmap|notes|backlog|decision-log|[^/]*-(?:plan|progress|status|notes|changelog|backlog|roadmap))\.md$/i;

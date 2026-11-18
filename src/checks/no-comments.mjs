@@ -2,9 +2,9 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { posix } from "node:path";
 
-import { parseSource, sourceFiles } from "./support/sources.mjs";
-
+import { POINTER_TARGETS } from "../doc-kinds.mjs";
 import { headingAnchors, markdownTree } from "./support/docs.mjs";
+import { parseSource, sourceFiles } from "./support/sources.mjs";
 
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
@@ -22,7 +22,6 @@ import { headingAnchors, markdownTree } from "./support/docs.mjs";
  * @typedef {{ key: string, judge(context: Context): string | null | undefined }} Kind
  */
 
-const DOCS = ["docs/*.md", "apps/*/docs/*.md"];
 const GENERATED_NAMES = new Set(["next-env.d.ts"]);
 
 /** The only license text a source may hold: one SPDX tag, or an `@license` tag, naming a license expression and nothing else. */
@@ -57,7 +56,7 @@ const TS_EXPECT_ERROR_REASON = /^@ts-expect-error[\s:-]*[^\s:-]/;
 const TS_SILENCE = /^@ts-(?:ignore|nocheck)\b/;
 const SAFETY = /^SAFETY:/;
 const SENTENCE_END = /[.?!][`)]*$/;
-const POINTER = /^See:\s+(\S+)$/;
+export const POINTER = /^See:\s+(\S+)$/;
 const NEXT_LINE = /^[ \t]*\r?\n[ \t]*$/;
 const DIRECTIVE = /^(?:(?:eslint|oxlint)-(?:disable|enable)|@ts-)/;
 
@@ -65,7 +64,7 @@ const DIRECTIVE = /^(?:(?:eslint|oxlint)-(?:disable|enable)|@ts-)/;
 const OWNERS = new Set(["ExpressionStatement", "PropertyDefinition", "ReturnStatement", "ThrowStatement", "VariableDeclaration"]);
 
 const HTML = "An HTML comment ships to every visitor. Move the why into a name or a doc, and delete the comment.";
-const COMMENT = `Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in ${DOCS.join(" or ")} and point at it alone on a line with // See: <path>.md#<heading>.`;
+const COMMENT = "Move the why into a name, a test name or a type, or delete the comment.";
 
 /** @type {Kind[]} */
 const KINDS = [
@@ -101,7 +100,7 @@ const KINDS = [
       if (!pointer) return undefined;
       const [path = "", anchor] = (pointer[1] ?? "").split("#", 2);
       const headings = docs.get(path);
-      if (!headings) return `Point at a tracked doc that matches ${DOCS.join(" or ")}, with a path from the repository root; ${path} is not one.`;
+      if (!headings) return `Point at a tracked doc that matches ${POINTER_TARGETS.join(" or ")}, with a path from the repository root; ${path} is not one.`;
       return anchor === undefined || headings().has(anchor) ? null : `Point at a heading ${path} has, as GitHub slugs it, or drop the anchor; it has no #${anchor}.`;
     },
   },
@@ -109,7 +108,7 @@ const KINDS = [
 ];
 
 /** @type {(comment: Comment) => string} */
-function bodyOf(comment) {
+export function bodyOf(comment) {
   return comment.type === "Line" || comment.type === "Html" ? comment.value.trim() : comment.value.replace(/^\s*\*?/, "").trim();
 }
 
@@ -194,11 +193,21 @@ function generatedPaths(repo, paths) {
 
 /**
  * @param {import("../repo.mjs").Repo} repo
+ * @returns {string[]} The source files whose comments are the repo's own: not `next-env.d.ts`, generated or vendored.
+ */
+export function commentedSources(repo) {
+  const paths = sourceFiles(repo).filter((path) => !GENERATED_NAMES.has(posix.basename(path)));
+  const generated = generatedPaths(repo, paths);
+  return paths.filter((path) => !generated.has(path));
+}
+
+/**
+ * @param {import("../repo.mjs").Repo} repo
  * @returns {Map<string, () => ReadonlySet<string>>} Each tracked doc a pointer may name, with its heading anchors read on first use.
  */
 function trackedDocs(repo) {
   return new Map(
-    repo.files().filter((path) => DOCS.some((glob) => posix.matchesGlob(path, glob))).map((path) => {
+    repo.files().filter((path) => POINTER_TARGETS.some((glob) => posix.matchesGlob(path, glob))).map((path) => {
       /** @type {ReadonlySet<string> | undefined} */
       let anchors;
       const read = () => (anchors ??= headingAnchors(markdownTree(repo.read(path))));
@@ -252,8 +261,8 @@ export default {
   name: "no-comments",
   since: "0.13.0",
   doc: {
-    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. An `.astro` component's markup holds no HTML comment, and its expressions follow the same rules. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped.",
-    fix: "Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`.",
+    enforces: "Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a conventions or external doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. An `.astro` component's markup holds no HTML comment, and its expressions follow the same rules. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped.",
+    fix: "Move the why into a name, test or type. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`.",
     config: [],
   },
   subject: "tree",
@@ -262,8 +271,6 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const docs = trackedDocs(repo);
-    const paths = sourceFiles(repo).filter((path) => !GENERATED_NAMES.has(posix.basename(path)));
-    const generated = generatedPaths(repo, paths);
-    return paths.filter((path) => !generated.has(path)).flatMap((path) => findings(path, repo.read(path), docs));
+    return commentedSources(repo).flatMap((path) => findings(path, repo.read(path), docs));
   },
 };

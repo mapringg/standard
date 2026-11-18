@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { git, standard, tempRepo, write } from "./helpers.mjs";
 
-const COMMENT = "Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in docs/*.md or apps/*/docs/*.md and point at it alone on a line with // See: <path>.md#<heading>.";
+const COMMENT = "Move the why into a name, a test name or a type, or delete the comment.";
 const HTML = "An HTML comment ships to every visitor. Move the why into a name or a doc, and delete the comment.";
 const LICENSE = "Keep only a leading `SPDX-License-Identifier: <expression>` line, whose expression names SPDX license ids such as `MIT` or `Apache-2.0 OR MIT`. If this is third-party code that must keep its copyright or notice, mark its path `linguist-vendored` in `.gitattributes`.";
 
@@ -91,14 +91,14 @@ test("no-comments fails an unfinished SAFETY comment, and one with no type asser
 });
 
 test("no-comments passes a See: pointer to a tracked doc and heading, and fails one that does not resolve", (t) => {
-  const docs = { "docs/time.md": "# Time\n\n## Why UTC on the wire\n", "apps/web/docs/summary.md": "# Summary\n", "apps/web/notes.md": "# Notes\n" };
-  passes(t, { ...docs, "src/a.ts": "// See: docs/time.md#why-utc-on-the-wire\nexport const a = 1;\n// See: apps/web/docs/summary.md\n" });
+  const docs = { "docs/time.md": "# Time\n\n## Why UTC on the wire\n", "apps/web/docs/summary.md": "# Summary\n", "apps/web/notes.md": "# Notes\n", "apps/api/docs/external/vendor.md": "# Vendor\n\n## Auth\n" };
+  passes(t, { ...docs, "src/a.ts": "// See: docs/time.md#why-utc-on-the-wire\nexport const a = 1;\n// See: apps/web/docs/summary.md\n// See: apps/api/docs/external/vendor.md#auth\n" });
   fails(
     t,
     { ...docs, "src/a.ts": "// See: docs/time.md#why-local\n// See: apps/web/notes.md\n// See: docs/missing.md\nexport const a = 1;\n" },
     "src/a.ts doc-pointer: src/a.ts has a comment on line 1. Point at a heading docs/time.md has, as GitHub slugs it, or drop the anchor; it has no #why-local.",
-    "src/a.ts doc-pointer: src/a.ts has a comment on line 2. Point at a tracked doc that matches docs/*.md or apps/*/docs/*.md, with a path from the repository root; apps/web/notes.md is not one.",
-    "src/a.ts doc-pointer: src/a.ts has a comment on line 3. Point at a tracked doc that matches docs/*.md or apps/*/docs/*.md, with a path from the repository root; docs/missing.md is not one.",
+    "src/a.ts doc-pointer: src/a.ts has a comment on line 2. Point at a tracked doc that matches docs/external/*.md or apps/*/docs/external/*.md or docs/*.md or apps/*/docs/*.md, with a path from the repository root; apps/web/notes.md is not one.",
+    "src/a.ts doc-pointer: src/a.ts has a comment on line 3. Point at a tracked doc that matches docs/external/*.md or apps/*/docs/external/*.md or docs/*.md or apps/*/docs/*.md, with a path from the repository root; docs/missing.md is not one.",
   );
 });
 
@@ -327,7 +327,7 @@ test("no-comments fails HTML comments and markup expression comments in an Astro
     },
     `src/pages/markup.astro html-comment: src/pages/markup.astro has comments on lines 4, 5, 8, 9, 16, 17, 18, 27. ${HTML}`,
     `src/pages/markup.astro comment: src/pages/markup.astro has comments on lines 10, 12, 13, 15. ${COMMENT}`,
-    "src/pages/markup.astro doc-pointer: src/pages/markup.astro has a comment on line 26. Point at a tracked doc that matches docs/*.md or apps/*/docs/*.md, with a path from the repository root; docs/missing.md is not one.",
+    "src/pages/markup.astro doc-pointer: src/pages/markup.astro has a comment on line 26. Point at a tracked doc that matches docs/external/*.md or apps/*/docs/external/*.md or docs/*.md or apps/*/docs/*.md, with a path from the repository root; docs/missing.md is not one.",
   );
 });
 
