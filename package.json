@@ -21,6 +21,7 @@
     "./plugin": "./src/plugin/index.mjs"
   },
   "scripts": {
+    "generate": "node scripts/oxlint-config.mjs",
     "lint": "oxlint",
     "format": "oxfmt",
     "test": "node --test"
