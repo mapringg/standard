@@ -21,7 +21,8 @@ export default {
     docs: { description: "Server Actions live only in <feature>-actions.ts and their names end in Action." },
   },
   create(context) {
-    const actions = stem(context.filename).endsWith("-actions");
+    const named = stem(context.filename).endsWith("-actions");
+    const actions = named && /\.[cm]?ts$/.test(context.filename);
     const inline = (node) => {
       const found = directives(node.body?.body).find((item) => item.directive === "use server");
       if (found)
@@ -37,6 +38,12 @@ export default {
           context.report({
             node: top,
             message: "Move the action into <feature>-actions.ts, the only file with 'use server'.",
+          });
+        if (named && !actions)
+          context.report({
+            node: program,
+            message:
+              "Rename this component file so it does not end in -actions; <feature>-actions.ts holds only Server Actions.",
           });
         if (actions && !top)
           context.report({ node: program, message: "Start <feature>-actions.ts with 'use server'." });
