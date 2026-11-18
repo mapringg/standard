@@ -43,7 +43,20 @@ Each app's and package's `package.json` maps `#/` to its own `src`:
 { "imports": { "#/*": "./src/*" } }
 ```
 
-Import as `#/lib/env.js`, with the `.js` extension, even for `.ts` and `.tsx` files. Node, TypeScript and the bundlers resolve `#/` against the importing file's own `package.json`, so one package can type check another's source.
+Import with the source file's own extension, as `#/lib/env.ts` or `#/components/ui/button.tsx`. Node, TypeScript and the bundlers resolve `#/` against the importing file's own `package.json`, so one package can type check another's source.
+
+A package that compiles to `dist` also maps the compiled files, and its build tsconfig sets `"noEmit": false` and `"rewriteRelativeImportExtensions": true`:
+
+```json
+{
+  "imports": {
+    "#/*.ts": { "types": "./src/*.ts", "compiled": "./dist/*.js", "default": "./src/*.ts" },
+    "#/*": "./src/*"
+  }
+}
+```
+
+Run the compiled code with `node --conditions=compiled`.
 
 `.githooks/pre-push`:
 
