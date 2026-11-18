@@ -15,5 +15,11 @@
   },
   "ignoreIssues": {
     "apps/*/src/features/*/routes.ts": ["types"]
+  },
+  "workspaces": {
+    "apps/*": {
+      "entry": ["src/app/**/*.{ts,tsx}!", "src/pages/**/*.{ts,tsx,astro}!"],
+      "includeEntryExports": false
+    }
   }
 }
