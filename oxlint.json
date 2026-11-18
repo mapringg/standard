@@ -167,7 +167,8 @@
           "object": false
         }
       }
-    ]
+    ],
+    "react/forbid-component-props": "off"
   },
   "overrides": [
     {

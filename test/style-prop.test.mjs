@@ -10,8 +10,14 @@ test("style-prop allows only CSS custom properties", (t) => {
     "apps/web/src/components/ui/box.tsx": "export const Box = () => <div style={{ width: 10 }} />;\n",
     "apps/web/src/components/ui/mixed.tsx":
       'export const Mixed = (props: { value: string }) => <div style={{ "--a": props.value, color: "red" }} />;\n',
+    "apps/web/src/components/ui/card.tsx":
+      'import { Bar } from "@/components/ui/bar";\nexport const Card = () => <Bar className="p-2" value="1" />;\n',
     "apps/web/src/components/ui/spread.tsx": "export const Spread = (props: object) => <div style={props} />;\n",
   });
+  deepEqual(
+    result.filter((item) => /forbid/.test(item.rule)),
+    [],
+  );
   deepEqual(filesWith(result, "style-prop"), [
     "apps/web/src/components/ui/box.tsx",
     "apps/web/src/components/ui/mixed.tsx",

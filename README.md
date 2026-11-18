@@ -99,6 +99,7 @@ oxlint only lints JS and TS files, so `standard/repo-shape` walks the repo once 
 | `react/jsx-filename-extension`                                                                          | Components are `.tsx`.                                                          |
 | `react/jsx-props-no-spreading`                                                                          | `components/ui` wrappers forward props to primitives.                           |
 | `react/jsx-max-depth`                                                                                   | Layouts nest deeper than any fixed limit without being wrong.                   |
+| `react/forbid-component-props`                                                                          | Its default bans `className`; `standard/style-prop` covers `style`.             |
 | `eslint/sort-keys`, `eslint/sort-imports`                                                               | oxfmt sorts imports; key order follows meaning.                                 |
 | `eslint/func-style`, `eslint/one-var`, `eslint/curly`, `eslint/no-ternary`                              | Formatting taste, not correctness.                                              |
 | `eslint/no-magic-numbers`                                                                               | HTTP statuses, limits and timeouts are clearest as literals.                    |
