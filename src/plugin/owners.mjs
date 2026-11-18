@@ -8,6 +8,7 @@ const APPS = [...API, ...UI];
 const PARAMS = ["src/features/*/*-params.ts"];
 const ROUTES = ["src/app/**", "src/pages/**"];
 const TESTS = ["**/*.test.ts", "**/*.test.tsx", "**/*.test-utils.ts", "e2e/*.test.ts"];
+const OAUTH = "src/features/oauth/**";
 const VIA = new Set(["window", "globalThis", "self"]);
 const DRIVERS =
   /^(?:pg|postgres|mysql2|mariadb|redis|ioredis|mongodb|mongoose|better-sqlite3|kysely|drizzle-orm|bun:sqlite|node:sqlite|@prisma\/client|@neondatabase\/.+|@libsql\/.+|@planetscale\/.+|@upstash\/.+|@aws-sdk\/.+|@google-cloud\/.+)(?:\/.*)?$/;
@@ -64,6 +65,12 @@ const TABLE = [
     kinds: UI,
     owner: ["src/lib/api/**"],
     use: "Call the API through the typed client in @/lib/api.",
+  },
+  {
+    ban: { literal: /^set-cookie$/i, method: ["getSetCookie"] },
+    kinds: UI,
+    owner: ["src/lib/api/**"],
+    use: "Forward the API's Set-Cookie only in @/lib/api.",
   },
   {
     ban: { global: "fetch" },
@@ -214,10 +221,15 @@ const TABLE = [
   {
     ban: { property: [null, "onError"] },
     kinds: API,
-    owner: ["src/app.ts"],
+    owner: ["src/app.ts", OAUTH],
     use: "Throw ApiError; src/app.ts maps errors through lib/errors.ts.",
   },
-  { ban: { property: [null, "notFound"] }, kinds: API, owner: ["src/app.ts"], use: 'Throw ApiError("not_found").' },
+  {
+    ban: { property: [null, "notFound"] },
+    kinds: API,
+    owner: ["src/app.ts", OAUTH],
+    use: 'Throw ApiError("not_found").',
+  },
   {
     ban: { property: [null, "put"] },
     kinds: API,
@@ -301,6 +313,11 @@ export default {
           const entry = rules.find((candidate) => candidate.ban.method?.includes(name));
           if (entry) report(node, entry);
         }
+      },
+      Literal(node) {
+        if (typeof node.value !== "string") return;
+        const entry = rules.find((candidate) => candidate.ban.literal?.test(node.value));
+        if (entry) report(node, entry);
       },
       ExportNamedDeclaration(node) {
         const names =
