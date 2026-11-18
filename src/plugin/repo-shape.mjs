@@ -172,7 +172,9 @@ function fileProblems(rel, root, localized) {
   if (/\.spec\.[cm]?[jt]sx?$/.test(name)) found.push("Rename the test to *.test.ts or *.test.tsx.");
   if (
     CODE.test(name) &&
-    /^(?:.*[-.])?(?:helpers?|mocks?|stubs?|fakes?|test-?utils|setup)\.[cm]?[jt]sx?$/.test(name) &&
+    /^(?:(?:.*[-.])?(?:helpers?|mocks?|stubs?|fakes?|test-?utils)|(?:(?:vi)?test[-.]|jest[-.])?setup)\.[cm]?[jt]sx?$/.test(
+      name,
+    ) &&
     !/\.test-utils\.[cm]?[jt]sx?$/.test(name)
   ) {
     found.push("Rename the file to <name>.fixture.ts or <name>.test-utils.ts.");

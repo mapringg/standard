@@ -96,3 +96,34 @@ test("tests rule accepts the MSW 3 strict listen option", (t) => {
   });
   deepEqual(only(result, "tests"), []);
 });
+
+test("tests rule lets fixtures polyfill browser globals and stub env vars", (t) => {
+  const result = lint(t, {
+    "packages/i18n/src/add.ts": source,
+    "packages/i18n/src/add.fixture.ts": [
+      'import { vi } from "vitest";',
+      "",
+      "globalThis.ResizeObserver ??= class {",
+      "  observe = () => undefined;",
+      "};",
+      'vi.stubEnv("API_URL", "http://localhost");',
+      "",
+      "export const ready = true;",
+      "",
+    ].join("\n"),
+    "packages/i18n/src/add.test.ts": `${vitest}vi.stubEnv("API_URL", "x");\nglobalThis.ResizeObserver ??= class {};\ntest("adds", () => { expect(add(1, 2)).toBe(3); });\n`,
+    "packages/i18n/src/sub.ts": source,
+    "packages/i18n/src/sub.fixture.ts":
+      'globalThis.fetch = () => Promise.reject(new Error("x"));\nexport const ready = true;\n',
+  });
+  deepEqual(
+    only(result, "tests")
+      .map((item) => `${item.file} ${item.message}`)
+      .sort(),
+    [
+      `packages/i18n/src/add.test.ts ${double}.`,
+      `packages/i18n/src/add.test.ts ${double}.`,
+      `packages/i18n/src/sub.fixture.ts ${double}.`,
+    ],
+  );
+});

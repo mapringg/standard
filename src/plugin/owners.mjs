@@ -78,6 +78,12 @@ const TABLE = [
     use: "Forward the API's Set-Cookie only in #/lib/api.",
   },
   {
+    ban: { property: ["document", "cookie"] },
+    kinds: UI,
+    owner: ["src/lib/cookie.browser.ts"],
+    use: "Read and write cookies through the helper in #/lib/cookie.browser.",
+  },
+  {
     ban: { global: "fetch" },
     kinds: API,
     owner: ["src/upstreams/**"],
@@ -339,8 +345,21 @@ export default {
           if (entry) report(node, entry);
         }
       },
+      JSXMemberExpression(node) {
+        const object = node.object.type === "JSXIdentifier" ? node.object.name : null;
+        const name = node.property.name;
+        if (namespaces.has(object) && hooks.has(name) && importBinding(context.sourceCode.getScope(node), object))
+          report(node, hooks.get(name));
+      },
       Literal(node) {
         if (typeof node.value !== "string") return;
+        const call = node.parent;
+        if (
+          call?.type === "CallExpression" &&
+          call.callee.type === "MemberExpression" &&
+          call.callee.property.name === "has"
+        )
+          return;
         const entry = rules.find((candidate) => candidate.ban.literal?.test(node.value));
         if (entry) report(node, entry);
       },

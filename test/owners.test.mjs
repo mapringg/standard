@@ -1,7 +1,7 @@
 import { deepEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { filesWith, lint } from "./lint.mjs";
+import { filesWith, lint, only } from "./lint.mjs";
 
 test("owners lets only owner files use what they own", (t) => {
   const result = lint(t, {
@@ -123,4 +123,48 @@ test("owners lets a database suite inherit its owner's permissions", (t) => {
     "apps/web/src/lib/log.browser.test.ts": "export const spy = () => console.log;\n",
   });
   deepEqual(filesWith(result, "owners"), ["apps/api/src/features/x/service.mongo.test.ts"]);
+});
+
+test("owners flags only Set-Cookie reads that obtain the value", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-has.ts": 'export const has = (h: Headers) => h.has("set-cookie");\n',
+    "apps/web/src/features/task/task-get.ts": 'export const get = (h: Headers) => h.get("set-cookie");\n',
+  });
+  deepEqual(filesWith(result, "owners"), ["apps/web/src/features/task/task-get.ts"]);
+});
+
+test("owners treats React.X like the named import", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-suspense.tsx":
+      'import * as React from "react";\nexport const View = () => <React.Suspense fallback={null}><div /></React.Suspense>;\n',
+    "apps/web/src/features/task/task-default.tsx":
+      'import React from "react";\nexport const View = () => <React.Suspense fallback={null}><div /></React.Suspense>;\n',
+    "apps/web/src/features/task/task-state.tsx":
+      'import * as React from "react";\nexport const useOpen = () => React.useState(false);\n',
+    "apps/web/src/features/task/task-fragment.tsx":
+      'import * as React from "react";\nexport const View = () => <React.Fragment><div /></React.Fragment>;\n',
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/web/src/features/task/task-default.tsx",
+    "apps/web/src/features/task/task-state.tsx",
+    "apps/web/src/features/task/task-suspense.tsx",
+  ]);
+});
+
+test("owners lets only the cookie helper touch document.cookie", (t) => {
+  const write = "export const write = (value: string) => {\n  document.cookie = value;\n};\n";
+  const result = lint(t, {
+    "apps/web/src/lib/cookie.browser.ts": write,
+    "apps/web/src/features/task/task-cookie.ts": write,
+    "apps/web/src/features/task/task-read.ts": "export const read = () => document.cookie;\n",
+  });
+  deepEqual(
+    only(result, "owners")
+      .map((item) => `${item.file} ${item.message}`)
+      .sort(),
+    [
+      "apps/web/src/features/task/task-cookie.ts Read and write cookies through the helper in #/lib/cookie.browser.",
+      "apps/web/src/features/task/task-read.ts Read and write cookies through the helper in #/lib/cookie.browser.",
+    ],
+  );
 });
