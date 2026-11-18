@@ -1,7 +1,7 @@
 import { deepEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { filesWith, lint, only } from "./lint.mjs";
+import { crashes, filesWith, lint, only } from "./lint.mjs";
 
 test("server-actions keeps actions in -actions.ts with Action names", (t) => {
   const result = lint(t, {
@@ -31,4 +31,19 @@ test("server-actions asks a component named *-actions.tsx to be renamed", (t) =>
     only(result, "server-actions").map((item) => item.message),
     ["Rename this component file so it does not end in -actions; <feature>-actions.ts holds only Server Actions."],
   );
+});
+
+test("server-actions checks destructured action exports", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-actions.ts":
+      '"use server";\nimport { makeActions } from "@/lib/actions";\nexport const { saveAction, load } = makeActions();\nexport const [moveAction] = [makeActions];\n',
+    "apps/api/src/middleware/public-routes.ts": 'export const { publicRoutes } = { publicRoutes: ["/api/*"] };\n',
+    "apps/api/src/middleware/auth.ts": 'export const { publicRoutes } = { publicRoutes: ["/api/health"] };\n',
+  });
+  deepEqual(crashes(result), []);
+  deepEqual(
+    only(result, "server-actions").map((item) => item.message),
+    ["Rename the action to loadAction."],
+  );
+  deepEqual(filesWith(result, "owners"), ["apps/api/src/middleware/auth.ts"]);
 });
