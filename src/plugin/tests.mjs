@@ -122,7 +122,12 @@ export default {
     const toggles = [];
     const faked = (node) => {
       const before = toggles.filter((item) => item.start < node.range[0] && contains(item.container, node));
-      return before.length > 0 && before.reduce((last, item) => (item.start > last.start ? item : last)).fake;
+      return (
+        before.length > 0 &&
+        before.reduce((last, item) =>
+          item.start > last.start || (item.start === last.start && item.order > last.order) ? item : last,
+        ).fake
+      );
     };
     let msw = false;
     const bodyOf = (node) => {
@@ -146,7 +151,7 @@ export default {
         }
         if (memberCall(node, MOCKERS, TIMER_CALLS)) {
           const scope = timerScope(node);
-          if (scope) toggles.push({ ...scope, fake: FAKE_TIMERS.has(property) });
+          if (scope) toggles.push({ ...scope, order: node.range[0], fake: FAKE_TIMERS.has(property) });
         }
         if (memberCall(node, new Set(["Date", "performance"]), new Set(["now"]))) clocks.push(node);
         if (memberCall(node, MOCKERS, MOCKS)) report(node, DOUBLE);

@@ -261,6 +261,14 @@ function applies(entry, where) {
   return !matches(where.local, entry.owner ?? []);
 }
 
+function importBinding(scope, name) {
+  for (let current = scope; current; current = current.upper) {
+    const variable = current.set.get(name);
+    if (variable) return variable.defs[0]?.type === "ImportBinding";
+  }
+  return false;
+}
+
 export default {
   meta: {
     type: "problem",
@@ -307,7 +315,8 @@ export default {
         if (node.computed) return;
         const name = node.property.name;
         const object = node.object.type === "Identifier" ? node.object.name : null;
-        if (namespaces.has(object) && hooks.has(name)) report(node, hooks.get(name));
+        if (namespaces.has(object) && hooks.has(name) && importBinding(context.sourceCode.getScope(node), object))
+          report(node, hooks.get(name));
         if (object && VIA.has(object) && globals.has(name)) report(node, globals.get(name));
         if (node.object.type === "MetaProperty" && name === "env") {
           const entry = rules.find((candidate) => candidate.ban.meta === "env");

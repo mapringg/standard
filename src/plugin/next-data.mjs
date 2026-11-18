@@ -70,9 +70,14 @@ export default {
         client = top.includes("use client");
       },
       ...Object.fromEntries(FUNCTION.map((type) => [type, enter])),
-      ...moduleVisitors((source, node) => {
+      ...moduleVisitors((source, node, specifiers) => {
         if (source === "server-only") serverOnly = true;
-        if (client && SERVER_MODULE.test(source))
+        const typeOnly =
+          node.importKind === "type" ||
+          node.exportKind === "type" ||
+          (specifiers.length > 0 &&
+            specifiers.every((item) => item.importKind === "type" || item.exportKind === "type"));
+        if (client && !typeOnly && SERVER_MODULE.test(source))
           context.report({
             node,
             message:
