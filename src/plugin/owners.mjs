@@ -283,20 +283,21 @@ export default {
           entry.ban.property[1] === name &&
           (entry.ban.property[0] === null || entry.ban.property[0] === object),
       );
-    return {
-      ...moduleVisitors((source, node, specifiers) => {
-        for (const entry of rules) {
-          if (source === "react" && entry.ban.react) {
-            for (const specifier of specifiers)
-              if (entry.ban.react.includes(importedName(specifier))) report(specifier, entry);
-          }
-          if (!entry.ban.module?.test(source)) continue;
-          if (!entry.ban.names) report(node, entry);
-          else
-            for (const specifier of specifiers)
-              if (entry.ban.names.includes(importedName(specifier))) report(specifier, entry);
+    const modules = moduleVisitors((source, node, specifiers) => {
+      for (const entry of rules) {
+        if (source === "react" && entry.ban.react) {
+          for (const specifier of specifiers)
+            if (entry.ban.react.includes(importedName(specifier))) report(specifier, entry);
         }
-      }),
+        if (!entry.ban.module?.test(source)) continue;
+        if (!entry.ban.names) report(node, entry);
+        else
+          for (const specifier of specifiers)
+            if (entry.ban.names.includes(importedName(specifier))) report(specifier, entry);
+      }
+    });
+    return {
+      ...modules,
       MemberExpression(node) {
         if (node.computed) return;
         const name = node.property.name;
@@ -320,6 +321,7 @@ export default {
         if (entry) report(node, entry);
       },
       ExportNamedDeclaration(node) {
+        modules.ExportNamedDeclaration(node);
         const names =
           node.declaration?.declarations?.map((item) => item.id.name) ??
           node.specifiers.map((item) => item.exported.name);
