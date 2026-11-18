@@ -9,6 +9,7 @@ const STATUS = new Set(["json", "body"]);
 const STREAMS = new Set(["streamSSE", "streamText", "stream"]);
 const OPENAPI = new Set(["openAPIRouteHandler", "openAPISpecs", "generateSpecs", "Scalar"]);
 const FUNCTION = new Set(["FunctionExpression", "ArrowFunctionExpression"]);
+const HANDLERS = new Set(["createHandlers", "createMiddleware"]);
 const KEBAB = "[a-z]+(?:-[a-z]+)*";
 const MOUNT = new RegExp(`^/api/${KEBAB}$`);
 const PATH = new RegExp(`^/(?:${KEBAB}|:id)?$`);
@@ -63,11 +64,20 @@ function inStream(node) {
   return false;
 }
 
+function contextIndex(fn) {
+  const call = fn.parent;
+  if (call?.type !== "CallExpression" || !call.arguments.includes(fn)) return -1;
+  const name = call.callee.type === "Identifier" ? call.callee.name : property(call.callee);
+  if (name === "onError") return 1;
+  return CHAIN.has(name) || HANDLERS.has(name) ? 0 : -1;
+}
+
 function isContext(node) {
   if (node?.type !== "Identifier") return false;
   for (let current = node.parent; current; current = current.parent) {
-    if (FUNCTION.has(current.type) && current.params[0]?.type === "Identifier" && current.params[0].name === node.name)
-      return true;
+    if (!FUNCTION.has(current.type)) continue;
+    const index = current.params.findIndex((param) => param.type === "Identifier" && param.name === node.name);
+    if (index !== -1) return index === contextIndex(current);
   }
   return false;
 }
