@@ -19,6 +19,11 @@ test("style-prop allows only CSS custom properties", (t) => {
     "apps/web/src/components/ui/cast-width.tsx":
       'import type { CSSProperties } from "react";\nexport const CastWidth = () => <div style={{ width: 10 } as CSSProperties} />;\n',
     "apps/web/src/components/ui/spread.tsx": "export const Spread = (props: object) => <div style={props} />;\n",
+    "apps/web/src/components/ui/motion.tsx":
+      'import { m } from "motion/react";\n\nexport const Motion = (props: { x: number }) => <m.div style={{ x: props.x }} />;\n',
+    "apps/web/src/components/ui/framed.tsx":
+      'import { Frame } from "#/components/ui/frame";\n\nexport const Framed = () => <Frame style={{ width: 10 }} />;\n',
+    "apps/web/src/components/ui/custom.tsx": "export const Custom = () => <my-element style={{ width: 10 }} />;\n",
   });
   deepEqual(
     result.filter((item) => /forbid/.test(item.rule)),
@@ -27,6 +32,7 @@ test("style-prop allows only CSS custom properties", (t) => {
   deepEqual(filesWith(result, "style-prop"), [
     "apps/web/src/components/ui/box.tsx",
     "apps/web/src/components/ui/cast-width.tsx",
+    "apps/web/src/components/ui/custom.tsx",
     "apps/web/src/components/ui/mixed.tsx",
     "apps/web/src/components/ui/spread.tsx",
   ]);
