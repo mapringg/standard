@@ -89,3 +89,32 @@ test("migrate names refuses an unknown subcommand, flag or effect reason", (t) =
     assert.match(run.stderr, message);
   }
 });
+
+test("migrate names keeps the config's own formatting outside the entries it drops", (t) => {
+  const cwd = fixture(t);
+  const text = [
+    "{",
+    '  "pr": { "ticket-prefix": "ABC" },',
+    '  "banned": [{ "global": "navigator", "files": ["apps/web/src/**"], "except": ["apps/web/src/map/use-bind.browser.ts"], "fix": "Use the map." }],',
+    '  "effect-wrappers": [',
+    '    { "file": "apps/web/src/map/use-bind.browser.ts", "reason": "Binds props to the map instance, which renders no element." },',
+    '    { "file": "apps/web/src/home/panel.tsx", "reason": "Reads the collections after mount." }',
+    "  ],",
+    '  "client-data": [{ "file": "apps/web/src/features/list.tsx", "reason": "pages" }]',
+    "}",
+    "",
+  ].join("\n");
+  write(cwd, { ".standard/config.json": text });
+  const run = standard(cwd, ["migrate", "names", "--write"]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(readFileSync(join(cwd, ".standard/config.json"), "utf8"), [
+    "{",
+    '  "pr": { "ticket-prefix": "ABC" },',
+    '  "banned": [{ "global": "navigator", "files": ["apps/web/src/**"], "except": ["apps/web/src/map/use-bind.effect-sync.browser.ts"], "fix": "Use the map." }],',
+    '  "effect-wrappers": [',
+    '    { "file": "apps/web/src/home/panel.tsx", "reason": "Reads the collections after mount." }',
+    "  ]",
+    "}",
+    "",
+  ].join("\n"));
+});
