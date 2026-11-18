@@ -130,8 +130,8 @@ test("pr-body ignores a ticket line inside a code block", (t) => {
 });
 
 test("pr-body reports a malformed ticket under the four-key schema", (t) => {
-  const { stdout } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: whatever-not-a-key" }), { config: { $schema: "x", pr: { "ticket-prefix": "ABC" } } });
-  assert.match(stdout, /Ticket:/);
+  const { stdout } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: whatever-not-a-key" }), { config: { $schema: "x", ticket: "ABC" } });
+  assert.match(stdout, /::warning title=pr-body::Ticket:/);
   assert.doesNotMatch(stdout, /pr-body: OK/);
 });
 
@@ -544,5 +544,15 @@ test("the config fails on a bad pr key", (t) => {
     const { stderr, status } = standard(tempRepo(t, config), ["check"]);
     assert.match(stderr, expected);
     assert.equal(status, 1);
+  }
+});
+
+test("baseline-growth ratchets skip across the legacy-to-modern transition", (t) => {
+  for (const base of [{ skip: ["banned"] }, { pending: ["banned"] }]) {
+    const kept = checkGrowth(t, { base: { ".standard/config.json": base }, head: { ".standard/config.json": { skip: ["banned"] } } });
+    assert.equal(kept.status, 0, kept.stdout + kept.stderr);
+    const grown = checkGrowth(t, { base: { ".standard/config.json": base }, head: { ".standard/config.json": { skip: ["banned", "react"] } } });
+    assert.equal(grown.status, 1);
+    assert.match(grown.stdout, /react/);
   }
 });

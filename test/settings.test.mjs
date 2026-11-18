@@ -13,28 +13,28 @@ test("the schema is generated from the registered checks", () => {
 });
 
 test("the four-key config rejects severity controls and validates facts", () => {
-  assert.equal(parseConfig('{"pr":{"ticket-prefix":"ABC"},"pending":["cache-components"],"except":{"standard/log":["src/old.ts"]}}').pr["ticket-prefix"], "ABC");
-  for (const value of [{ rules: {} }, { overrides: [] }, { except: { typo: ["src/**"] } }, { pending: ["docs", "docs"] }, { pr: { "ticket-prefix": "abc" } }]) assert.throws(() => parseConfig(JSON.stringify(value)));
+  assert.equal(parseConfig('{"ticket":"ABC","skip":["cache-components"],"allow":{"standard/log":["src/old.ts"]}}').pr["ticket-prefix"], "ABC");
+  for (const value of [{ ticket: 'ABC', pending: [] }, { skip: [], pr: {} }, { rules: {} }, { overrides: [] }, { allow: { typo: ["src/**"] } }, { skip: ["docs", "docs"] }, { ticket: "abc" }]) assert.throws(() => parseConfig(JSON.stringify(value)));
 });
 
-test("except filters real findings and dead globs fail", async (t) => {
-  const root = tempRepo(t, { except: { banned: ["src/skip.ts"] } });
+test("allow filters real findings and dead globs fail", async (t) => {
+  const root = tempRepo(t, { allow: { banned: ["src/skip.ts"] } });
   write(root, { "src/skip.ts": 'import { useEffect } from "react";', "src/keep.ts": 'import { useEffect } from "react";' });
   git(root, "add", ".");
   const results = await run({ checks: registry, repo: loadRepo(root), scope: { commits: null, pr: null }, names: ["banned"] });
   assert.equal(results[0].check, "banned");
   assert.equal(results[0].failed, true);
-  for (const config of [{ except: { banned: ["missing/**"] } }, { except: { banned: ["src/clean.ts"] } }, { pending: ["banned"], except: { banned: ["src/skip.ts"] } }]) {
+  for (const config of [{ allow: { banned: ["missing/**"] } }, { allow: { banned: ["src/clean.ts"] } }, { skip: ["banned"], allow: { banned: ["src/skip.ts"] } }]) {
     write(root, { ".standard/config.json": config, "src/clean.ts": "export const value = 1;" });
     git(root, "add", ".");
     const result = standard(root, ["check", "banned"]);
     assert.equal(result.status, 1);
-    assert.match(result.stdout + result.stderr, /changes no findings|matches no files|pending/);
+    assert.match(result.stdout + result.stderr, /changes no findings|matches no files|skip/);
   }
 });
 
 test("plugin exceptions suppress findings and participate in the drift guard", (t) => {
-  const root = tempRepo(t, { except: { "standard/log": ["src/old.ts"] } });
+  const root = tempRepo(t, { allow: { "standard/log": ["src/old.ts"] } });
   write(root, { "package.json": { type: "module" }, "src/old.ts": "console.log(1);" });
   git(root, "add", ".");
   assert.equal(standard(root, ["check", "config"]).status, 0);
@@ -49,12 +49,12 @@ test("oxlint cannot turn standard rules off through config or overrides", (t) =>
     git(root, "add", ".");
     const result = standard(root, ["check", "config"]);
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /except/);
+    assert.match(result.stdout, /allow/);
   }
 });
 
 test("commit-subject runs do not execute the tree drift guard", async (t) => {
-  const root = tempRepo(t, { except: { banned: ["missing/**"] } });
+  const root = tempRepo(t, { allow: { banned: ["missing/**"] } });
   git(root, "add", ".");
   const result = await run({ checks: registry, repo: loadRepo(root), names: ["commit-subject"], scope: { commits: [{ sha: null, subject: "Add a feature", body: "", parents: null, source: "message" }], pr: null } });
   assert.equal(result[0].check, "commit-subject");
@@ -81,3 +81,10 @@ test("inherited object properties cannot masquerade as known config keys", () =>
   }
 });
 
+
+test("legacy facts emit a notice and cannot mix with modern keys", (t) => {
+  const root = tempRepo(t, { pr: { "ticket-prefix": "ABC" }, pending: ["banned"] });
+  const result = standard(root, ["check", "banned"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.migrationNotice, true);
+});
