@@ -32,7 +32,7 @@ function body({ summary = "Accept a Before/After table as evidence.", evidence, 
   ].join("\n");
 }
 
-function checkBody(t, prBody, { config } = {}) {
+function checkBody(t, prBody, { config = { rules: { "pr-body": "warn" } } } = {}) {
   const repo = pullRequestRepo(t, { base: config ? { ".standard/config.json": config } : {} });
   return checkPullRequest(t, repo, { body: prBody }, ["pr-body"]);
 }
@@ -129,9 +129,9 @@ test("pr-body ignores a ticket line inside a code block", (t) => {
   assert.equal(checkBody(t, prBody).stdout.trim(), BODY_OK);
 });
 
-test("pr-body warns on a ticket line when the repo has no ticket prefix", (t) => {
+test("pr-body ignores ticket conventions in the new config", (t) => {
   const { stdout, status } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: ABC-12" }));
-  assert.match(stdout, /::warning title=pr-body::Ticket: .*\.standard\/config\.json sets no pr\.ticket-prefix.* Delete the line\./);
+  assert.equal(stdout.trim(), BODY_OK);
   assert.equal(status, 0);
 });
 
@@ -466,6 +466,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "docs: OK",
       "docs-prose: OK",
       "no-doc-pointers: OK",
+      "config: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);
