@@ -87,6 +87,7 @@ const TABLE = [
     ban: { global: "fetch" },
     kinds: API,
     owner: ["src/upstreams/**"],
+    except: { in: TESTS, imports: /^express$/ },
     use: "Call outside services through src/upstreams/<vendor>.ts with a timeout.",
   },
   {
@@ -196,6 +197,7 @@ const TABLE = [
     ban: { module: /^#\/lib\/api(?:\/|$)|\.server$/ },
     kinds: UI,
     in: ROUTES,
+    owner: ["src/app/**/route.ts"],
     use: "Import a feature component that loads its own data.",
   },
   {
@@ -253,7 +255,13 @@ const TABLE = [
     owner: ["src/middleware/public-routes.ts"],
     use: "List public routes in src/middleware/public-routes.ts.",
   },
-  { ban: { property: ["app", "request"] }, kinds: API, in: TESTS, use: "Call routes through testClient()." },
+  {
+    ban: { property: ["app", "request"] },
+    kinds: API,
+    in: TESTS,
+    except: { path: /^\/(?!api(?:\/|$))/ },
+    use: "Call routes through testClient().",
+  },
   { ban: { property: ["expect", "poll"] }, in: TESTS, use: "Await the real event instead of polling." },
   { ban: { property: ["jest", "setTimeout"] }, in: TESTS, use: "Make the test fast instead of raising its timeout." },
   {
@@ -277,6 +285,12 @@ function applies(entry, where) {
   return !subjects(where.local).some((local) => matches(local, entry.owner ?? []));
 }
 
+function firstPath(node) {
+  const call = node.parent;
+  const arg = call?.type === "CallExpression" && call.callee === node ? call.arguments[0] : null;
+  return arg?.type === "Literal" && typeof arg.value === "string" ? arg.value : null;
+}
+
 function importBinding(scope, name) {
   for (let current = scope; current; current = current.upper) {
     const variable = current.set.get(name);
@@ -295,7 +309,16 @@ export default {
     if (!where?.base) return {};
     const rules = TABLE.filter((entry) => applies(entry, where));
     if (rules.length === 0) return {};
-    const report = (node, entry) => context.report({ node, message: entry.use });
+    const sources = [];
+    const pending = [];
+    const report = (node, entry) => pending.push({ node, entry });
+    const excepted = ({ node, entry }) => {
+      const rule = entry.except;
+      if (!rule) return false;
+      if (rule.in && !matches(where.local, rule.in)) return false;
+      if (rule.imports && !sources.some((source) => rule.imports.test(source))) return false;
+      return !rule.path || rule.path.test(firstPath(node) ?? "");
+    };
     const globals = new Map(
       rules.flatMap((entry) => (entry.ban.global ? list(entry.ban.global).map((name) => [name, entry]) : [])),
     );
@@ -309,6 +332,7 @@ export default {
       );
     const namespaces = new Set();
     const modules = moduleVisitors((source, node, specifiers) => {
+      sources.push(source);
       if (source === "react")
         for (const specifier of specifiers)
           if (specifier.type === "ImportNamespaceSpecifier" || specifier.type === "ImportDefaultSpecifier")
@@ -370,11 +394,12 @@ export default {
           if (entry.ban.export && names.some((name) => entry.ban.export.includes(name))) report(node, entry);
       },
       "Program:exit"(program) {
-        if (globals.size === 0) return;
-        for (const reference of context.sourceCode.getScope(program).through) {
-          const entry = globals.get(reference.identifier.name);
-          if (entry) report(reference.identifier, entry);
-        }
+        if (globals.size > 0)
+          for (const reference of context.sourceCode.getScope(program).through) {
+            const entry = globals.get(reference.identifier.name);
+            if (entry) report(reference.identifier, entry);
+          }
+        for (const item of pending) if (!excepted(item)) context.report({ node: item.node, message: item.entry.use });
       },
     };
   },

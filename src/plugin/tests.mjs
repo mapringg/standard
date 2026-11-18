@@ -18,6 +18,7 @@ const BEFORE_HOOKS = new Set(["beforeEach", "beforeAll"]);
 const AFTER_HOOKS = new Set(["afterEach", "afterAll"]);
 const FAKE_TIMERS = new Set(["useFakeTimers", "setSystemTime"]);
 const TIMER_CALLS = new Set([...FAKE_TIMERS, "useRealTimers"]);
+const HTTP_SERVERS = /^(?:express|(?:node:)?https?)$/;
 const CONFIG = /^(?:vitest|vite|jest)\.config\.[cm]?[jt]s$/;
 
 function rootName(node) {
@@ -132,6 +133,7 @@ export default {
       );
     };
     let msw = false;
+    const servers = new Set();
     const bodyOf = (node) => {
       for (let current = node.parent; current; current = current.parent)
         if (bodies.has(current)) return bodies.get(current);
@@ -160,7 +162,7 @@ export default {
         if (!fixture && memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
         if (!fixture && property && FAKES.test(property)) report(node, DOUBLE);
         if (property === "defineProperty" && rootName(callee) === "Object") report(node, DOUBLE);
-        if (property === "listen" && msw && !strictListen(node))
+        if (property === "listen" && msw && !servers.has(rootName(callee.object)) && !strictListen(node))
           report(
             node,
             'Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3).',
@@ -175,6 +177,11 @@ export default {
       },
       ImportDeclaration(node) {
         if (/^msw(?:\/|$)/.test(node.source.value)) msw = true;
+        if (HTTP_SERVERS.test(node.source.value))
+          for (const specifier of node.specifiers) servers.add(specifier.local.name);
+      },
+      VariableDeclarator(node) {
+        if (node.id.type === "Identifier" && node.init && servers.has(rootName(node.init))) servers.add(node.id.name);
       },
       AssignmentExpression(node) {
         const target = node.left;

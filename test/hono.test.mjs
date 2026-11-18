@@ -88,3 +88,41 @@ export const named = env.NODE_ENV === "development-like" && openAPIRouteHandler(
     "apps/api/src/middleware/guard.ts: Pass the status explicitly: c",
   ]);
 });
+
+test("hono leaves Express apps and OAuth spec paths alone", (t) => {
+  const result = lint(t, {
+    "apps/api/src/features/oauth/routes.ts": `import express from "express";
+import { describeRoute } from "hono-openapi";
+import { factory } from "#/factory";
+import { router } from "#/lib/mcp/router";
+const broker = express();
+broker.use(router);
+broker.get("/mcp-oauth/callback", (req, res) => res.json({ code: req.query }));
+export { broker };
+export const oauth = factory
+  .createApp()
+  .get("/.well-known/oauth-authorization-server", describeRoute({}), async (c) => c.json({}, 200))
+  .get("/.well-known/oauth-protected-resource/mcp", describeRoute({}), async (c) => c.json({}, 200))
+  .get("/authorize", describeRoute({}), async (c) => c.json({}, 200))
+  .post("/token", describeRoute({}), async (c) => c.json({}, 200))
+  .post("/register", describeRoute({}), async (c) => c.json({}, 201))
+  .post("/revoke", describeRoute({}), async (c) => c.body(null, 204))
+  .get("/mcp-oauth/callback", describeRoute({}), async (c) => c.json({}, 200));
+`,
+    "apps/api/src/app.ts": `import { factory } from "#/factory";
+import { oauth } from "#/features/oauth/routes";
+import { tasks } from "#/features/tasks/routes";
+export const app = factory.createApp().route("/api/tasks", tasks).route("/", oauth).route("/.well-known", oauth);
+export const bad = factory.createApp().route("/", tasks).route("/.well-known", tasks);
+`,
+  });
+  deepEqual(
+    only(result, "hono")
+      .map((item) => `${item.file}: ${item.message}`)
+      .sort(),
+    [
+      "apps/api/src/app.ts: Mount routers at /api/<plural-kebab>.",
+      "apps/api/src/app.ts: Mount routers at /api/<plural-kebab>.",
+    ],
+  );
+});
