@@ -32,7 +32,7 @@ function body({ summary = "Accept a Before/After table as evidence.", evidence, 
   ].join("\n");
 }
 
-function checkBody(t, prBody, { config = { rules: { "pr-body": "warn" } } } = {}) {
+function checkBody(t, prBody, { config = {} } = {}) {
   const repo = pullRequestRepo(t, { base: config ? { ".standard/config.json": config } : {} });
   return checkPullRequest(t, repo, { body: prBody }, ["pr-body"]);
 }
@@ -129,10 +129,10 @@ test("pr-body ignores a ticket line inside a code block", (t) => {
   assert.equal(checkBody(t, prBody).stdout.trim(), BODY_OK);
 });
 
-test("pr-body ignores ticket conventions in the new config", (t) => {
-  const { stdout, status } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: ABC-12" }));
-  assert.equal(stdout.trim(), BODY_OK);
-  assert.equal(status, 0);
+test("pr-body reports a malformed ticket under the four-key schema", (t) => {
+  const { stdout } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: whatever-not-a-key" }), { config: { $schema: "x", pr: { "ticket-prefix": "ABC" } } });
+  assert.match(stdout, /Ticket:/);
+  assert.doesNotMatch(stdout, /pr-body: OK/);
 });
 
 function checkTitle(t, title, pr = {}) {

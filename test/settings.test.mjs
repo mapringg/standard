@@ -12,43 +12,57 @@ test("the schema is generated from the registered checks", () => {
   assert.deepEqual(JSON.parse(readFileSync(new URL("../schema.json", import.meta.url))), buildSchema(registry));
 });
 
-test("rules accept oxlint severities and reject unknown keys and rules", () => {
-  assert.equal(parseConfig('{"rules":{"docs":"warn"}}').rules.docs, "warn");
-  for (const value of [{ rules: { config: "off" } }, { rules: { typo: "off" } }, { rules: { docs: "sometimes" } }, { $schema: "x", pending: [] }, { overrides: [{ files: [], rules: {} }] }]) {
-    assert.throws(() => parseConfig(JSON.stringify(value)));
-  }
+test("the four-key config rejects severity controls and validates facts", () => {
+  assert.equal(parseConfig('{"pr":{"ticket-prefix":"ABC"},"pending":["cache-components"],"except":{"standard/log":["src/old.ts"]}}').pr["ticket-prefix"], "ABC");
+  for (const value of [{ rules: {} }, { overrides: [] }, { except: { typo: ["src/**"] } }, { pending: ["docs", "docs"] }, { pr: { "ticket-prefix": "abc" } }]) assert.throws(() => parseConfig(JSON.stringify(value)));
 });
 
-test("rule severities and file overrides control real check findings", async (t) => {
-  const root = tempRepo(t, { rules: { banned: "warn" }, overrides: [{ files: ["src/skip.ts"], rules: { banned: "off" } }] });
+test("except filters real findings and dead globs fail", async (t) => {
+  const root = tempRepo(t, { except: { banned: ["src/skip.ts"] } });
   write(root, { "src/skip.ts": 'import { useEffect } from "react";', "src/keep.ts": 'import { useEffect } from "react";' });
   git(root, "add", ".");
   const results = await run({ checks: registry, repo: loadRepo(root), scope: { commits: null, pr: null }, names: ["banned"] });
-  assert.equal(results[0].failed, false);
-  assert.equal(results[0].findings.length, 1);
-  assert.equal(results[0].findings[0].advisory, true);
-});
-
-test("dead override globs fail even when selecting another check", (t) => {
-  for (const files of [["missing/**"], ["src/clean.ts"]]) {
-    const root = tempRepo(t, { overrides: [{ files, rules: { banned: "off" } }] });
-    write(root, { "src/clean.ts": "export const value = 1;" });
+  assert.equal(results[0].check, "banned");
+  assert.equal(results[0].failed, true);
+  for (const config of [{ except: { banned: ["missing/**"] } }, { except: { banned: ["src/clean.ts"] } }, { pending: ["banned"], except: { banned: ["src/skip.ts"] } }]) {
+    write(root, { ".standard/config.json": config, "src/clean.ts": "export const value = 1;" });
     git(root, "add", ".");
     const result = standard(root, ["check", "banned"]);
     assert.equal(result.status, 1);
-    assert.match(result.stdout + result.stderr, /changes no findings|matches no files/);
+    assert.match(result.stdout + result.stderr, /changes no findings|matches no files|pending/);
   }
 });
 
-test("legacy config emits a migration notice and keeps its old checks working", (t) => {
-  const root = tempRepo(t, { pending: ["banned"] });
-  const result = standard(root, ["check", "banned"]);
-  assert.equal(result.status, 0);
-  assert.equal(result.migrationNotice, true);
+test("plugin exceptions suppress findings and participate in the drift guard", (t) => {
+  const root = tempRepo(t, { except: { "standard/log": ["src/old.ts"] } });
+  write(root, { "package.json": { type: "module" }, "src/old.ts": "console.log(1);" });
+  git(root, "add", ".");
+  assert.equal(standard(root, ["check", "config"]).status, 0);
+  write(root, { "src/old.ts": "export const value = 1;" });
+  assert.match(standard(root, ["check", "config"]).stdout, /changes no findings/);
+});
+
+test("oxlint cannot turn standard rules off through config or overrides", (t) => {
+  for (const [path, config] of [[".oxlintrc.json", { overrides: [{ files: ["src/**"], rules: { "standard/log": "off" } }] }], ["oxlint.config.ts", 'export default { rules: { "standard/zod": [0] } };']]) {
+    const root = tempRepo(t, {});
+    write(root, { [path]: config });
+    git(root, "add", ".");
+    const result = standard(root, ["check", "config"]);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /except/);
+  }
+});
+
+test("commit-subject runs do not execute the tree drift guard", async (t) => {
+  const root = tempRepo(t, { except: { banned: ["missing/**"] } });
+  git(root, "add", ".");
+  const result = await run({ checks: registry, repo: loadRepo(root), names: ["commit-subject"], scope: { commits: [{ sha: null, subject: "Add a feature", body: "", parents: null, source: "message" }], pr: null } });
+  assert.equal(result[0].check, "commit-subject");
+  assert.equal(result[0].failed, false);
 });
 
 test("modern docs budgets initialize from real docs and cannot grow", (t) => {
-  const root = tempRepo(t, { rules: {} });
+  const root = tempRepo(t, {});
   write(root, { "README.md": "# Example\n" });
   git(root, "add", ".");
   const initialized = standard(root, ["check", "docs", "--init"]);
@@ -67,8 +81,3 @@ test("inherited object properties cannot masquerade as known config keys", () =>
   }
 });
 
-test("explicit error severity makes an advisory PR finding fail", async (t) => {
-  const root = tempRepo(t, { rules: { "pr-body": "error" } });
-  const result = await run({ checks: registry, repo: loadRepo(root), names: ["pr-body"], scope: { commits: null, pr: { number: 1, body: "empty" } } });
-  assert.equal(result[0].failed, true);
-});
