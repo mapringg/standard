@@ -7,6 +7,8 @@ import { ResolverFactory } from "oxc-resolver";
 import { FILE } from "./config.mjs";
 import { git } from "./repo.mjs";
 import { EFFECT, parseName, withSegment } from "./oxlint/roles.mjs";
+import { EFFECT_HOOKS, keyName } from "./oxlint/hooks.mjs";
+import { returnsCleanup } from "./oxlint/rules/effect-cleanup.mjs";
 
 /** The words in an effect wrapper's legacy reason that name one effect role. A reason that matches no role, or more than one, goes to a human. */
 const WORDS = {
@@ -20,6 +22,41 @@ const SOURCE = /\.[cm]?[jt]sx?$/;
 export function effectReason(reason) {
   const found = Object.entries(WORDS).filter(([, words]) => words.test(reason)).map(([name]) => name);
   return found.length === 1 ? found[0] : undefined;
+}
+
+/** @param {any} node @param {(node: any) => void} visit */
+function walk(node, visit) {
+  if (!node || typeof node !== "object") return;
+  if (typeof node.type === "string") visit(node);
+  for (const value of Object.values(node)) walk(value, visit);
+}
+
+/** @param {string} root @param {string} file Whether a file calls a react effect hook whose callback misses its cleanup on some path, as effect-cleanup reads it. */
+function missesCleanup(root, file) {
+  const path = join(root, file);
+  if (!existsSync(path)) return false;
+  const { program } = parseSync(file, readFileSync(path, "utf8"));
+  const namespaces = new Set();
+  const hooks = new Set();
+  walk(program, (node) => {
+    if (node.type !== "ImportDeclaration" || node.source.value !== "react" || node.importKind === "type") return;
+    for (const item of node.specifiers) {
+      if (item.type !== "ImportSpecifier") namespaces.add(item.local.name);
+      else if (item.importKind !== "type" && EFFECT_HOOKS.includes(keyName(item.imported))) hooks.add(item.local.name);
+    }
+  });
+  walk(program, (node) => {
+    if (node.type !== "VariableDeclarator" || node.id.type !== "ObjectPattern" || node.init?.type !== "Identifier" || !namespaces.has(node.init.name)) return;
+    for (const item of node.id.properties) if (item.type === "Property" && EFFECT_HOOKS.includes(keyName(item.key))) { const value = item.value.type === "AssignmentPattern" ? item.value.left : item.value; if (value.type === "Identifier") hooks.add(value.name); }
+  });
+  let misses = false;
+  walk(program, (node) => {
+    if (node.type !== "CallExpression") return;
+    const { callee } = node;
+    const hook = callee.type === "Identifier" ? hooks.has(callee.name) : callee.type === "MemberExpression" && callee.object.type === "Identifier" && namespaces.has(callee.object.name) && (!callee.computed || callee.property.type === "Literal") && EFFECT_HOOKS.includes(keyName(callee.property));
+    if (hook && !returnsCleanup(node.arguments[0])) misses = true;
+  });
+  return misses;
 }
 
 const MOCKS = new Set(["mock", "doMock", "unmock", "doUnmock", "importActual", "importMock"]);
@@ -95,7 +132,7 @@ function importEdits(root, files, renames) {
 function companion(source, test) {
   const parts = posix.basename(source).split(".").slice(0, -1);
   const tested = posix.basename(test).split(".");
-  return parts.every((part, index) => tested[index] === part) ? parts.length : 0;
+  return parts.every((/** @type {string} */ part, /** @type {number} */ index) => tested[index] === part) ? parts.length : 0;
 }
 
 /**
@@ -158,7 +195,10 @@ export function migrateNames(root, { write, picks }) {
   const pending = new Set();
   for (const { file, reason } of wrappers) {
     const role = picks.get(file) ?? effectReason(reason);
-    if (role) add(file, `effect-${role}`);
+    if (role === "subscribe" && missesCleanup(root, file)) {
+      pending.add(file);
+      lines.push(`pick ${file}: an effect-subscribe effect returns an inline cleanup on every path, and this one does not. Rewrite the effect, or rerun with --effect ${file}=<${EFFECT.filter((item) => item !== "subscribe").join("|")}>.`);
+    } else if (role) add(file, `effect-${role}`);
     else {
       pending.add(file);
       lines.push(`pick ${file}: ${JSON.stringify(reason)} Rerun with --effect ${file}=<${EFFECT.join("|")}>, or rewrite the effect.`);
