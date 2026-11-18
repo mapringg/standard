@@ -169,3 +169,10 @@ test("the 0.16 settings messages say the move to the flat keys is by hand", (t) 
   const legacy = standard(tempRepo(t, { pending: [] }), ["check", "banned"]);
   assert.ok(legacy.migrationNotice, legacy.stderr);
 });
+
+test("migrate names rewrites the partial paths and file names docs use when they name one file", (t) => {
+  const cwd = fixture(t, { [`${WEB}/other/list.tsx`]: "export {};\n", "docs/map.md": "Use `use-bind.browser.ts` from `map/use-bind.browser.ts`, and `features/list.tsx`, not `list.tsx`.\n" });
+  const run = standard(cwd, ["migrate", "names", "--write"]);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.equal(readFileSync(join(cwd, "docs/map.md"), "utf8"), "Use `use-bind.effect-sync.browser.ts` from `map/use-bind.effect-sync.browser.ts`, and `features/list.data-pages.tsx`, not `list.tsx`.\n");
+});
