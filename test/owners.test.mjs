@@ -78,3 +78,13 @@ test("owners ignores a local binding that shadows a react namespace", (t) => {
   });
   deepEqual(filesWith(result, "owners"), []);
 });
+
+test("owners bans forwardRef in every UI app", (t) => {
+  const result = lint(t, {
+    "apps/web/src/components/ui/button.tsx":
+      'import { forwardRef } from "react";\nexport const Button = forwardRef<HTMLButtonElement>((props, ref) => <button ref={ref} {...props} />);\n',
+    "apps/web/src/components/ui/input.tsx":
+      'import type { Ref } from "react";\nexport const Input = (props: { ref?: Ref<HTMLInputElement> }) => <input ref={props.ref} />;\n',
+  });
+  deepEqual(filesWith(result, "owners"), ["apps/web/src/components/ui/button.tsx"]);
+});

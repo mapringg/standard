@@ -20,6 +20,11 @@ const TABLE = [
     use: "Use one useReducer with its reducer in <feature>-state.ts, or useActionState, useOptimistic, useTransition.",
   },
   {
+    ban: { react: ["forwardRef"] },
+    kinds: UI,
+    use: "Take ref as a prop; React 19 passes it to function components.",
+  },
+  {
     ban: { react: ["useEffect", "useLayoutEffect", "useInsertionEffect"] },
     kinds: UI,
     owner: ["src/components/ui/**", "src/lib/notifications.ts"],
