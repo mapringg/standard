@@ -33,3 +33,43 @@ test("zod mini follows browser imports and exempts server-only code", (t) => {
   const result = spawnSync(join(import.meta.dirname, "../../node_modules/.bin/oxlint"), ["-c", "oxlint.json", "--format", "json", "apps", "shared"], { cwd: root, encoding: "utf8" });
   assert.deepEqual(JSON.parse(result.stdout).diagnostics.map(({ filename }) => filename), ["shared/value.ts"]);
 });
+
+function browserDiagnostics(t, files, manifest = { type: "module" }) {
+  const root = tempDir(t, "browser-edges");
+  installPackage(root);
+  write(root, { "package.json": manifest, "oxlint.json": { jsPlugins: ["@mapringg/standard/oxlint"], categories: { correctness: "off" }, rules: { "standard/zod": "error" } }, ...files });
+  const result = spawnSync(join(import.meta.dirname, "../../node_modules/.bin/oxlint"), ["-c", "oxlint.json", "--format", "json", "."], { cwd: root, encoding: "utf8" });
+  assert.ok([0, 1].includes(result.status), result.stdout + result.stderr);
+  return JSON.parse(result.stdout).diagnostics.map(({ filename }) => filename).sort();
+}
+
+test("browser reach follows two hops of shared value imports", (t) => {
+  assert.deepEqual(browserDiagnostics(t, {
+    "src/client.ts": '"use client"; import { value } from "../shared/first"; export { value };',
+    "shared/first.ts": 'export { value } from "./second";',
+    "shared/second.ts": 'import { z } from "zod"; export const value = z.string();',
+  }), ["shared/second.ts"]);
+});
+
+test("browser reach stops at use server modules", (t) => {
+  assert.deepEqual(browserDiagnostics(t, {
+    "src/client.ts": '"use client"; import { action } from "../shared/action"; export { action };',
+    "shared/action.ts": '"use server"; import { value } from "./secret"; export async function action() { return value; }',
+    "shared/secret.ts": 'import { z } from "zod"; export const value = z.string();',
+  }), []);
+});
+
+test("browser reach ignores type-only imports and exports", (t) => {
+  assert.deepEqual(browserDiagnostics(t, {
+    "src/client.ts": '"use client"; import type { Value } from "../shared/imported"; export type { Value as Other } from "../shared/exported"; export type Local = Value;',
+    "shared/imported.ts": 'import { z } from "zod"; export type Value = string; export const schema = z.string();',
+    "shared/exported.ts": 'import { z } from "zod"; export type Value = string; export const schema = z.string();',
+  }), []);
+});
+
+test("Vite browser seeds are confined to src", (t) => {
+  assert.deepEqual(browserDiagnostics(t, {
+    "src/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
+    "runtime/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
+  }, { type: "module", dependencies: { react: "19", vite: "8" } }), ["src/schema.ts"]);
+});

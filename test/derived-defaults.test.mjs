@@ -4,7 +4,8 @@ import { loadRepo } from "../src/repo.mjs";
 import boundaries from "../src/checks/boundaries.mjs";
 import screenshot from "../src/checks/pr-screenshot.mjs";
 import banned from "../src/checks/banned.mjs";
-import { git, tempRepo, write, pullRequestRepo } from "./helpers.mjs";
+import noComments from "../src/checks/no-comments.mjs";
+import { git, tempRepo, write, pullRequestRepo, standard } from "./helpers.mjs";
 
 function fixture(t, files) {
   const root = tempRepo(t, {});
@@ -50,4 +51,18 @@ test("derived screenshots cover React apps and exclude non-product changes", asy
 test("derived hooks run lint-staged, typecheck, test and the fixed extra script", (t) => {
   const repo = fixture(t, { "scripts/pre-push.sh": "true\n" });
   assert.deepEqual(repo.config.hooks, { "pre-commit": ["pnpm exec lint-staged"], "pre-push": ["pnpm typecheck", "pnpm test", "sh scripts/pre-push.sh"] });
+});
+
+test("flat configs retain mocking and comment bans on non-product sources", async (t) => {
+  const files = ["src/a.test.ts", "scripts/a.ts", "fixtures/a.ts"];
+  const repo = fixture(t, Object.fromEntries(files.map((file) => [file, 'import { vi } from "vitest"; vi.mock("./b");\n// Explain a routine operation.\n'])));
+  const mocks = await banned.run(repo, []);
+  const comments = await noComments.run(repo, []);
+  for (const file of files) {
+    assert.ok(mocks.some(({ key }) => key.startsWith(`${file} `) && key.includes("vi.mock")), JSON.stringify(mocks));
+    assert.ok(comments.some(({ key }) => key.startsWith(`${file} `)), JSON.stringify(comments));
+  }
+  const result = standard(repo.root, ["check", "banned"]);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /src\/a.test.ts vitest#vi.mock/);
 });
