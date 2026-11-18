@@ -72,7 +72,8 @@
     "react/jsx-no-literals": [
       "error",
       {
-        "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"]
+        "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"],
+        "allowedStrings": ["-", "–", "—", "/", "|", "·", "•", ":", ",", ".", "…", "(", ")", "+", "×", "%", "#", "*"]
       }
     ],
     "typescript/switch-exhaustiveness-check": [
@@ -182,6 +183,34 @@
       "files": ["**/src/app/**", "**/src/pages/**", "**/*.config.*"],
       "rules": {
         "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["**/src/app/**/page.tsx", "**/src/app/**/layout.tsx"],
+      "rules": {
+        "react/only-export-components": [
+          "error",
+          {
+            "allowExportNames": [
+              "dynamic",
+              "dynamicParams",
+              "revalidate",
+              "fetchCache",
+              "runtime",
+              "preferredRegion",
+              "maxDuration",
+              "experimental_ppr",
+              "instant",
+              "prefetch",
+              "ensureStatic",
+              "metadata",
+              "generateMetadata",
+              "viewport",
+              "generateViewport",
+              "generateStaticParams"
+            ]
+          }
+        ]
       }
     },
     {

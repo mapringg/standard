@@ -21,15 +21,26 @@ function customPropertiesOnly(value) {
   );
 }
 
+function intrinsic(element) {
+  return element.name.type === "JSXIdentifier" && /^[a-z]/.test(element.name.name);
+}
+
 export default {
   meta: {
     type: "problem",
-    docs: { description: "The style prop only sets CSS custom properties; everything else is a class." },
+    docs: {
+      description: "The style prop on a DOM element only sets CSS custom properties; everything else is a class.",
+    },
   },
   create(context) {
     return {
       JSXAttribute(node) {
-        if (node.name.type !== "JSXIdentifier" || node.name.name !== "style" || customPropertiesOnly(node.value))
+        if (
+          node.name.type !== "JSXIdentifier" ||
+          node.name.name !== "style" ||
+          !intrinsic(node.parent) ||
+          customPropertiesOnly(node.value)
+        )
           return;
         context.report({
           node,
