@@ -4,8 +4,9 @@ import { join, matchesGlob } from "node:path";
 const UI = ["web", "liff", "mobile", "marketing"];
 const ALL = ["api", ...UI];
 const PARAMS = "src/features/*/*-params.ts";
-const TESTS = ["**/*.test.ts", "**/*.test.tsx"];
-const PAGE_LAYOUT = ["src/app/**/page.tsx", "src/app/**/layout.tsx"];
+const TESTS = ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"];
+const ROUTES = { "*": ["src/app/**"], marketing: ["src/pages/**"] };
+const SHARED = ["src/lib/**", "src/components/**"];
 
 const hook = (name, message) => ({ name: "react", importNames: [name], message });
 const owned = (thing, owner) => `${thing} belongs to ${owner}. Use it through that file.`;
@@ -171,15 +172,23 @@ const ENTRIES = [
   },
   {
     apps: ["web"],
-    only: PAGE_LAYOUT,
-    imports: { name: "next/headers", message: "Pages and layouts never read session or data." },
+    only: ROUTES,
+    imports: { name: "next/headers", message: "Route files never read session or data." },
   },
   {
-    apps: ["web"],
-    only: PAGE_LAYOUT,
+    apps: UI,
+    only: ROUTES,
     patterns: {
       regex: "(^@/lib/api(/|$))|(\\.server$)",
-      message: "Pages and layouts never read session or data. Load it in a feature server component inside <Section>.",
+      message: "Route files never import data modules. Load data in a feature component.",
+    },
+  },
+  {
+    apps: ALL,
+    only: SHARED,
+    patterns: {
+      regex: "^@/features/",
+      message: "lib/ and components/ never import features. Features meet in routes.",
     },
   },
   { apps: ALL, exempt: ["src/lib/log.ts"], globals: { name: "console", message: owned("console", "src/lib/log.ts") } },
@@ -191,9 +200,9 @@ const ENTRIES = [
     globals: { name, message: owned("Timers", "src/lib/timer.ts") },
   })),
   {
-    apps: ["api"],
-    exempt: ["src/upstreams/**"],
-    globals: { name: "fetch", message: "Only src/upstreams/ call outside services, with a timeout." },
+    apps: ALL,
+    exempt: { "*": ["src/lib/api/**"], api: ["src/upstreams/**"] },
+    globals: { name: "fetch", message: "Only src/lib/api/ (UI apps) and src/upstreams/ (API) call fetch." },
   },
   {
     apps: UI,
@@ -241,6 +250,19 @@ const ENTRIES = [
     only: ["src/features/*/routes.ts"],
     properties: { property: "put", message: "No PUT routes. Use PATCH /:id." },
   },
+  ...["onError", "notFound"].map((property) => ({
+    apps: ["api"],
+    exempt: ["src/app.ts"],
+    properties: {
+      property,
+      message: "onError and notFound are set only in src/app.ts; the mapping lives in lib/errors.ts.",
+    },
+  })),
+  {
+    apps: ["api"],
+    exempt: ["src/middleware/public-routes.ts"],
+    exports: ["publicRoutes", "PUBLIC_ROUTES", "publicPaths"],
+  },
   {
     apps: ["api"],
     only: TESTS,
@@ -259,6 +281,8 @@ const TEST_ENTRIES = [
     },
   })),
 ];
+
+const VIA_GLOBAL = ["window", "globalThis"];
 
 const RELATIVE = { regex: "^\\.{1,2}(/|$)", message: "Import through the @/ alias." };
 
@@ -280,11 +304,17 @@ const COMPILER = [
 
 const PLUGIN_RULES = {
   api: ["feature-imports", "hono", "import-meta-env"],
-  web: ["feature-imports", "reducer", "next-routes", "next-data", "server-actions", "import-meta-env"],
+  web: ["feature-imports", "reducer", "next-routes", "next-data", "server-actions", "params", "import-meta-env"],
   liff: ["feature-imports", "reducer", "next-data", "params", "import-meta-env"],
   mobile: ["feature-imports", "reducer", "next-data", "params", "import-meta-env"],
-  marketing: ["feature-imports", "reducer", "import-meta-env"],
+  marketing: ["feature-imports", "reducer", "params", "import-meta-env"],
 };
+
+function onlyFor(entry, app) {
+  if (!entry.only) return null;
+  if (Array.isArray(entry.only)) return entry.only;
+  return entry.only[app] ?? entry.only["*"];
+}
 
 function exemptFor(entry, app) {
   if (!entry.exempt) return [];
@@ -303,14 +333,24 @@ function restrictions(entries) {
   rules["no-restricted-imports"] = ["error", { paths: imports, patterns: [RELATIVE, ...patterns] }];
   const globals = entries.filter((entry) => entry.globals).map((entry) => entry.globals);
   rules["no-restricted-globals"] = globals.length ? ["error", ...globals] : "off";
-  const properties = entries.filter((entry) => entry.properties).map((entry) => entry.properties);
+  const properties = entries.flatMap((entry) => [
+    ...(entry.properties ? [entry.properties] : []),
+    ...(entry.globals
+      ? VIA_GLOBAL.map((object) => ({ object, property: entry.globals.name, message: entry.globals.message }))
+      : []),
+    ...(entry.imports?.name === "react"
+      ? entry.imports.importNames.map((property) => ({ object: "React", property, message: entry.imports.message }))
+      : []),
+  ]);
   rules["no-restricted-properties"] = properties.length ? ["error", ...properties] : "off";
+  const exports = entries.flatMap((entry) => entry.exports ?? []);
+  rules["no-restricted-exports"] = exports.length ? ["error", { restrictedNamedExports: exports }] : "off";
   return rules;
 }
 
 function reactRules(dom) {
   const rules = Object.fromEntries(COMPILER.map((rule) => [`react/${rule}`, "error"]));
-  rules["react/jsx-no-literals"] = "error";
+  rules["react/jsx-no-literals"] = ["error", { restrictedAttributes: ["placeholder", "aria-label", "title", "alt"] }];
   rules["react/forbid-component-props"] = ["error", { forbid: ["style"] }];
   if (dom) rules["react/forbid-dom-props"] = ["error", { forbid: ["style"] }];
   return rules;
@@ -320,10 +360,12 @@ function appOverrides(app) {
   const entries = ENTRIES.filter((entry) => entry.apps.includes(app));
   const prefix = (glob) => `apps/${app}/${glob}`;
   const pick = (glob) =>
-    entries.filter((entry) => (!entry.only || covers(glob, entry.only)) && !covers(glob, exemptFor(entry, app)));
-  const globs = [...new Set(entries.flatMap((entry) => [...exemptFor(entry, app), ...(entry.only ?? [])]))].filter(
-    (glob) => !TESTS.includes(glob),
-  );
+    entries.filter(
+      (entry) => (!entry.only || covers(glob, onlyFor(entry, app))) && !covers(glob, exemptFor(entry, app)),
+    );
+  const globs = [
+    ...new Set(entries.flatMap((entry) => [...exemptFor(entry, app), ...(onlyFor(entry, app) ?? [])])),
+  ].filter((glob) => !TESTS.includes(glob));
   globs.sort((a, b) => Number(b.includes("**")) - Number(a.includes("**")) || a.length - b.length);
   const plugins =
     app === "api"
@@ -357,9 +399,12 @@ export function config() {
     plugins: ["eslint", "typescript", "unicorn", "oxc", "import", "promise", "vitest"],
     jsPlugins: ["./src/plugin/index.mjs"],
     categories: { correctness: "error" },
+    options: { typeAware: true, typeCheck: true },
     env: { builtin: true, es2024: true },
     rules: {
       "standard/no-comments": "error",
+      "standard/no-chained-assertions": "error",
+      "standard/no-typeof": "error",
       "standard/repo-shape": "error",
       "typescript/switch-exhaustiveness-check": ["error", { considerDefaultExhaustiveForUnions: false }],
       "unicorn/filename-case": [
@@ -411,5 +456,10 @@ export function config() {
   };
 }
 
-if (import.meta.main)
-  writeFileSync(join(import.meta.dirname, "../oxlint.json"), `${JSON.stringify(config(), null, 2)}\n`);
+export function render(value) {
+  const { overrides, ...rest } = value;
+  const head = JSON.stringify(rest, null, 2).replace(/\n}$/, "");
+  return `${head},\n  "overrides": [\n${overrides.map((item) => `    ${JSON.stringify(item)}`).join(",\n")}\n  ]\n}\n`;
+}
+
+if (import.meta.main) writeFileSync(join(import.meta.dirname, "../oxlint.json"), render(config()));
