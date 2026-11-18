@@ -14,7 +14,7 @@ test("params checks standard names and LIFF validateSearch", (t) => {
     "apps/web/src/features/order/order-params.ts":
       'import { z } from "zod";\nexport const orderParams = z.object({ due_date: z.string(), sortBy: z.string(), keyword: z.string() });\n',
     "apps/liff/src/app/tasks.tsx":
-      'import { createFileRoute } from "@tanstack/react-router";\nimport { taskParams } from "#/features/task/task-params";\nexport const Route = createFileRoute("/tasks")({ validateSearch: taskParams });\n',
+      'import { createFileRoute } from "@tanstack/react-router";\nimport { taskParams } from "#/features/task/task-params.ts";\nexport const Route = createFileRoute("/tasks")({ validateSearch: taskParams });\n',
     "apps/liff/src/app/users.tsx":
       'import { createFileRoute } from "@tanstack/react-router";\nimport { z } from "zod";\nexport const Route = createFileRoute("/users")({ validateSearch: z.object({}) });\n',
   });
