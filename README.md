@@ -586,4 +586,4 @@ Every allow glob must change a finding; unmatched, redundant and skipped-rule ex
 
 Earlier repository-specific keys, including `pr.ticket-prefix` and `pending`, still parse with a deprecation notice during adoption. Mixing formats fails. Fixed paths, module entries, Next layering, API paths, cached-module names, hook commands and screenshot requirements are derived. Initialize doc line budgets with `standard check docs --init`, and lower them with `standard check docs --write`.
 
-Zod Mini is required in browser code: Vite React sources and the value-import graph from `use client` or `.browser.*` modules, including shared code. Server-only code is exempt. Tests, fixtures, stories, scripts, evals and config sources skip the derived source checks. Fixed `src/lib/*` owners remain directly importable.
+Zod Mini is required in browser code: Vite React sources and the value-import graph from `use client` or `.browser.*` modules, including shared code. Server-only code is exempt. Boundaries skip tests, fixtures, stories, scripts, evals and config importers. Mocking and comment checks still read those sources. Fixed `src/lib/*` owners remain directly importable.
