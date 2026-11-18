@@ -62,7 +62,7 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
     "cdp.fixture.ts: Fake HTTP with MSW handlers instead of a fetch fake",
     "clock.test.ts: Call vi.useFakeTimers() and vi.setSystemTime() instead of reading the real clock",
     "loop.test.ts: Write one test.each with a table instead of a loop",
-    'loose.test-utils.ts: Start the MSW server with listen({ onUnhandledRequest: "error" })',
+    'loose.test-utils.ts: Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3)',
     `mocked.test.ts: ${double}`,
     `mocked.test.ts: ${double}`,
     `mocked.test.ts: ${double}`,
@@ -86,4 +86,13 @@ test("tests rule follows setup hooks in the order they run", (t) => {
     only(result, "tests").map((item) => item.file.split("/").at(-1)),
     ["order.test.ts"],
   );
+});
+
+test("tests rule accepts the MSW 3 strict listen option", (t) => {
+  const result = lint(t, {
+    "packages/i18n/src/add.ts": source,
+    "packages/i18n/src/frame.test-utils.ts":
+      'import { setupServer } from "msw/node";\nexport const server = setupServer();\nserver.listen({ onUnhandledFrame: "error" });\n',
+  });
+  deepEqual(only(result, "tests"), []);
 });

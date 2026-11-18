@@ -173,7 +173,8 @@
       }
     ],
     "react/forbid-component-props": "off",
-    "import/no-nodejs-modules": "off"
+    "import/no-nodejs-modules": "off",
+    "typescript/no-unnecessary-type-parameters": "off"
   },
   "overrides": [
     {

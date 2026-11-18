@@ -83,7 +83,9 @@ function strictListen(node) {
   return (
     options?.type === "ObjectExpression" &&
     options.properties.some(
-      (item) => (item.key?.name ?? item.key?.value) === "onUnhandledRequest" && item.value.value === "error",
+      (item) =>
+        ["onUnhandledRequest", "onUnhandledFrame"].includes(item.key?.name ?? item.key?.value) &&
+        item.value.value === "error",
     )
   );
 }
@@ -159,7 +161,10 @@ export default {
         if (!fixture && property && FAKES.test(property)) report(node, DOUBLE);
         if (property === "defineProperty" && rootName(callee) === "Object") report(node, DOUBLE);
         if (property === "listen" && msw && !strictListen(node))
-          report(node, 'Start the MSW server with listen({ onUnhandledRequest: "error" }).');
+          report(
+            node,
+            'Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3).',
+          );
         const body = bodyOf(node);
         if (!body) return;
         if (callee.type === "Identifier" && RENDERS.has(callee.name)) body.render = true;
