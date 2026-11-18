@@ -115,7 +115,7 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
       "apps/web/src/app/(app)/@modal/page.tsx | apps/web/src/app/(app)/x.module.css: Replace the CSS module with Tailwind classes.",
       "apps/web/src/app/(app)/_parts/page.tsx | Move the code from the _private folder into a feature or components/.",
       "apps/web/src/app/(app)/hook/route.ts | Move the handler into a webhooks/ folder or a metadata route like sitemap.xml/route.ts, or into a Server Action.",
-      "apps/web/src/app/(app)/loading.tsx | Delete loading.tsx and wrap the slow section in <Section fallback> from @/components/boundary/section.",
+      "apps/web/src/app/(app)/loading.tsx | Delete loading.tsx and wrap the slow section in <Section fallback> from #/components/boundary/section.",
       "apps/web/src/app/(app)/page.test.tsx | Move the test to the feature code it covers; route files never have tests.",
       "apps/web/src/app/(app)/page.test.tsx | Move this code into a feature or components/; app/ holds only Next route files.",
       "apps/web/src/features/task/board.tsx | Rename the file to task-board so it starts with its feature.",

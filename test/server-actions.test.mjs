@@ -36,7 +36,7 @@ test("server-actions asks a component named *-actions.tsx to be renamed", (t) =>
 test("server-actions checks destructured action exports", (t) => {
   const result = lint(t, {
     "apps/web/src/features/task/task-actions.ts":
-      '"use server";\nimport { makeActions } from "@/lib/actions";\nexport const { saveAction, load } = makeActions();\nexport const [moveAction] = [makeActions];\n',
+      '"use server";\nimport { makeActions } from "#/lib/actions";\nexport const { saveAction, load } = makeActions();\nexport const [moveAction] = [makeActions];\n',
     "apps/api/src/middleware/public-routes.ts": 'export const { publicRoutes } = { publicRoutes: ["/api/*"] };\n',
     "apps/api/src/middleware/auth.ts": 'export const { publicRoutes } = { publicRoutes: ["/api/health"] };\n',
   });

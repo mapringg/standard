@@ -18,15 +18,15 @@ test("owners lets only owner files use what they own", (t) => {
     "apps/web/src/features/task/task-fetch.ts": 'export const load = () => fetch("/api/tasks");\n',
     "apps/web/src/lib/api/client.ts": 'export const load = () => fetch("/api/tasks");\n',
     "apps/web/src/lib/task-link.ts":
-      'import { taskHref } from "@/features/task/task-params";\nexport const link = taskHref;\n',
+      'import { taskHref } from "#/features/task/task-params";\nexport const link = taskHref;\n',
     "apps/web/src/app/(app)/tasks/page.tsx":
-      'import { tasks } from "@/features/task/task-data.server";\nexport default function Page() { return tasks; }\n',
+      'import { tasks } from "#/features/task/task-data.server";\nexport default function Page() { return tasks; }\n',
     "apps/web/src/app/(app)/page.tsx":
       'export default function Page(props: PageProps<"/">) { return props.searchParams; }\n',
     "apps/web/src/features/task/task-view.tsx": "export const read = (url: URL) => url.searchParams;\n",
     "apps/web/src/features/task/task-list.tsx": "export const tasks = 1;\n",
     "apps/web/src/features/task/task-list.test.tsx":
-      'import { expect, test } from "vitest";\nimport { tasks } from "@/features/task/task-list";\ntest("x", async () => { await expect.poll(() => tasks).toBe(1); });\n',
+      'import { expect, test } from "vitest";\nimport { tasks } from "#/features/task/task-list";\ntest("x", async () => { await expect.poll(() => tasks).toBe(1); });\n',
     "apps/api/src/lib/env.ts": "export const port = process.env.PORT;\n",
     "apps/api/src/features/tasks/db.ts": 'import postgres from "postgres";\nexport const sql = postgres;\n',
     "apps/api/src/features/tasks/service.ts":

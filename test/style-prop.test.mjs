@@ -11,7 +11,7 @@ test("style-prop allows only CSS custom properties", (t) => {
     "apps/web/src/components/ui/mixed.tsx":
       'export const Mixed = (props: { value: string }) => <div style={{ "--a": props.value, color: "red" }} />;\n',
     "apps/web/src/components/ui/card.tsx":
-      'import { Bar } from "@/components/ui/bar";\nexport const Card = () => <Bar className="p-2" value="1" />;\n',
+      'import { Bar } from "#/components/ui/bar";\nexport const Card = () => <Bar className="p-2" value="1" />;\n',
     "apps/web/src/components/ui/cast.tsx":
       'import type { CSSProperties } from "react";\nexport const Cast = (props: { value: string }) => <div style={{ "--progress": props.value } as CSSProperties} />;\n',
     "apps/web/src/components/ui/pinned.tsx":

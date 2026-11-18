@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { crashes, filesWith, lint, only } from "./lint.mjs";
 
 const imports =
-  'import { cacheLife, cacheTag } from "next/cache";\nimport { taskTag } from "@/features/task/task-cache";\n';
+  'import { cacheLife, cacheTag } from "next/cache";\nimport { taskTag } from "#/features/task/task-cache";\n';
 
 test("next-data checks use cache, tags and server-only", (t) => {
   const result = lint(t, {
@@ -41,9 +41,9 @@ test("next-data keeps *.server.ts out of client components", (t) => {
     "apps/web/src/features/task/task-data.server.ts":
       'import "server-only";\nexport const listTasks = async () => [];\n',
     "apps/web/src/features/task/task-picker.tsx":
-      '"use client";\nimport { listTasks } from "@/features/task/task-data.server";\nexport const TaskPicker = () => listTasks;\n',
+      '"use client";\nimport { listTasks } from "#/features/task/task-data.server";\nexport const TaskPicker = () => listTasks;\n',
     "apps/web/src/features/task/task-list.tsx":
-      'import { listTasks } from "@/features/task/task-data.server";\nexport const TaskList = () => listTasks;\n',
+      'import { listTasks } from "#/features/task/task-data.server";\nexport const TaskList = () => listTasks;\n',
   });
   deepEqual(
     only(result, "next-data").map((item) => `${item.file}: ${item.message}`),
@@ -58,9 +58,9 @@ test("next-data lets client components import types from *.server.ts", (t) => {
     "apps/web/src/features/task/task-data.server.ts":
       'import "server-only";\nexport type Task = { id: string };\nexport const listTasks = async () => [];\n',
     "apps/web/src/features/task/task-row.tsx":
-      '"use client";\nimport type { Task } from "@/features/task/task-data.server";\nexport const TaskRow = (props: { task: Task }) => props.task.id;\n',
+      '"use client";\nimport type { Task } from "#/features/task/task-data.server";\nexport const TaskRow = (props: { task: Task }) => props.task.id;\n',
     "apps/web/src/features/task/task-cell.tsx":
-      '"use client";\nimport { type Task } from "@/features/task/task-data.server";\nexport type { Task } from "@/features/task/task-data.server";\nexport const TaskCell = (props: { task: Task }) => props.task.id;\n',
+      '"use client";\nimport { type Task } from "#/features/task/task-data.server";\nexport type { Task } from "#/features/task/task-data.server";\nexport const TaskCell = (props: { task: Task }) => props.task.id;\n',
   });
   deepEqual(filesWith(result, "next-data"), []);
 });
