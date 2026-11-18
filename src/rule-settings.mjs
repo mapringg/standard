@@ -36,7 +36,7 @@ export function parseSettings(raw) {
 
 /** @param {Pick<import("./config.mjs").Config, "allow">} config @param {string} rule @param {string} path */
 export function excepted(config, rule, path) {
-  return (config.allow?.[rule] ?? []).some((glob) => matchesGlob(path, glob));
+  return path !== "" && (config.allow?.[rule] ?? []).some((glob) => matchesGlob(path, glob));
 }
 
 /** @param {import("./registry.mjs").Finding} finding @param {readonly string[]} files */

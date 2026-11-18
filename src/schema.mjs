@@ -1,8 +1,8 @@
 import plugin from "./oxlint/rules.mjs";
 
-/** @param {readonly { name: string }[]} checks */
+/** @param {readonly { name: string, subject: string }[]} checks */
 export function buildSchema(checks) {
-  const ids = [...checks.filter(({ name }) => name !== "config").map(({ name }) => name), ...Object.keys(plugin.rules).map((name) => `standard/${name}`)];
+  const ids = [...checks.filter(({ name, subject }) => name !== "config" && subject === "tree").map(({ name }) => name), ...Object.keys(plugin.rules).map((name) => `standard/${name}`)];
   return {
     $schema: "https://json-schema.org/draft/2020-12/schema", title: "Standard configuration", type: "object", additionalProperties: false,
     properties: {

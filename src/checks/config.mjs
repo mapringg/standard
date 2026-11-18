@@ -18,7 +18,7 @@ function disabledPlugins(repo) {
       if (!node || typeof node !== "object") return;
       const { type, key, value } = /** @type {{ type?: string, key?: { value?: string }, value?: { value?: unknown, elements?: { value?: unknown }[] } }} */ (node);
       const level = value?.elements?.[0]?.value ?? value?.value;
-      if (type === "Property" && key?.value?.startsWith("standard/") && ["off", "warn", 0, 1].includes(/** @type {string | number} */ (level))) rules.add(key.value);
+      if (type === "Property" && key?.value?.startsWith("standard/") && ["off", "allow", "warn", 0, 1].includes(/** @type {string | number} */ (level))) rules.add(key.value);
       Object.values(node).forEach(visit);
     }
     visit(program);
@@ -59,7 +59,7 @@ export default {
       const results = name.startsWith("standard/") ? raw.filter(({ key }) => key.endsWith(` ${name}`)) : !pending && check?.subject === "tree" && check.applies(repo).on ? await check.run(repo, checks) : [];
       for (const [index, glob] of globs.entries()) {
         const without = { allow: { ...repo.config.allow, [name]: globs.filter((_, at) => at !== index) } };
-        const changes = results.some((finding) => { const path = findingPath(finding, files); return matchesGlob(path, glob) && !excepted(without, name, path); });
+        const changes = results.some((finding) => { const path = findingPath(finding, files); return excepted(repo.config, name, path) && matchesGlob(path, glob) && !excepted(without, name, path); });
         if (pending || !changes) findings.push({ key: `${name} ${glob}`, fix: pending ? `${name} is in skip; remove its exception.` : `${glob} ${files.some((file) => matchesGlob(file, glob)) ? "changes no findings" : "matches no files"}. Delete the exception glob.` });
       }
     }

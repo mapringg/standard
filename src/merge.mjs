@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 
+import { defaults } from "./defaults.mjs";
+
 import { FILE, parseConfig } from "./config.mjs";
 import { loadRepo } from "./repo.mjs";
 import { report, run } from "./run.mjs";
@@ -237,7 +239,7 @@ async function reread(cwd, number, checks, pr) {
   const config = parseConfig(repo.readAt(live.headSha, FILE) ?? "{}");
   const results = await run({
     checks: [...checks],
-    repo: { ...repo, config },
+    repo: { ...repo, config: defaults({ ...repo, config }) },
     scope: { commits: null, pr: live },
     names: DESCRIPTION_CHECKS,
   });
