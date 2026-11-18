@@ -2,7 +2,7 @@ import { stem } from "./paths.mjs";
 
 function directives(body) {
   const found = [];
-  for (const node of body ?? []) {
+  for (const node of Array.isArray(body) ? body : []) {
     if (node.type !== "ExpressionStatement" || typeof node.directive !== "string") break;
     found.push(node);
   }

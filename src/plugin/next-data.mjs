@@ -5,7 +5,7 @@ const TAGS = new Set(["cacheTag", "updateTag", "revalidateTag"]);
 
 function directiveList(body) {
   const found = [];
-  for (const node of body ?? []) {
+  for (const node of Array.isArray(body) ? body : []) {
     if (node.type !== "ExpressionStatement" || typeof node.directive !== "string") break;
     found.push(node.directive);
   }
