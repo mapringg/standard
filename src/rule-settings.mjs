@@ -14,7 +14,7 @@ function validate(value, definition, at = ".standard/config.json") {
     for (const key of spec.required ?? []) if (!(key in fields)) throw new Error(`${at}.${key} is required.`);
     for (const [key, item] of Object.entries(fields)) {
       const child = spec.properties?.[key];
-      if (!Object.hasOwn(spec.properties ?? {}, key)) throw new Error(`${at} has an unknown key "${key}". Settings were replaced in 0.16.0; use standard migrate and allow.`);
+      if (!Object.hasOwn(spec.properties ?? {}, key)) throw new Error(`${at} has an unknown key "${key}". Settings were replaced in 0.16.0; move them by hand to $schema, ticket, skip and allow.`);
       validate(item, child, `${at}.${key}`);
     }
   } else if (spec.type === "array") {

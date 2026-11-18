@@ -34,7 +34,7 @@ export function standard(cwd, args, { env = {}, input } = {}) {
     input,
     encoding: "utf8",
   });
-  const notice = ".standard/config.json: legacy settings are deprecated in 0.16.0. Use standard migrate to keep only $schema, ticket, skip and allow.\n";
+  const notice = ".standard/config.json: legacy settings are deprecated in 0.16.0. Move them by hand to $schema, ticket, skip and allow; standard migrate names moves effect-wrappers and client-data.\n";
   const lists = ".standard/config.json: effect-wrappers and client-data are deprecated in 0.17.0. Run standard migrate names --write to move each file's role into its name.\n";
   return { ...result, migrationNotice: result.stderr.includes(notice), listsNotice: result.stderr.includes(lists), stderr: result.stderr.replaceAll(notice, "").replaceAll(lists, "") };
 }

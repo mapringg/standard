@@ -13,8 +13,8 @@ function returns(node, top = true) {
   return Object.entries(node).flatMap(([key, value]) => key === "parent" ? [] : Array.isArray(value) ? value.flatMap((item) => returns(item, false)) : returns(value, false));
 }
 
-/** @param {any} callback */
-function returnsCleanup(callback) {
+/** @param {any} callback Whether an effect callback returns an inline cleanup on every path. */
+export function returnsCleanup(callback) {
   if (!INLINE.has(callback?.type) || callback.async || callback.generator || callback.body.type !== "BlockStatement") return false;
   const body = callback.body.body;
   /** @type {Set<string>} The consts the callback's own body binds to an inline function. */
