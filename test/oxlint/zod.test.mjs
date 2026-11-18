@@ -71,5 +71,12 @@ test("Vite browser seeds are confined to src", (t) => {
   assert.deepEqual(browserDiagnostics(t, {
     "src/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
     "runtime/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
+    "index.html": "<div></div>",
   }, { type: "module", dependencies: { react: "19", vite: "8" } }), ["src/schema.ts"]);
+});
+
+test("a Vite dependency without index.html or a vite config seeds no browser code", (t) => {
+  assert.deepEqual(browserDiagnostics(t, {
+    "src/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
+  }, { type: "module", dependencies: { react: "19", vite: "8" } }), []);
 });

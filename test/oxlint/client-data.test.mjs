@@ -69,3 +69,18 @@ test("the plugin ignores legacy lists in a config the CLI rejects", (t) => {
   const diagnostics = lint(t, { "apps/web/package.json": NEXT, "apps/web/src/listed.tsx": SWR }, { config: { $schema: "x", "client-data": [{ file: "apps/web/src/listed.tsx", reason: "pages" }] } });
   assert.deepEqual(diagnostics.map(({ filename }) => filename), ["apps/web/src/listed.tsx"]);
 });
+
+test("client-data follows computed, destructured and aliased globals, dynamic clients and react-query", (t) => {
+  const diagnostics = lint(t, {
+    "apps/web/package.json": NEXT,
+    "apps/web/src/computed.tsx": '"use client"; export const load = () => window["fetch"]("/x");',
+    "apps/web/src/destructured.tsx": '"use client"; const { fetch: f } = window; export const load = () => f("/x");',
+    "apps/web/src/alias.tsx": '"use client"; const g = globalThis; export const load = () => g.fetch("/x");',
+    "apps/web/src/dynamic.tsx": '"use client"; export const load = async () => (await import("ky")).default("/x");',
+    "apps/web/src/required.tsx": '"use client"; const axios = require("axios"); export const load = () => axios.get("/x");',
+    "apps/web/src/query.ts": 'import { useQuery, useInfiniteQuery, useSuspenseQuery } from "@tanstack/react-query"; export const hooks = [useQuery, useInfiniteQuery, useSuspenseQuery];',
+    "apps/web/src/location.tsx": '"use client"; export const here = () => window.location.href;',
+  });
+  assert.deepEqual([...new Set(diagnostics.map(({ filename }) => filename))], ["apps/web/src/alias.tsx", "apps/web/src/computed.tsx", "apps/web/src/destructured.tsx", "apps/web/src/dynamic.tsx", "apps/web/src/query.ts", "apps/web/src/required.tsx"]);
+  assert.equal(diagnostics.filter(({ filename }) => filename.endsWith("query.ts")).length, 3);
+});

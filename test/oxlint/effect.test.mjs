@@ -68,3 +68,25 @@ test("effect follows useInsertionEffect, re-exports and destructured namespaces"
   assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/default.ts", "src/destructure.ts", "src/insertion.ts", "src/local.effect-sync.ts", "src/reexport.effect-sync.ts", "src/star.effect-sync.ts"]);
   assert.equal(diagnostics.find(({ filename }) => filename === "src/reexport.effect-sync.ts").message, "Export the hook that calls the effect, never the effect hook itself, so every file that runs an effect carries an effect name.");
 });
+
+test("an effect hook is only ever called directly", (t) => {
+  const diagnostics = lint(t, "effect", {
+    "src/alias.effect-sync.ts": 'import { useEffect } from "react"; export const run = useEffect;',
+    "src/default.effect-sync.ts": 'import { useEffect } from "react"; export default useEffect;',
+    "src/member.effect-sync.ts": 'import * as React from "react"; const run = React.useEffect; run(() => {});',
+    "src/bind.effect-sync.ts": 'import { useLayoutEffect } from "react"; useLayoutEffect.call(null, () => {});',
+    "src/direct.effect-sync.ts": 'import * as React from "react"; import { useEffect } from "react"; export function useA() { useEffect(() => {}); React.useEffect(() => {}); }',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/alias.effect-sync.ts", "src/bind.effect-sync.ts", "src/default.effect-sync.ts", "src/member.effect-sync.ts"]);
+  assert.ok(diagnostics.every(({ message }) => message.startsWith("Export the hook that calls the effect")), JSON.stringify(diagnostics));
+});
+
+test("effect-cleanup knows every hook form and rejects async effects", (t) => {
+  const diagnostics = lint(t, "effect-cleanup", {
+    "src/async.effect-subscribe.ts": 'import { useEffect } from "react"; export function useA(t) { useEffect(async () => { return () => t.off(); }, []); }',
+    "src/destructured.effect-subscribe.ts": 'import * as React from "react"; const { useEffect: ue } = React; export function useA(t) { ue(() => { t.on(); }, []); }',
+    "src/computed.effect-subscribe.ts": 'import React from "react"; export function useA(t) { React["useEffect"](() => { t.on(); }, []); }',
+    "src/good.effect-subscribe.ts": 'import * as React from "react"; const { useEffect: ue } = React; export function useA(t) { ue(() => { t.on(); return () => t.off(); }, []); React["useLayoutEffect"](() => { return () => t.off(); }); }',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/async.effect-subscribe.ts", "src/computed.effect-subscribe.ts", "src/destructured.effect-subscribe.ts"]);
+});
