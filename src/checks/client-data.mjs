@@ -4,6 +4,7 @@ import { FILE } from "../config.mjs";
 import { dependents, NOT_PRODUCT } from "./support/packages.mjs";
 import { moduleOf, reach, reExports, targets } from "./support/reach.mjs";
 import { sourceFacts } from "./support/source.mjs";
+import { parseName } from "../oxlint/roles.mjs";
 
 /**
  * @typedef {import("../repo.mjs").Repo} Repo
@@ -22,8 +23,8 @@ const SWR_HOOK = /^swr(?:#(?:default|useSWR)|\/immutable#default)(?:\.|$)/;
 /** The browser's request globals and the HTTP client packages built on them. */
 const GLOBALS = new Set(["fetch", "XMLHttpRequest"]);
 const CLIENTS = new Set(["ky", "axios"]);
-const LISTED_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in ${FILE} with its reason: pages, live, client-state or unreachable.`;
-const FETCH_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in ${FILE} with its reason: pages, live, client-state or unreachable.`;
+const LISTED_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, name the file <name>.data-<pages|live|client-state|unreachable>.tsx.`;
+const FETCH_FIX = `Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, name the file <name>.data-<pages|live|client-state|unreachable>.tsx.`;
 const BROWSER = 'and "use client" runs it in the browser.';
 
 /** @type {(use: Parsed["uses"][number]) => string | null} The request global or HTTP client package a use loads data through. */
@@ -46,7 +47,7 @@ export default {
   retired: [],
   applies: (repo) => (dependents(repo, "react").length > 0 ? { on: true } : { on: false, because: "no tracked package.json declares react" }),
   async run(repo) {
-    const listed = (/** @type {string} */ path) => repo.config.clientData.some((entry) => ("file" in entry ? entry.file === path : path.startsWith(`${entry.app}/`)));
+    const listed = (/** @type {string} */ path) => parseName(path).data.length > 0 || repo.config.clientData.some((entry) => ("file" in entry ? entry.file === path : path.startsWith(`${entry.app}/`)));
     const files = sourceFacts(repo).flatMap((file) => ("error" in file ? [] : [file]));
     const target = await targets(repo);
     const templates = new Set(dependents(repo, "react").map((app) => posix.join(app, TEMPLATE)));
@@ -69,7 +70,7 @@ export default {
         const { space, path, kind, line } = use;
         const hook = space === "module" && kind !== "type" ? hookOf(file.path, path) : undefined;
         if (hook) {
-          sites.push({ file: file.path, key: `${file.path} useSWR`, group: LISTED, line, said: `uses ${hook}`, fix: `and client-data in ${FILE} does not list it. ${LISTED_FIX}` });
+          sites.push({ file: file.path, key: `${file.path} useSWR`, group: LISTED, line, said: `uses ${hook}`, fix: `and its name carries no data role. ${LISTED_FIX}` });
         }
         if (!file.client) continue;
         const what = transport(use);

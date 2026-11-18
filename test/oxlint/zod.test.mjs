@@ -8,7 +8,7 @@ test("zod is enforced in product code and skips tests", (t) => {
   const root = join(tempDir(t, "zod"), "scripts", "test", "repo");
   installPackage(root);
   const config = { jsPlugins: ["@mapringg/standard/oxlint"], rules: { "standard/zod": "error" }, categories: { correctness: "off" } };
-  write(root, { "package.json": { type: "module", dependencies: { react: "19", vite: "8" } }, "oxlint.json": config, "src/feature.ts": "import { z } from \"zod\"; z.string();", "src/subpath.ts": 'import { z } from "zod/v4"; z.string();', "src/lib/zod.ts": "export function owned() {}", "src/feature.test.ts": "import { z } from \"zod\"; z.string();" });
+  write(root, { "package.json": { type: "module", dependencies: { react: "19", vite: "8" } }, "oxlint.json": config, "index.html": "<div></div>", "src/feature.ts": "import { z } from \"zod\"; z.string();", "src/subpath.ts": 'import { z } from "zod/v4"; z.string();', "src/lib/zod.ts": "export function owned() {}", "src/feature.test.ts": "import { z } from \"zod\"; z.string();" });
   const result = spawnSync(join(import.meta.dirname, "../../node_modules/.bin/oxlint"), ["-c", "oxlint.json", "--format", "json", "src"], { cwd: root, encoding: "utf8" });
   const diagnostics = JSON.parse(result.stdout).diagnostics;
   assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -71,5 +71,12 @@ test("Vite browser seeds are confined to src", (t) => {
   assert.deepEqual(browserDiagnostics(t, {
     "src/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
     "runtime/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
+    "index.html": "<div></div>",
   }, { type: "module", dependencies: { react: "19", vite: "8" } }), ["src/schema.ts"]);
+});
+
+test("a Vite dependency without index.html or a vite config seeds no browser code", (t) => {
+  assert.deepEqual(browserDiagnostics(t, {
+    "src/schema.ts": 'import { z } from "zod"; export const schema = z.string();',
+  }, { type: "module", dependencies: { react: "19", vite: "8" } }), []);
 });

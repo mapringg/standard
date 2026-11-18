@@ -408,5 +408,6 @@ export function loadConfig(root, tracks) {
   const path = join(root, FILE);
   const config = parseConfig(existsSync(path) ? readFileSync(path, "utf8") : "{}");
   if (config.allow === undefined) process.stderr.write(`${FILE}: legacy settings are deprecated in 0.16.0. Use standard migrate to keep only $schema, ticket, skip and allow.\n`);
+  if (config.effectWrappers.length || config.clientData.length) process.stderr.write(`${FILE}: effect-wrappers and client-data are deprecated in 0.17.0. Run standard migrate names --write to move each file's role into its name.\n`);
   return config;
 }
