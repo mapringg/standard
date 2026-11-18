@@ -5,7 +5,7 @@ import { directives, moduleExports, isFunction, statements, walk } from "../func
 const CACHE = /^use cache(?::|$)/;
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
-  meta: { type: "problem", docs: { description: "Every use cache scope is an inline function that calls cacheTag with a tag at its top level.", fix: "Call cacheTag(tag) at the top of the scope." }, schema: [], messages: { tag: "Call cacheTag from next/cache with at least one tag at the top of this use cache scope, and export each scope as an inline function, so a write can revalidate what it caches." } },
+  meta: { type: "problem", docs: { description: "Every use cache scope is an inline function that calls cacheTag with a tag at its top level.", fix: "Call cacheTag(tag) at the top of the scope." }, schema: [], messages: { tag: "Call cacheTag from next/cache at the top of this use cache scope with a first tag that is not spread, such as cacheTag(key, ...more), and export each scope as an inline function, so a write can revalidate what it caches." } },
   create(context) {
     /** @type {Set<string>} */
     const tags = new Set();
