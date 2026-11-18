@@ -129,7 +129,7 @@ test("migrate names refuses the whole run when a destination exists or a source 
     assert.ok(run.stdout.includes(`conflict ${WEB}/hooks/use-window-event.ts -> ${WEB}/hooks/use-window-event.effect-subscribe.ts: the destination exists`), run.stdout);
     assert.ok(run.stdout.includes(`conflict ${WEB}/home/new.tsx: git does not track it`), run.stdout);
   }
-  assert.equal(git(cwd, "status", "--porcelain"), "?? apps/web/src/home/new.tsx");
+  assert.equal(git(cwd, "status", "--porcelain"), "M .standard/config.json\n?? apps/web/src/home/new.tsx");
 });
 
 test("migrate names refuses specifiers it cannot rewrite and never renames an index file", (t) => {

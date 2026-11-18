@@ -97,8 +97,9 @@ const COMMANDS = {
         picks.set(file, reason);
       } else throw new Error(`Unexpected argument ${argv[index]}.\n${USAGE}`);
     }
-    for (const line of migrateNames(loadRepo(process.cwd()).root, { write, picks })) console.log(line);
-    return 0;
+    const { ok, lines } = migrateNames(loadRepo(process.cwd()).root, { write, picks });
+    for (const line of lines) console.log(line);
+    return ok ? 0 : 1;
   },
   score(argv) {
     const { values, positionals } = parseArgs({
