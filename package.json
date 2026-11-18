@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "One repository standard for every project, run by one command.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -13,13 +13,15 @@
     "./oxlint": "./src/oxlint/index.mjs",
     "./oxfmt": "./config/oxfmt.json",
     "./tsconfig": "./config/tsconfig.json",
-    "./oxlint-config": "./config/oxlint.json"
+    "./oxlint-config": "./config/oxlint.json",
+    "./schema.json": "./schema.json"
   },
   "files": [
     "bin",
     "config",
     "src",
-    "templates"
+    "templates",
+    "schema.json"
   ],
   "engines": {
     "node": ">=26"
@@ -45,7 +47,7 @@
   },
   "devDependencies": {
     "@types/mdast": "4.0.4",
-    "@types/node": "^26.6.6",
+    "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "jsdom": "31.0.1",
     "oxfmt": "0.78.0",

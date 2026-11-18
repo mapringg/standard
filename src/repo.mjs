@@ -2,6 +2,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
+import { defaults } from "./defaults.mjs";
+
 import { loadConfig } from "./config.mjs";
 
 /**
@@ -52,7 +54,8 @@ export function loadRepo(cwd) {
     git(root, "ls-files", "-z", ...(glob ? ["--", `:(glob)${glob}`] : []))
       .split("\0")
       .filter(Boolean);
-  return {
+  /** @type {Repo} */
+  const repo = {
     root,
     name: basename(dirname(commonDir(root))),
     config: loadConfig(root, (path) => files(path).includes(path)),
@@ -64,6 +67,7 @@ export function loadRepo(cwd) {
       return exists ? git(root, "show", object) : null;
     },
   };
+  return { ...repo, config: defaults(repo) };
 }
 
 /**

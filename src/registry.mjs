@@ -1,3 +1,4 @@
+import config from "./checks/config.mjs";
 import banned from "./checks/banned.mjs";
 import baselineGrowth from "./checks/baseline-growth.mjs";
 import boundaries from "./checks/boundaries.mjs";
@@ -46,10 +47,10 @@ import wiring from "./checks/wiring.mjs";
  * @property {string} since The package version that added this check.
  *
  * @typedef {(Named & { subject: "commit", run(commit: Commit, repo: Repo): Finding[] })
- *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, summary?(pr: PullRequest): string, run(pr: PullRequest, repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })
- *   | (Named & { subject: "tree", baseline?: false, moved?: Readonly<Record<string, string>>, applies(repo: Repo): Applies, run(repo: Repo, checks: readonly Named[]): Finding[] | Promise<Finding[]> })} Check
+ *   | (Named & { subject: "pr", applies?(repo: Repo): Applies, summary?(pr: PullRequest): string, run(pr: PullRequest, repo: Repo, checks: readonly Check[]): Finding[] | Promise<Finding[]> })
+ *   | (Named & { subject: "tree", baseline?: false, moved?: Readonly<Record<string, string>>, applies(repo: Repo): Applies, run(repo: Repo, checks: readonly Check[]): Finding[] | Promise<Finding[]> })} Check
  * A tree check's `moved` maps a baseline group it no longer finds to the check that finds it now.
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned, react, clientData, routeAwait, usePromise, suspenseErrors, cacheComponents, noComments, docs, docsProse, noDocPointers];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned, react, clientData, routeAwait, usePromise, suspenseErrors, cacheComponents, noComments, docs, docsProse, noDocPointers, config];

@@ -101,7 +101,7 @@ export default {
   subject: "pr",
   retired: ["scripts/check-pr-convention.mjs", "scripts/check-pr-convention.test.mjs", "scripts/subject-convention.mjs"],
   run(pr, repo) {
-    return bodyNotes(rendered(pr.body), repo.config.pr["ticket-prefix"]).map((note) => ({
+    return bodyNotes(rendered(pr.body), repo.config.pr["ticket-prefix"]).filter((note) => repo.config.rules === undefined || note.key !== "Ticket").map((note) => ({
       ...note,
       advisory: /** @type {const} */ (true),
     }));
