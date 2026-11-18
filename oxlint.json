@@ -72,7 +72,8 @@
     "react/jsx-no-literals": [
       "error",
       {
-        "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"]
+        "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"],
+        "allowedStrings": ["-", "–", "—", "/", "|", "·", "•", ":", ",", ".", "…", "(", ")", "+", "×", "%", "#", "*"]
       }
     ],
     "typescript/switch-exhaustiveness-check": [
