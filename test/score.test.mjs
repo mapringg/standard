@@ -114,38 +114,39 @@ test("score prints one column for this repo and ends with its count", (t) => {
   assert.equal(
     stdout,
     [
-      `                   ${name}`,
+      `                    ${name}`,
       "wiring",
-      "  retired          fail",
-      "  ci               ok",
-      "  pin              ok",
-      "  installed        ok",
-      "  prepare          ok",
-      "  config-file      ok",
-      "  claude-md        ok",
-      "  hooks            ok",
-      "  config           ok",
+      "  retired           fail",
+      "  ci                ok",
+      "  pin               ok",
+      "  installed         ok",
+      "  prepare           ok",
+      "  config-file       ok",
+      "  claude-md         ok",
+      "  hooks             ok",
+      "  config            ok",
       "checks",
-      "  commit-subject   on",
-      "  pr-title         on",
-      "  pr-body          on",
-      "  pr-screenshot    n/a",
-      "  pr-size          on",
-      "  baseline-growth  on",
-      "  wiring           on",
-      "  dead-code        on",
-      "  duplicates       n/a",
-      "  typecheck        n/a",
-      "  tests            on",
-      "  pr-tests         on",
-      "  boundaries       on",
-      "  banned           on",
-      "  react            n/a",
-      "  client-data      n/a",
-      "  route-await      n/a",
-      "  use-promise      n/a",
-      "  suspense-errors  n/a",
-      "  no-comments      on",
+      "  commit-subject    on",
+      "  pr-title          on",
+      "  pr-body           on",
+      "  pr-screenshot     n/a",
+      "  pr-size           on",
+      "  baseline-growth   on",
+      "  wiring            on",
+      "  dead-code         on",
+      "  duplicates        n/a",
+      "  typecheck         n/a",
+      "  tests             on",
+      "  pr-tests          on",
+      "  boundaries        on",
+      "  banned            on",
+      "  react             n/a",
+      "  client-data       n/a",
+      "  route-await       n/a",
+      "  use-promise       n/a",
+      "  suspense-errors   n/a",
+      "  cache-components  n/a",
+      "  no-comments       on",
       "",
       `retired in ${name}: Delete scripts/check-commit-msg.mjs, which the commit-subject check replaces.`,
       `pr-screenshot in ${name}: n/a, .standard/config.json sets no pr.screenshots`,
@@ -156,6 +157,7 @@ test("score prints one column for this repo and ends with its count", (t) => {
       `route-await in ${name}: n/a, no tracked package.json declares next`,
       `use-promise in ${name}: n/a, no tracked package.json declares react`,
       `suspense-errors in ${name}: n/a, no tracked package.json declares next`,
+      `cache-components in ${name}: n/a, no tracked package.json declares next`,
       "",
       `${name}: 20 of 21 pass`,
       "",
@@ -202,7 +204,7 @@ test("a pending check shows pending and fails even where it would not apply", (t
 
 test("a pending list the runner refuses fails the config row with the runner's message", (t) => {
   const cases = [
-    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, suspense-errors, no-comments.'],
+    [{ pending: ["typo"] }, '.standard/config.json pending names "typo", which is not a check in this version. Checks: commit-subject, pr-title, pr-body, pr-screenshot, pr-size, baseline-growth, wiring, dead-code, duplicates, typecheck, tests, pr-tests, boundaries, banned, react, client-data, route-await, use-promise, suspense-errors, cache-components, no-comments.'],
     [{ pending: ["baseline-growth"] }, ".standard/config.json pending names baseline-growth, which guards pending itself. Remove it from pending."],
   ];
   for (const [config, message] of cases) {
@@ -246,7 +248,7 @@ test("hooks fails until standard install writes the three shims and unsets core.
 test("installed fails when package.json pins a version other than the one that runs", (t) => {
   const pinned = { ...WIRED, "package.json": { scripts: { prepare: "standard install" }, devDependencies: { "@mapringg/standard": "9.9.9" } } };
   const cwd = repoWith(t, pinned);
-  const fix = "Run pnpm install, so the installed 0.14.16 becomes the @mapringg/standard 9.9.9 that package.json pins.";
+  const fix = "Run pnpm install, so the installed 0.14.17 becomes the @mapringg/standard 9.9.9 that package.json pins.";
   assert.equal(standard(cwd, ["check", "wiring"]).stdout, `wiring: installed: ${fix}\n`);
   const { status, repos } = scoreJson(cwd, []);
   assert.deepEqual(repos[0].cells.find((cell) => cell.row === "installed").notes, [fix]);
@@ -289,6 +291,7 @@ test("a check the pinned version predates is absent, and so is every check witho
     "route-await": "n/a",
     "use-promise": "n/a",
     "suspense-errors": "n/a",
+    "cache-components": "n/a",
     "no-comments": "absent",
   });
   assert.deepEqual([bare.passing, bare.total], [5, 18]);
@@ -306,7 +309,7 @@ test("several paths print a matrix with a column and a count per repo", (t) => {
   const { stdout, status } = standard(wired, ["score", wired, bare]);
   const lines = stdout.trimEnd().split("\n");
   assert.match(lines[0], new RegExp(`^ +${a}  ${b}$`));
-  assert.match(stdout, /^ {2}claude-md {8}ok {2,}fail$/m);
+  assert.match(stdout, /^ {2}claude-md {9}ok {2,}fail$/m);
   assert.match(stdout, new RegExp(`^claude-md in ${b}: Make CLAUDE.md exactly "@AGENTS.md" and a newline`, "m"));
   assert.doesNotMatch(stdout, new RegExp(`claude-md in ${a}`));
   assert.deepEqual(lines.slice(-2), [`${a}: 20 of 20 pass`, `${b}: 19 of 20 pass`]);
@@ -582,7 +585,7 @@ test("--remote fails current when a newer release tag than the pin exists", (t) 
     row: "current",
     status: "fail",
     pass: false,
-    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.16."],
+    notes: ["Bump @mapringg/standard to v0.15.0, the latest release; the repo pins 0.14.17."],
   });
   assert.equal(status, 1);
 });
