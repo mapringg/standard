@@ -73,7 +73,7 @@
       "error",
       {
         "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"],
-        "allowedStrings": ["-", "–", "—", "/", "|", "·", "•", ":", ",", ".", "…", "(", ")", "+", "×", "%", "#", "*"]
+        "allowedStrings": ["", "-", "–", "—", "/", "|", "·", "•", ":", ",", ".", "…", "(", ")", "+", "×", "%", "#", "*"]
       }
     ],
     "typescript/switch-exhaustiveness-check": [
@@ -176,7 +176,10 @@
     ],
     "react/forbid-component-props": "off",
     "import/no-nodejs-modules": "off",
-    "typescript/no-unnecessary-type-parameters": "off"
+    "typescript/no-unnecessary-type-parameters": "off",
+    "node/no-sync": ["error", { "ignores": ["flushSync"] }],
+    "react/no-unstable-nested-components": ["error", { "allowAsProps": true }],
+    "react/incompatible-library": "off"
   },
   "overrides": [
     {
@@ -207,10 +210,45 @@
               "generateMetadata",
               "viewport",
               "generateViewport",
-              "generateStaticParams"
+              "generateStaticParams",
+              "unstable_dynamicStaleTime"
             ]
           }
         ]
+      }
+    },
+    {
+      "files": [
+        "**/src/app/**/opengraph-image.tsx",
+        "**/src/app/**/twitter-image.tsx",
+        "**/src/app/**/icon.tsx",
+        "**/src/app/**/apple-icon.tsx"
+      ],
+      "rules": {
+        "react/only-export-components": [
+          "error",
+          {
+            "allowExportNames": [
+              "alt",
+              "size",
+              "contentType",
+              "generateImageMetadata",
+              "dynamic",
+              "dynamicParams",
+              "revalidate",
+              "fetchCache",
+              "runtime",
+              "preferredRegion",
+              "maxDuration"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/proxy.ts", "**/src/middleware.ts"],
+      "rules": {
+        "unicorn/prefer-string-raw": "off"
       }
     },
     {
