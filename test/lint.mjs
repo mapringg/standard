@@ -46,3 +46,7 @@ export function only(diagnostics, rule) {
 export function filesWith(diagnostics, rule) {
   return [...new Set(only(diagnostics, rule).map((item) => item.file))].sort();
 }
+
+export function crashes(diagnostics) {
+  return diagnostics.filter((item) => item.message.startsWith("Error running JS plugin"));
+}
