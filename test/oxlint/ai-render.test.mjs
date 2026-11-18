@@ -31,3 +31,14 @@ test("ai-render resolves package imports and aliases to src/lib/ai", (t) => {
   });
   assert.deepEqual(diagnostics.map(({ filename }) => filename), [`${S}/app/lazy/page.tsx`, `${S}/app/page.tsx`]);
 });
+
+test("ai-render applies only inside Next apps", (t) => {
+  const diagnostics = lint(t, "ai-render", {
+    "apps/api/package.json": { type: "module", dependencies: { hono: "4" } },
+    "apps/api/src/lib/ai.ts": "export function createProvider() { return 1; }\n",
+    "apps/api/src/ai/model-runtime/driver.ts": 'import { createProvider } from "../../lib/ai.js";\nexport const driver = createProvider();\n',
+    [`${S}/lib/ai.ts`]: "export async function generateSummary() { return 1; }\n",
+    [`${S}/app/page.tsx`]: 'import { generateSummary } from "@/lib/ai";\nexport default async function Page() { return <p>{await generateSummary()}</p>; }\n',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), [`${S}/app/page.tsx`]);
+});
