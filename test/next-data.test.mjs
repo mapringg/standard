@@ -15,10 +15,13 @@ test("next-data checks use cache, tags and server-only", (t) => {
     "apps/web/src/features/task/task-user.server.ts": `import "server-only";\n${imports}export async function listTasks(userId: string) { "use cache"; cacheTag(taskTag); cacheLife("hours"); return [userId]; }\n`,
     "apps/web/src/features/task/task-literal.server.ts": `import "server-only";\n${imports}export async function listTasks() { "use cache"; cacheTag("tasks"); cacheLife("hours"); return [taskTag]; }\n`,
     "apps/web/src/features/task/task-open.server.ts": "export const open = 1;\n",
+    "apps/web/src/features/task/task-reload.tsx":
+      'import { useRouter } from "next/navigation";\nexport function TaskReload() { const r = useRouter(); return () => [r.refresh(), useRouter().refresh()]; }\n',
   });
   deepEqual(filesWith(result, "next-data"), [
     "apps/web/src/features/task/task-literal.server.ts",
     "apps/web/src/features/task/task-open.server.ts",
+    "apps/web/src/features/task/task-reload.tsx",
     "apps/web/src/features/task/task-untagged.server.ts",
     "apps/web/src/features/task/task-user.server.ts",
   ]);

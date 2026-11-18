@@ -22,6 +22,11 @@ ${long}
 });
 export const users = app;
 `,
+    "apps/api/src/features/notes/routes.ts": `${head}export const notes = factory
+  .createApp()
+  .get("/", describeRoute({}), async (ctx) => ctx.json([]))
+  .delete("/:id", async (ctx) => ctx.body(null, 204));
+`,
     "apps/api/src/app.ts": `import { openAPIRouteHandler } from "hono-openapi";
 import { factory } from "@/factory";
 import { tasks } from "@/features/tasks/routes";
@@ -37,6 +42,8 @@ export const leaked = base.get("/api/docs", openAPIRouteHandler(base));
   deepEqual(found, [
     "apps/api/src/app.ts: Mount routers at /api/<plural-kebab>",
     "apps/api/src/app.ts: Mount the OpenAPI spec and docs only when NODE_ENV is development",
+    "apps/api/src/features/notes/routes.ts: Every route has describeRoute with its response schemas from schema",
+    "apps/api/src/features/notes/routes.ts: Pass the status explicitly: c",
     "apps/api/src/features/users/routes.ts: A route handler is at most 10 lines",
     "apps/api/src/features/users/routes.ts: Build each router as one chain: factory",
     "apps/api/src/features/users/routes.ts: Build each router as one chain: factory",

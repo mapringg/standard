@@ -10,6 +10,7 @@ test("no-comments flags every comment and skips generated files", (t) => {
     "packages/i18n/src/block.ts": "/* note */\nexport const a = 1;\n",
     "packages/i18n/src/directive.ts": "// @ts-expect-error\nexport const a: number = 'x';\n",
     "packages/i18n/src/view.tsx": "export const View = () => <div>{/* note */}</div>;\n",
+    "packages/i18n/src/cli.ts": "#!/usr/bin/env node\nexport const a = 1;\n",
     "packages/i18n/src/env.d.ts": '/// <reference types="vite/client" />\n',
   });
   deepEqual(filesWith(result, "no-comments"), [

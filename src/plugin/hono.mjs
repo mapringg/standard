@@ -31,6 +31,15 @@ function inDevelopmentBranch(node, source) {
   return false;
 }
 
+function isContext(node) {
+  if (node?.type !== "Identifier") return false;
+  for (let current = node.parent; current; current = current.parent) {
+    if (FUNCTION.has(current.type) && current.params[0]?.type === "Identifier" && current.params[0].name === node.name)
+      return true;
+  }
+  return false;
+}
+
 export default {
   meta: {
     type: "problem",
@@ -56,7 +65,7 @@ export default {
       CallExpression(node) {
         const method = property(node.callee);
         const object = node.callee.object;
-        if (method === "json" && object?.type === "Identifier" && object.name === "c" && node.arguments.length < 2) {
+        if (method === "json" && isContext(object) && node.arguments.length < 2) {
           context.report({ node, message: "Pass the status explicitly: c.json(body, 200)." });
         }
         if (RAW.has(method) && object?.type === "MemberExpression" && property(object) === "req") {
@@ -79,7 +88,10 @@ export default {
             message: "Paths are / and /:id, plus POST /:id/<verb> for actions.",
           });
         if (!node.arguments.some((arg) => calls(arg, "describeRoute")))
-          context.report({ node, message: "Every route has describeRoute with its response schemas from schema.ts." });
+          context.report({
+            node: node.callee.property,
+            message: "Every route has describeRoute with its response schemas from schema.ts.",
+          });
         const handler = node.arguments.at(-1);
         if (!FUNCTION.has(handler.type))
           context.report({ node: handler, message: "Write the handler inline as the last argument." });

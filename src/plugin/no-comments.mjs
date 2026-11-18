@@ -10,6 +10,7 @@ export default {
     return {
       Program() {
         for (const comment of context.sourceCode.getAllComments()) {
+          if (comment.type === "Shebang") continue;
           context.report({
             loc: comment.loc,
             message:

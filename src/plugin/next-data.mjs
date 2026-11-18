@@ -42,6 +42,7 @@ export default {
     const name = stem(context.filename);
     const cacheFile = name.endsWith("-cache");
     const cached = new Map();
+    const routers = new Set();
     let fileCached = false;
     let serverOnly = false;
     const enter = (node) => {
@@ -69,8 +70,26 @@ export default {
       ...moduleVisitors((source) => {
         if (source === "server-only") serverOnly = true;
       }),
+      VariableDeclarator(node) {
+        if (
+          node.id.type === "Identifier" &&
+          node.init?.type === "CallExpression" &&
+          calleeName(node.init) === "useRouter"
+        )
+          routers.add(node.id.name);
+      },
       CallExpression(node) {
         const called = calleeName(node);
+        if (called === "refresh" && node.callee.type === "MemberExpression") {
+          const object = node.callee.object;
+          const named = object.type === "Identifier" && object.name !== "router" && routers.has(object.name);
+          if (named || (object.type === "CallExpression" && calleeName(object) === "useRouter")) {
+            context.report({
+              node,
+              message: "Never router.refresh(). Update the cache in the Server Action with updateTag or refresh().",
+            });
+          }
+        }
         const owner = nearestCached(node);
         if (owner && (called === "cacheTag" || called === "cacheLife")) cached.get(owner).add(called);
         const tag = node.arguments[0]?.type;
