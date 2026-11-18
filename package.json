@@ -1,63 +1,42 @@
 {
   "name": "@mapringg/standard",
-  "version": "0.17.0",
-  "description": "One repository standard for every project, run by one command.",
+  "version": "1.0.0",
+  "description": "One oxlint config and plugin for every repository.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
+  "files": [
+    "oxlint.json",
+    "oxfmt.json",
+    "tsconfig.json",
+    "knip.json",
+    "src"
+  ],
   "type": "module",
-  "bin": {
-    "standard": "bin/standard.mjs"
-  },
   "exports": {
     "./package.json": "./package.json",
-    "./oxlint": "./src/oxlint/index.mjs",
-    "./oxfmt": "./config/oxfmt.json",
-    "./tsconfig": "./config/tsconfig.json",
-    "./oxlint-config": "./config/oxlint.json",
-    "./schema.json": "./schema.json"
-  },
-  "files": [
-    "bin",
-    "config",
-    "src",
-    "templates",
-    "schema.json"
-  ],
-  "engines": {
-    "node": ">=26"
+    "./oxlint.json": "./oxlint.json",
+    "./oxfmt.json": "./oxfmt.json",
+    "./tsconfig.json": "./tsconfig.json",
+    "./knip.json": "./knip.json",
+    "./plugin": "./src/plugin/index.mjs"
   },
   "scripts": {
-    "test": "node --test",
-    "typecheck": "tsc -p tsconfig.json"
-  },
-  "dependencies": {
-    "@astrojs/compiler": "4.0.0",
-    "entities": "9.0.0",
-    "knip": "6.45.1",
-    "mdast-util-from-markdown": "2.1.0",
-    "mdast-util-frontmatter": "2.0.1",
-    "mdast-util-gfm": "3.1.0",
-    "micromark-extension-frontmatter": "2.0.0",
-    "micromark-extension-gfm": "3.0.0",
-    "oxc-parser": "0.158.0",
-    "oxc-resolver": "11.24.2",
-    "parse5": "8.1.1",
-    "spdx-expression-parse": "5.0.0",
-    "unbash": "6.0.4",
-    "yaml": "2.9.1"
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "test": "node --test"
   },
   "devDependencies": {
-    "@types/mdast": "4.0.4",
-    "@types/node": "26.6.6",
-    "@types/react": "19.3.0",
-    "jsdom": "31.0.1",
-    "oxfmt": "0.78.0",
-    "oxlint": "1.93.0",
-    "oxlint-tsgolint": "7.0.2007",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "swr": "2.5.1",
-    "typescript": "7.0.2",
-    "typescript-6": "npm:typescript@6.0.3"
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
+  },
+  "peerDependencies": {
+    "knip": "6.45.1",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
+  },
+  "engines": {
+    "node": ">=26"
   }
 }

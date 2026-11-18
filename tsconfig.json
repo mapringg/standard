@@ -1,15 +1,21 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
     "noEmit": true,
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "target": "esnext",
-    "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["node"]
-  },
-  "include": ["bin/**/*.mjs", "src/**/*.mjs"]
+    "resolveJsonModule": true,
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "target": "es2024",
+    "lib": ["es2024"],
+    "jsx": "react-jsx"
+  }
 }
