@@ -24,12 +24,22 @@ test("no-doc-pointers fails each See: pointer in source, whatever it names, and 
   assert.equal(status, 1);
 });
 
-test("no-doc-pointers reads the frontmatter and scripts of an Astro file, and not its markup", (t) => {
+test("no-doc-pointers reads an Astro file's frontmatter, scripts and markup expressions, and not its text or HTML comments", (t) => {
   const { stdout, status } = pointers(t, {
-    "src/page.astro": "---\n// See: docs/time.md\nconst a = 1;\n---\n<p>// See: docs/time.md</p>\n<script>\n  // See: docs/time.md#why-utc\n</script>\n",
+    "src/page.astro": "---\n// See: docs/time.md\nconst a = 1;\n---\n<p>// See: docs/time.md</p>\n<script>\n  // See: docs/time.md#why-utc\n</script>\n{/* See: docs/time.md#why-utc */}\n<p title={/* See: docs/time.md */ \"a\"}>a</p>\n<!-- See: docs/time.md -->\n",
   });
-  assert.equal(stdout, ["no-doc-pointers: 1 new findings.", `  src/page.astro has See: pointers on lines 2, 7. ${FIX}`, NO_BASELINE, ""].join("\n"));
+  assert.equal(stdout, ["no-doc-pointers: 1 new findings.", `  src/page.astro has See: pointers on lines 2, 7, 9, 10. ${FIX}`, NO_BASELINE, ""].join("\n"));
   assert.equal(status, 1);
+});
+
+test("no-doc-pointers skips the files no-comments skips", (t) => {
+  const { stdout, status } = pointers(t, {
+    ".gitattributes": "src/gen.ts linguist-generated\nsrc/vendor/** linguist-vendored\n",
+    "next-env.d.ts": "// See: docs/time.md\n",
+    "src/gen.ts": "// See: docs/time.md\n",
+    "src/vendor/v.js": "// See: docs/time.md\n",
+  });
+  assert.deepEqual([stdout, status], ["no-doc-pointers: OK\n", 0]);
 });
 
 test("no-doc-pointers records today's pointers with --init and fails one more", (t) => {
