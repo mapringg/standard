@@ -209,9 +209,15 @@ export function migrateNames(root, { write, picks }) {
   for (const [from, to] of renames) git(root, "mv", from, to);
   const escape = (/** @type {string} */ text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const movePaths = (/** @type {string} */ text) => [...renames].reduce((current, [from, to]) => current.replace(new RegExp(`${escape(from)}(?![\\w.-])`, "g"), to), text);
+  /** @type {[string, string][]} Each tail of a renamed path, longest first, that ends no other tracked file, with its new tail. */
+  const tails = [...renames].flatMap(([from, to]) => {
+    const parts = from.split("/");
+    const moved = posix.basename(to);
+    return parts.map((_, index) => parts.slice(index).join("/")).filter((tail) => tracked.filter((file) => file === tail || file.endsWith(`/${tail}`)).length === 1).map((tail) => /** @type {[string, string]} */ ([tail, `${tail.slice(0, tail.length - posix.basename(from).length)}${moved}`]));
+  }).toSorted((a, b) => b[0].length - a[0].length);
   for (const doc of tracked.filter((file) => file.endsWith(".md"))) {
     const before = readFileSync(join(root, doc), "utf8");
-    const after = movePaths(before);
+    const after = tails.reduce((current, [from, to]) => current.replace(new RegExp(`(?<![\\w.@/-])${escape(from)}(?![\\w.-])`, "g"), to), movePaths(before));
     if (after !== before) writeFileSync(join(root, doc), after);
   }
   for (const baseline of tracked.filter((file) => file.startsWith(".standard/baselines/") && file.endsWith(".json"))) {
