@@ -44,6 +44,9 @@ importers:
       spdx-expression-parse:
         specifier: 5.0.0
         version: 5.0.0
+      unbash:
+        specifier: 6.0.4
+        version: 6.0.4
       yaml:
         specifier: 2.9.1
         version: 2.9.1

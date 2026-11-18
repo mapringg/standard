@@ -102,6 +102,16 @@ test("no-comments passes a See: pointer to a tracked doc and heading, and fails 
   );
 });
 
+test("no-comments reads a doc's heading anchors as GitHub renders the doc", (t) => {
+  const docs = { "docs/time.md": "# Time\n\n## Use <code>cache</code>\n\nWhy local\n---\n\n```md\n## Why fenced\n```\n" };
+  passes(t, { ...docs, "src/a.ts": "// See: docs/time.md#use-cache\n// See: docs/time.md#why-local\nexport const a = 1;\n" });
+  fails(
+    t,
+    { ...docs, "src/a.ts": "// See: docs/time.md#why-fenced\nexport const a = 1;\n" },
+    "src/a.ts doc-pointer: src/a.ts has a comment on line 1. Point at a heading docs/time.md has, as GitHub slugs it, or drop the anchor; it has no #why-fenced.",
+  );
+});
+
 const MIT = [
   "SPDX-License-Identifier: MIT",
   "Copyright (c) 2026 Someone",

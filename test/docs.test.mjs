@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { git, standard, tempRepo, write } from "./helpers.mjs";
@@ -169,4 +171,229 @@ for (const [name, agents, files, found] of [
 
 test("docs passes a repository with no Markdown", (t) => {
   passes(t, { "src/a.ts": "export const a = 1;\n" });
+});
+
+const REFERENCED = {
+  "AGENTS.md": "# Guide\n\n[Conventions](docs/conventions.md), [broken](docs/broken.md), [vendor](docs/external/vendor.md)\n",
+  ".gitignore": ".env*\nlogs/\n",
+  "package.json": JSON.stringify({ scripts: { build: "tsc" }, dependencies: { "@scope/pkg": "1.0.0" } }),
+  "apps/api/package.json": JSON.stringify({ name: "api", scripts: { "test:parity": "node --test" } }),
+  "packages/ui/package.json": JSON.stringify({ name: "@scope/ui", scripts: { storybook: "storybook dev" } }),
+  "apps/api/src/x.ts": "export const parseThing = 1;\nexport const MAX_ITEMS = 2;\n",
+  ".github/pull_request_template.md": "## Summary\n\nSee `missing.ts` and [nothing](nope.md).\n",
+};
+
+test("docs passes references that name tracked paths, globs, ignored paths, dependencies, scripts, symbols and headings", (t) => {
+  passes(t, {
+    ...REFERENCED,
+    "AGENTS.md": "# Guide\n\n[Conventions](docs/conventions.md) and [the api guide](apps/api/docs/guide.md)\n",
+    "apps/api/logo.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x1a]),
+    "apps/api/docs/guide.md": "# Guide\n\nFrom `apps/api`, `../../docs/conventions.md` holds the rules.\n",
+    "docs/conventions.md": [
+      "# Conventions",
+      "",
+      "## Local db",
+      "",
+      "Read `src/x.ts`, `apps/api/src/x.ts`, `x.ts`, `apps/*/src/*.ts`, `src/*.ts`, `apps/api/src/x.ts:2` and `../apps/api/src/x.ts`.",
+      "Name files by suffix, such as `.server.ts`, rule ids by prefix, such as `si/`, and screenshots, such as `figure-1-2.png`.",
+      "Copy `apps/api/.env.local` and check `logs/`. Import `@scope/pkg/sub.js`.",
+      "Skip `<name>.ts`, `$HOME/a.ts`, `~/a.md`, `/api/a.json` and `https://example.com/b.ts`.",
+      "Call `parseThing()` with `MAX_ITEMS`.",
+      "Run `pnpm --filter api test:parity`, `pnpm build`, `pnpm exec whatever`, `pnpm install`, `pnpm -C apps/api test:parity`, `pnpm --filter @scope/ui storybook` and `pnpm --filter ./packages/ui storybook`.",
+      "See [local](#local-db), [apps](../apps/) and [api](/apps/api/src/x.ts).",
+      "Use pnpm in prose without checking it.",
+      "",
+      "```sh",
+      "pnpm build",
+      "pnpm --filter=api run test:parity",
+      "```",
+      "",
+    ].join("\n"),
+  });
+});
+
+test("docs lists every reference in a doc that names nothing, and checks only links and local paths in external docs", (t) => {
+  fails(
+    t,
+    {
+      ...REFERENCED,
+      "docs/conventions.md": "# Conventions\n\n## Local db\n",
+      "docs/broken.md": [
+        "# Broken",
+        "",
+        "Read `src/missing.ts`, `./nope.md` and `apps/*/src/*.go`.",
+        "Call `parseWidget` and `MISSING_THING`.",
+        "Run `pnpm check:docs` and `pnpm --filter api build`.",
+        "See [setup `db`](conventions.md#setup) and [gone](gone.md), but not `[code](nowhere.md)`.",
+        "",
+        "```sh",
+        "pnpm lint",
+        "```",
+        "",
+      ].join("\n"),
+      "docs/external/vendor.md": "# Vendor\n\nTheir `src/server/handler.go` calls `fetchVendorThing` through `pnpm vendor:sync`. Ours is `apps/api/src/gone.ts` and [x](missing.md).\n",
+    },
+    "docs/broken.md reference: docs/broken.md names things that do not exist: line 3 `src/missing.ts` (no tracked file ends with this path), line 3 `./nope.md` (no tracked file at docs/nope.md or from a folder above it), line 3 `apps/*/src/*.go` (no tracked file matches this glob), line 4 `parseWidget` (no tracked source has this word), line 4 `MISSING_THING` (no tracked source has this word), line 5 `pnpm check:docs` (package.json has no script check:docs), line 5 `pnpm --filter api build` (api has no script build), line 6 [setup `db`](conventions.md#setup) (docs/conventions.md has no heading #setup), line 6 [gone](gone.md) (docs/gone.md is not tracked), line 9 `pnpm lint` (package.json has no script lint). Fix each name, or move facts about an outside system to docs/external/.",
+    "docs/external/vendor.md reference: docs/external/vendor.md names things that do not exist: line 3 `apps/api/src/gone.ts` (no tracked file ends with this path), line 3 [x](missing.md) (docs/external/missing.md is not tracked). Fix each name.",
+  );
+});
+
+test("docs matches a percent-encoded anchor and one to a heading with inline HTML", (t) => {
+  passes(t, {
+    "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md#caf%C3%A9)\n",
+    "docs/guide.md": "# Café\n\n## Use <code>cache</code>\n\n[Jump](#caf%C3%A9) or [cache](#use-cache).\n",
+  });
+});
+
+test("docs reads quoted pnpm package flags as the shell does", (t) => {
+  passes(t, {
+    "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+    "apps/web/package.json": JSON.stringify({ name: "@scope/web", scripts: { build: "next build" } }),
+    "docs/guide.md": "# Guide\n\nRun `pnpm --filter='@scope/web' build`.\n\n```sh\npnpm --filter \"@scope/web\" build\npnpm -C 'apps/web' build\npnpm --dir=\"apps/web\" run build\n```\n",
+  });
+});
+
+test("docs resolves a pnpm script with no package flag against the doc's nearest package or the root", (t) => {
+  fails(
+    t,
+    {
+      "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md) and [web](apps/web/docs/deploy.md)\n",
+      "package.json": JSON.stringify({ scripts: { lint: "oxlint" } }),
+      "apps/web/package.json": JSON.stringify({ name: "web", scripts: { "deploy:prod": "deploy" } }),
+      "apps/api/package.json": JSON.stringify({ name: "api", scripts: { seed: "seed" } }),
+      "apps/web/docs/deploy.md": "# Deploy\n\nRun `pnpm deploy:prod`, `pnpm lint` and `pnpm seed`.\n",
+      "docs/guide.md": "# Guide\n\nRun `pnpm deploy:prod`, `pnpm lint` and `pnpm -r seed`.\n",
+    },
+    "apps/web/docs/deploy.md reference: apps/web/docs/deploy.md names things that do not exist: line 3 `pnpm seed` (apps/web/package.json and package.json have no script seed). Fix each name, or move facts about an outside system to docs/external/.",
+    "docs/guide.md reference: docs/guide.md names things that do not exist: line 3 `pnpm deploy:prod` (package.json has no script deploy:prod). Fix each name, or move facts about an outside system to docs/external/.",
+  );
+});
+
+const reference = (path, ...misses) => `${path} reference: ${path} names things that do not exist: ${misses.join(", ")}. Fix each name, or move facts about an outside system to docs/external/.`;
+
+const UNCLOSED = "a quote is not closed, so no shell can run it; fix the quoting";
+
+const WEB = {
+  "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+  "package.json": JSON.stringify({ scripts: {} }),
+  "apps/web/package.json": JSON.stringify({ name: "@scope/web", scripts: { build: "echo build" } }),
+};
+
+for (const [name, command, miss, shown = command] of [
+  ["a double-quoted filter", 'pnpm --filter "@scope/web" build', null],
+  ["a single-quoted filter", "pnpm --filter '@scope/web' build", null],
+  ["a quoted directory", 'pnpm --dir "apps/web" build', null],
+  ["quotes in the middle of a word", 'pnpm --filter "@scope/web" "bu"ild', null],
+  ["a comment that names pnpm build", 'pnpm --filter "@scope/web" build # runs pnpm build in the web package', null],
+  ["a comment that names a missing script", 'pnpm --filter "@scope/web" build # pnpm missing', null],
+  ["an unclosed quote in the filter", 'pnpm --filter "@scope/web build', UNCLOSED],
+  ["an unclosed double quote", 'pnpm --filter "@scope/web" "build', UNCLOSED],
+  ["an unclosed single quote", "pnpm --filter '@scope/web' 'build", UNCLOSED],
+  ["an unclosed quote inside a word", 'pnpm --filter "@scope/web" bu"ild', UNCLOSED],
+  ["an unclosed quote after a missing script", 'pnpm --filter "@scope/web" missing"', UNCLOSED],
+  ["an unclosed quote before a missing script", 'pnpm --filter "@scope/web" "missing', UNCLOSED],
+  ["an unclosed quote in a line that runs no pnpm", "echo it's done", null],
+  ["a hash inside a word, which starts no comment", "echo a#b && pnpm missing", "package.json has no script missing"],
+  ["a command after an operator", "cd apps/web; pnpm --filter=@scope/web run missing", "@scope/web has no script missing"],
+  ["a continued filter", 'pnpm --filter \\\n  "@scope/web" build', null],
+  ["a continued filter with a missing script", 'pnpm --filter \\\n  "@scope/web" missing', "@scope/web has no script missing", 'pnpm --filter "@scope/web" missing'],
+  ["a continued line inside a quoted filter", 'pnpm --filter "@scope/\\\nweb" build', null],
+  ["a continued run of a missing script", "pnpm run \\\n  missing", "package.json has no script missing", "pnpm run missing"],
+  ["a heredoc body, which is data", "cat <<'EOF'\npnpm missing\nEOF", null],
+  ["an unclosed quote in a heredoc body", "cat <<'EOF'\npnpm --filter \"whatever\nEOF", null],
+  ["pnpm as an argument to echo", "echo pnpm missing", null],
+  ["pnpm as an argument to a pnpm script", 'pnpm --filter "@scope/web" build --label pnpm missing', null],
+]) {
+  test(`docs splits a pnpm command as a POSIX shell does: ${name}`, (t) => {
+    const files = { ...WEB, "docs/guide.md": `# Guide\n\n\`\`\`sh\n${command}\n\`\`\`\n` };
+    if (miss === null) passes(t, files);
+    else fails(t, files, reference("docs/guide.md", `line 4 \`${shown}\` (${miss})`));
+  });
+}
+
+test("docs passes a path git ignores beside a symlink git cannot look through", (t) => {
+  const cwd = tempRepo(t);
+  write(cwd, {
+    "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+    ".gitignore": "node_modules/\ngenerated/\n",
+    "package.json": JSON.stringify({ scripts: {} }),
+    "vendor/types.json": "{}\n",
+    "docs/guide.md": "# Guide\n\nRead `node_modules/pkg/types.json` and `generated/result.json`.\n",
+  });
+  mkdirSync(join(cwd, "node_modules"));
+  symlinkSync("../vendor", join(cwd, "node_modules/pkg"));
+  git(cwd, "add", "-A");
+  assert.deepEqual(standard(cwd, ["check", "docs"]).stdout, "docs: OK\n");
+});
+
+test("docs gives a heading repeated after its suffixed name the next free suffix, as GitHub does", (t) => {
+  passes(t, { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Setup\n\n# Setup-1\n\n# Setup\n\n[Jump](#setup-2)\n" });
+});
+
+test("docs passes a bare file name that tracked source writes, and fails one source names only inside a folder", (t) => {
+  fails(
+    t,
+    {
+      "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n",
+      "package.json": JSON.stringify({ scripts: {} }),
+      "scripts/verify.mjs": 'writeFileSync(join(out, "result.json"), "{}");\nreadFileSync("evidence/cleanup.json");\nmkdirSync("trace.json/archive");\nrm("log.json.bak");\n',
+      "docs/guide.md": "# Guide\n\nThe run writes `result.json` and `cleanup.json`, then `trace.json` and `log.json`.\n",
+    },
+    reference(
+      "docs/guide.md",
+      "line 3 `cleanup.json` (no tracked file ends with this path)",
+      "line 3 `trace.json` (no tracked file ends with this path)",
+      "line 3 `log.json` (no tracked file ends with this path)",
+    ),
+  );
+});
+
+test("docs reports a path beneath a tracked file as missing", (t) => {
+  fails(
+    t,
+    { "AGENTS.md": "# Guide\n\nRead `package.json/child/missing.json`.\n", "package.json": "{}" },
+    "AGENTS.md reference: AGENTS.md names things that do not exist: line 3 `package.json/child/missing.json` (no tracked file ends with this path). Fix each name, or move facts about an outside system to docs/external/.",
+  );
+});
+
+for (const [name, lang, body, miss, shown] of [
+  ["a TypeScript template string", "ts", "const example = `\npnpm missing\n`;", null],
+  ["a TypeScript comment", "ts", "/*\npnpm missing\n*/", null],
+  ["a JSON string", "json", '{ "example": "pnpm missing" }', null],
+  ["a block with no language", "", "pnpm missing", null],
+  ["a bash block", "bash", "pnpm missing", "package.json has no script missing", "pnpm missing"],
+  ["a console prompt", "console", "$ pnpm missing\ncommand failed", "package.json has no script missing", "pnpm missing"],
+  ["console output", "console", "$ echo example\npnpm missing", null],
+  ["a console prompt continued after a > prompt", "console", '$ pnpm --filter \\\n> "@scope/web" missing', "@scope/web has no script missing", 'pnpm --filter "@scope/web" missing'],
+]) {
+  test(`docs reads pnpm commands only in shell code blocks and console prompts: ${name}`, (t) => {
+    const files = { ...WEB, "docs/guide.md": `# Guide\n\n\`\`\`${lang}\n${body}\n\`\`\`\n` };
+    if (miss === null) passes(t, files);
+    else fails(t, files, reference("docs/guide.md", `line 4 \`${shown}\` (${miss})`));
+  });
+}
+
+test("docs checks no reference inside an HTML comment", (t) => {
+  passes(t, { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Guide\n<!--\nUse `missingThing()` and [x](missing.md).\n-->\n" });
+});
+
+test("docs resolves a reference link, a folder link and a link to a Unicode heading", (t) => {
+  passes(t, {
+    "AGENTS.md": "[Guide][guide]\n\n[guide]: docs/guide.md\n",
+    "docs/guide.md": "# Guide\n\n[Parent](../src/) and [unicode](#café)\n\n## Café\n",
+    "src/file.ts": "export const x = 1;\n",
+  });
+});
+
+test("docs fails a symbol that only Markdown names", (t) => {
+  fails(
+    t,
+    { "AGENTS.md": "# Guide\n\n[Guide](docs/guide.md)\n", "docs/guide.md": "# Guide\n\nUse `parseThing()`.\n\nThe name parseThing lives here.\n" },
+    reference("docs/guide.md", "line 3 `parseThing()` (no tracked source has this word)"),
+  );
+});
+
+test("docs replaces the repository's check-docs script", (t) => {
+  const { stdout } = standard(tempRepo(t), ["explain", "docs"]);
+  assert.match(stdout, /^ {2}Replaces: scripts\/check-docs\.mjs, scripts\/check-docs\.test\.mjs$/m);
 });

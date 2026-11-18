@@ -4,6 +4,8 @@ import { posix } from "node:path";
 
 import { parseSource, sourceFiles } from "./support/sources.mjs";
 
+import { headingAnchors, markdownTree } from "./support/docs.mjs";
+
 /**
  * @typedef {import("../registry.mjs").Finding} Finding
  * @typedef {{ type: string, start: number, end: number, [key: string]: any }} Node
@@ -64,9 +66,6 @@ const OWNERS = new Set(["ExpressionStatement", "PropertyDefinition", "ReturnStat
 
 const HTML = "An HTML comment ships to every visitor. Move the why into a name or a doc, and delete the comment.";
 const COMMENT = `Move the why into a name, a test name or a type, or delete the comment. For a decision an agent would otherwise undo, write it under a heading in ${DOCS.join(" or ")} and point at it alone on a line with // See: <path>.md#<heading>.`;
-
-/** @type {(heading: string) => string} The anchor GitHub gives a heading. */
-const slug = (heading) => heading.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/gu, "-");
 
 /** @type {Kind[]} */
 const KINDS = [
@@ -202,10 +201,7 @@ function trackedDocs(repo) {
     repo.files().filter((path) => DOCS.some((glob) => posix.matchesGlob(path, glob))).map((path) => {
       /** @type {ReadonlySet<string> | undefined} */
       let anchors;
-      const read = () => (anchors ??= new Set(repo.read(path).split("\n").flatMap((line) => {
-        const heading = /^#{1,6}\s+(.+?)\s*#*$/.exec(line);
-        return heading ? [slug(heading[1] ?? "")] : [];
-      })));
+      const read = () => (anchors ??= headingAnchors(markdownTree(repo.read(path))));
       return [path, read];
     }),
   );
