@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeBudgets } from "../src/doc-budgets.mjs";
 
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
@@ -39,6 +40,8 @@ const COMMANDS = {
     const stray = flags.find((flag) => !MODES.includes(flag)) ?? flags[1];
     if (stray) throw new Error(`Unexpected argument ${stray}. Use --pr <number> or one of ${MODES.join(", ")}.`);
     const repo = loadRepo(process.cwd());
+    const budgetMode = repo.config.allow !== undefined && args.filter((arg) => !arg.startsWith("--")).join() === "docs" && flags.length === 1;
+    if (budgetMode) repo.config = { ...repo.config, budgets: writeBudgets(repo, flags[0].slice(2)) };
     const event = process.env.GITHUB_EVENT_PATH;
     const results = await run({
       checks: registry,
@@ -49,7 +52,7 @@ const COMMANDS = {
           ? subjectsFromEvent(repo.root, event)
           : { commits: null, pr: null },
       names: args.filter((arg) => !arg.startsWith("--")),
-      mode: /** @type {import("../src/ratchet.mjs").Mode} */ (flags[0]?.slice(2) ?? "check"),
+      mode: /** @type {import("../src/ratchet.mjs").Mode} */ (budgetMode ? "check" : flags[0]?.slice(2) ?? "check"),
     });
     for (const line of report(results, process.env.GITHUB_ACTIONS === "true")) console.log(line);
     return failed(results) ? 1 : 0;

@@ -28,12 +28,14 @@ export function tryGit(cwd, ...args) {
 }
 
 export function standard(cwd, args, { env = {}, input } = {}) {
-  return spawnSync(process.execPath, [CLI, ...args], {
+  const result = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     env: { ...ENV, ...env },
     input,
     encoding: "utf8",
   });
+  const notice = ".standard/config.json: legacy settings are deprecated in 0.16.0. Use standard migrate to keep only $schema, ticket, skip and allow.\n";
+  return { ...result, migrationNotice: result.stderr.includes(notice), stderr: result.stderr.replaceAll(notice, "") };
 }
 
 export function tempDir(t, prefix) {
@@ -114,7 +116,7 @@ export const WIRED = {
   ".standard/config.json": { hooks: { "pre-push": ["pnpm test"] } },
   "package.json": {
     scripts: { prepare: "standard install", test: "node --test" },
-    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.15.0" },
+    devDependencies: { "@mapringg/standard": "github:mapringg/standard#v0.16.0" },
   },
   ".github/workflows/ci.yml": [
     "on:",

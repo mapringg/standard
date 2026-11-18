@@ -80,7 +80,7 @@ test("tests wants pre-push to run the test command as a whole command", (t) => {
   for (const line of ["pnpm lint && pnpm test", "pnpm test:visual", "pnpm turbo run test", 'echo "pnpm test"', "pnpm test || true", "pnpm test; true"]) {
     fails(t, hook(line), HOOKS);
   }
-  fails(t, { ".standard/config.json": {} }, HOOKS);
+  passes(t, { ".standard/config.json": {} });
 });
 
 test("tests wants a Check job step that runs the test command without continue-on-error", (t) => {

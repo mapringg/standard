@@ -1,6 +1,8 @@
 import { join } from "node:path";
 
 import { FILE, pendingProblem } from "./config.mjs";
+import { excepted, findingPath } from "./rule-settings.mjs";
+
 import { ratchet } from "./ratchet.mjs";
 
 /**
@@ -98,6 +100,11 @@ export async function run({ checks, repo, scope, names = [], mode = "check" }) {
     throw new Error(`standard check names "${unknown}", which is not a check in this version. Checks: ${known.join(", ")}.`);
   }
   const selected = names.length > 0 ? checks.filter((check) => names.includes(check.name)) : checks;
+  const guard = checks.find((check) => check.name === "config");
+  if (repo.config.allow !== undefined && selected.some((check) => check.subject !== "commit") && guard?.subject === "tree") {
+    const findings = await guard.run(repo, checks);
+    if (findings.length) return [{ check: "config", outcome: "ran", failed: true, findings, message: "" }];
+  }
   if (mode !== "check" && (selected.length !== 1 || selected[0].subject !== "tree")) {
     throw new Error(
       `--${mode} changes one baseline, so name exactly one tree check: standard check <name> --${mode}.`,
@@ -106,7 +113,16 @@ export async function run({ checks, repo, scope, names = [], mode = "check" }) {
   if (mode !== "check" && selected[0].subject === "tree" && selected[0].baseline === false) {
     throw new Error(`${selected[0].name} allows no findings, so it has no baseline for --${mode}. Fix what it finds.`);
   }
-  return Promise.all(selected.map((check) => runCheck(check, repo, scope, mode, checks)));
+  return Promise.all(selected.map(async (check) => {
+    const files = repo.files();
+    /** @param {Finding[]} findings */
+    const filter = (findings) => findings.filter((finding) => !excepted(repo.config, check.name, findingPath(finding, files)));
+    /** @type {Check} */
+    const configured = check.subject === "tree" ? { ...check, run: async (/** @type {Repo} */ repo, /** @type {Check[]} */ checks) => filter(await check.run(repo, checks)) }
+      : check.subject === "pr" ? { ...check, run: async (pr, repo, checks) => filter(await check.run(pr, repo, checks)) }
+      : { ...check, run: (/** @type {import("./subjects.mjs").Commit} */ commit, /** @type {Repo} */ repo) => filter(check.run(commit, repo)) };
+    return runCheck(configured, repo, scope, mode, checks);
+  }));
 }
 
 /**

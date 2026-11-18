@@ -32,7 +32,7 @@ function body({ summary = "Accept a Before/After table as evidence.", evidence, 
   ].join("\n");
 }
 
-function checkBody(t, prBody, { config } = {}) {
+function checkBody(t, prBody, { config = {} } = {}) {
   const repo = pullRequestRepo(t, { base: config ? { ".standard/config.json": config } : {} });
   return checkPullRequest(t, repo, { body: prBody }, ["pr-body"]);
 }
@@ -129,10 +129,10 @@ test("pr-body ignores a ticket line inside a code block", (t) => {
   assert.equal(checkBody(t, prBody).stdout.trim(), BODY_OK);
 });
 
-test("pr-body warns on a ticket line when the repo has no ticket prefix", (t) => {
-  const { stdout, status } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: ABC-12" }));
-  assert.match(stdout, /::warning title=pr-body::Ticket: .*\.standard\/config\.json sets no pr\.ticket-prefix.* Delete the line\./);
-  assert.equal(status, 0);
+test("pr-body reports a malformed ticket under the four-key schema", (t) => {
+  const { stdout } = checkBody(t, body({ evidence: PAIR, ticket: "Ticket: whatever-not-a-key" }), { config: { $schema: "x", ticket: "ABC" } });
+  assert.match(stdout, /::warning title=pr-body::Ticket:/);
+  assert.doesNotMatch(stdout, /pr-body: OK/);
 });
 
 function checkTitle(t, title, pr = {}) {
@@ -466,6 +466,7 @@ test("a pull_request event runs commit, pull request and tree checks in one proc
       "docs: OK",
       "docs-prose: OK",
       "no-doc-pointers: OK",
+      "config: OK",
     ].join("\n"),
   );
   assert.equal(status, 0);
@@ -543,5 +544,15 @@ test("the config fails on a bad pr key", (t) => {
     const { stderr, status } = standard(tempRepo(t, config), ["check"]);
     assert.match(stderr, expected);
     assert.equal(status, 1);
+  }
+});
+
+test("baseline-growth ratchets skip across the legacy-to-modern transition", (t) => {
+  for (const base of [{ skip: ["banned"] }, { pending: ["banned"] }]) {
+    const kept = checkGrowth(t, { base: { ...pinned("0.16.0"), ".standard/config.json": base }, head: { ...pinned("0.16.0"), ".standard/config.json": { skip: ["banned"] }, "change.txt": "changed" } });
+    assert.equal(kept.status, 0, kept.stdout + kept.stderr);
+    const grown = checkGrowth(t, { base: { ...pinned("0.16.0"), ".standard/config.json": base }, head: { ...pinned("0.16.0"), ".standard/config.json": { skip: ["banned", "react"] } } });
+    assert.equal(grown.status, 1);
+    assert.match(grown.stdout, /react/);
   }
 });

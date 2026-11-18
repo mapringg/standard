@@ -14,7 +14,8 @@ const BASELINES = /^\.standard\/baselines\/([^/]+)\.json$/;
 function rawPendingAt(repo, commit) {
   const text = repo.readAt(commit, FILE) ?? repo.readAt(commit, "standard.json");
   try {
-    const pending = text === null ? [] : JSON.parse(text).pending;
+    const raw = text === null ? {} : JSON.parse(text);
+    const pending = raw.skip ?? raw.pending;
     return Array.isArray(pending) ? pending.filter((name) => typeof name === "string") : [];
   } catch {
     return [];
@@ -24,7 +25,8 @@ function rawPendingAt(repo, commit) {
 /** @type {(repo: import("../repo.mjs").Repo, commit: string) => Map<string, number>} */
 function rawBudgetsAt(repo, commit) {
   try {
-    const budgets = JSON.parse(repo.readAt(commit, FILE) ?? "{}").budgets ?? {};
+    const baseline = repo.readAt(commit, ".standard/baselines/docs.json");
+    const budgets = baseline === null ? JSON.parse(repo.readAt(commit, FILE) ?? "{}").budgets ?? {} : JSON.parse(baseline);
     return new Map(Object.entries(budgets).filter((entry) => Number.isSafeInteger(entry[1])));
   } catch {
     return new Map();
@@ -38,17 +40,18 @@ function rawBudgetsAt(repo, commit) {
  * @returns {import("../registry.mjs").Finding[]} Each budget the PR raises or removes, and each it starts for a kind that already had docs.
  */
 function budgetGrowth(pr, repo, starts) {
+  const location = repo.config.allow === undefined ? FILE : ".standard/baselines/docs.json";
   const [before, after] = [rawBudgetsAt(repo, pr.baseSha), rawBudgetsAt(repo, pr.headSha)];
   const existed = new Set(git(repo.root, "ls-tree", "-r", "-z", "--name-only", pr.baseSha).split("\0").filter(isDoc).map((path) => place(path).kind?.name));
   return KINDS.flatMap(({ name }) => {
     const [was, now] = [before.get(name), after.get(name)];
     const key = `budget ${name}`;
-    if (was !== undefined && now === undefined) return [{ key, fix: `This PR removes budgets.${name} (${was}) from ${FILE}. A budget only shrinks. Keep it, or lower it.` }];
-    if (was !== undefined && now !== undefined && now > was) return [{ key, fix: `This PR raises budgets.${name} in ${FILE} from ${was} to ${now}. A budget only shrinks. Cut ${name} lines instead.` }];
+    if (was !== undefined && now === undefined) return [{ key, fix: `This PR removes budgets.${name} (${was}) from ${location}. A budget only shrinks. Keep it, or lower it.` }];
+    if (was !== undefined && now !== undefined && now > was) return [{ key, fix: `This PR raises budgets.${name} in ${location} from ${was} to ${now}. A budget only shrinks. Cut ${name} lines instead.` }];
     if (was !== undefined || now === undefined || starts || !existed.has(name)) return [];
     return [{
       key,
-      fix: `This PR adds budgets.${name} (${now}) to ${FILE}, while ${name} docs existed at the base. A budget starts only in the pull request that removes docs from pending, in a pin bump that brings docs, or with the first doc of its kind.`,
+      fix: `This PR adds budgets.${name} (${now}) to ${location}, while ${name} docs existed at the base. A budget starts only in the pull request that removes docs from pending, in a pin bump that brings docs, or with the first doc of its kind.`,
     }];
   });
 }
@@ -88,12 +91,13 @@ export default {
     const before = rawPendingAt(repo, pr.baseSha);
     const after = rawPendingAt(repo, pr.headSha);
     const adopted = before.filter((name) => !after.includes(name));
-    const findings = budgetGrowth(pr, repo, adopted.includes("docs") || arrived("docs"));
+    const findings = budgetGrowth(pr, repo, adopted.includes("docs") || arrived("docs") || arrived("config"));
+    const rollout = repo.config.allow === undefined ? "pending" : "skip";
     findings.push(...after
       .filter((name) => !before.includes(name) && !arrived(name))
       .map((name) => ({
-        key: `pending ${name}`,
-        fix: `${FILE} adds "${name}" to pending. pending only shrinks: fix what ${name} finds, or start its baseline in the PR that removes it from pending.`,
+        key: `${rollout} ${name}`,
+        fix: `${FILE} adds "${name}" to ${rollout}. ${rollout} only shrinks: fix what ${name} finds, or start its baseline in the PR that removes it from ${rollout}.`,
       })));
 
     const tracked = git(repo.root, "ls-tree", "-r", "--name-only", pr.headSha, "--", ".standard");
@@ -105,7 +109,7 @@ export default {
 
     for (const path of pr.changedFiles) {
       const check = BASELINES.exec(path)?.[1];
-      if (!check || adopted.includes(check)) continue;
+      if (!check || adopted.includes(check) || check === "docs" && repo.config.allow !== undefined) continue;
       const was = baselineEntries(repo.readAt(pr.baseSha, path));
       const now = repo.readAt(pr.headSha, path);
       if (now === null) continue;

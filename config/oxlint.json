@@ -3,7 +3,20 @@
   "categories": { "correctness": "error" },
   "env": { "builtin": true },
   "options": { "typeAware": true, "typeCheck": true, "reportUnusedDisableDirectives": "error" },
+  "jsPlugins": ["@mapringg/standard/oxlint"],
   "rules": {
+    "standard/zod": "error",
+    "standard/memo": "error",
+    "standard/timer": "error",
+    "standard/redis": "error",
+    "standard/ai": "error",
+    "standard/ui": "error",
+    "standard/swr": "error",
+    "standard/env": "error",
+    "standard/json": "error",
+    "standard/log": "error",
+    "standard/format": "error",
+
     "import/no-cycle": ["error", { "maxDepth": 3 }],
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
     "typescript/no-restricted-types": [

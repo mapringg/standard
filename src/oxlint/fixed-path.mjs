@@ -4,10 +4,10 @@ import { parseSync } from "oxc-parser";
 
 export const NON_PRODUCT = /\.(?:test|spec|stories)\.[^/]+$|(?:^|\/)(?:__tests__|tests?|__fixtures__|fixtures?|scripts|evals)\/|(?:^|\/)[^/]+\.config\.[^/]+$/;
 
-/** @param {string} filename */
-function packageRoot(filename) {
+/** @param {string} filename @param {string} cwd */
+function packageRoot(filename, cwd) {
   for (let folder = dirname(filename); ; folder = dirname(folder)) {
-    if (existsSync(join(folder, "package.json")) || dirname(folder) === folder) return folder;
+    if (existsSync(join(folder, "package.json")) || folder === cwd || dirname(folder) === folder) return folder;
   }
 }
 
@@ -51,7 +51,7 @@ export function fixedPathRule({ owner, modules, globals, properties }) {
     meta: { type: "problem", schema: [], messages: { owner: "{{fix}}" } },
     create(context) {
       const filename = context.filename;
-      const root = packageRoot(filename);
+      const root = packageRoot(filename, context.cwd);
       const path = relative(root, filename).split(sep).join("/");
       if (NON_PRODUCT.test(path) || matchesGlob(path.replace(/\.(?:server|browser)\.ts$/, ".ts"), owner)) return {};
       /** @param {Node} node */

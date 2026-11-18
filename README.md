@@ -57,6 +57,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `docs` | Every tracked Markdown file is a kind of doc the standard names by path, carries no `check-docs: external` marker, and is reached by links from an AGENTS.md, a CLAUDE.md, `.gemini/styleguide.md` or a SKILL.md unless it is a README or a pull request template. A file named like a log or plan fails in any folder. The paths, links, heading anchors, `pnpm` scripts and code symbols a doc names exist; an external doc's are checked only for links and paths under a tracked top-level entry. Each kind with docs has a line budget in `budgets` and fits it. | Move, delete, link, correct or cut the doc as the finding says. | `budgets` | 0.15.0 | yes |
 | `docs-prose` | Docs of every kind use no en or em dash and none of a fixed list of filler words outside code, headings in sentence case, and prose sentences of at most 40 words, where a code span or a link is one word. A capitalized heading word passes when it is all capitals, has an inner capital or dot, starts a sentence, or some doc's prose writes it capitalized mid-sentence. The headings `pr-body` requires pass. | Rewrite the sentence or heading as the finding says. | none | 0.15.0 | no |
 | `no-doc-pointers` | Source holds no `See:` comment that points at a doc, which `no-comments` still allows. Its baseline records today's pointers, so none can be added and each one deleted stays deleted. It skips the files `no-comments` skips. | Put the decision in a name, a type or a test, and delete the pointer. | none | 0.15.0 | no |
+| `config` | Config uses known rule ids and every exception glob changes a finding. | Delete unused exceptions and keep plugin rules enabled in oxlint. | `allow` | 0.16.0 | yes |
 <!-- explain:end -->
 
 `commit-subject` checks commit messages. A message is one subject line. The subject starts with a capital imperative verb, has three or more words and at most 80 characters, and has no prefix, no trailing period, no body and no trailers.
@@ -567,3 +568,20 @@ Oxlint 1.93.0 loads `@mapringg/standard/oxlint` through `jsPlugins`. The JSON co
 ```
 
 Each package owns environment reads in `src/env.ts`, JSON parsing in `src/lib/json.ts`, logging in `src/lib/log.ts`, date formatting in `src/lib/format.ts`, Redis imports in `src/lib/redis.ts`, AI SDK imports in `src/lib/ai.ts`, SWR imports in `src/lib/swr.ts`, and primitive UI imports under `src/components/ui/`. Owners may use `.server.ts` and `.browser.ts` variants. Tests, fixtures, stories, scripts, evals and config files are excluded. Diagnostics name the owner's exported helpers when the owner exists. The CLI `banned` check remains available during migration.
+
+### Configuration in 0.16.0
+
+An empty `.standard/config.json` enables every check. The schema has four keys: `$schema`, `ticket`, `skip` and `allow`. `skip` is temporary rollout debt and may only shrink. `allow` is the only file exception, for CLI checks and `standard/<rule>` plugin rules alike.
+
+```json
+{
+  "$schema": "../node_modules/@mapringg/standard/schema.json",
+  "ticket": "ABC",
+  "skip": ["cache-components"],
+  "allow": { "standard/log": ["src/legacy.ts"] }
+}
+```
+
+Every allow glob must change a finding; unmatched, redundant and skipped-rule exceptions fail. Keep plugin rules at error in oxlint; the config guard rejects disabled or warning-level standard rules there. The guard skips commit-message runs. Checks keep their built-in advisory behavior. Malformed ticket lines warn during checks and block merge.
+
+Earlier repository-specific keys, including `pr.ticket-prefix` and `pending`, still parse with a deprecation notice during adoption. Mixing formats fails. Fixed paths, module entries, Next layering, API paths, cached-module names, hook commands and screenshot requirements are derived. Initialize doc line budgets with `standard check docs --init`, and lower them with `standard check docs --write`.

@@ -59,8 +59,8 @@ function orphanFindings(corpus) {
     .map(({ path }) => ({ key: `${path} orphan`, fix: `No link reaches ${path} from ${ROOTS}. Link it from ${nearestRoot(corpus, path)}.` }));
 }
 
-/** @type {(corpus: Corpus, budgets: import("../config.mjs").Budgets) => Finding[]} Each kind with docs has a budget and fits it. */
-function budgetFindings(corpus, budgets) {
+/** @type {(corpus: Corpus, budgets: import("../config.mjs").Budgets, location?: string) => Finding[]} Each kind with docs has a budget and fits it. */
+function budgetFindings(corpus, budgets, location = `budgets in ${FILE}`) {
   return KINDS.flatMap(({ name }) => {
     const docs = [...corpus.docs.values()].filter((doc) => doc.kind.name === name).sort((a, b) => b.lines - a.lines);
     const total = docs.reduce((sum, doc) => sum + doc.lines, 0);
@@ -70,8 +70,8 @@ function budgetFindings(corpus, budgets) {
     return [{
       key: `budget ${name}`,
       fix: budget === undefined
-        ? `budgets in ${FILE} has no "${name}", and ${name} docs total ${total} lines. Add "${name}": ${total}, then lower it as they shrink.`
-        : `${name} docs total ${total} lines, over budgets.${name} ${budget} in ${FILE}. Cut ${total - budget} lines. Largest: ${largest}.`,
+        ? `${location} has no "${name}", and ${name} docs total ${total} lines. Add "${name}": ${total}, then lower it as they shrink.`
+        : `${name} docs total ${total} lines, over ${location === `budgets in ${FILE}` ? `budgets.${name} ${budget} in ${FILE}` : `${location} ${name} ${budget}`}. Cut ${total - budget} lines. Largest: ${largest}.`,
     }];
   });
 }
@@ -91,6 +91,6 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const corpus = loadCorpus(repo);
-    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus), ...budgetFindings(corpus, repo.config.budgets)];
+    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus), ...budgetFindings(corpus, repo.config.budgets, repo.config.allow === undefined ? undefined : ".standard/baselines/docs.json (initialize with standard check docs --init)")];
   },
 };

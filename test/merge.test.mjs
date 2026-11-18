@@ -484,3 +484,12 @@ test("merge fetches a base or head commit the clone lacks from origin", (t) => {
   const view = { headRefOid: origin.head, baseRefOid: base };
   assert.equal(mergeWith(t, { cwd: clone, runs, view }).merged.length, 1);
 });
+
+test("merge enforces derived screenshots for a flat-config React app", (t) => {
+  const repo = pullRequestRepo(t, {
+    base: { ".standard/config.json": {}, "apps/web/package.json": { dependencies: { next: "16", react: "19" } } },
+    head: { "apps/web/src/page.tsx": "export default function Page() { return null; }" },
+  });
+  const result = mergeWith(t, { cwd: repo.cwd, runs: [run(1, { sha: repo.head })], view: { headRefOid: repo.head, baseRefOid: repo.base } });
+  assertRefused(result, /pr-screenshot: warning: Evidence: Evidence has no screenshot/);
+});

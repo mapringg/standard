@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { parseDocument } from "yaml";
 
+import { parseSettings } from "./rule-settings.mjs";
+
 import { KINDS } from "./doc-kinds.mjs";
 
 /**
@@ -17,6 +19,7 @@ import { KINDS } from "./doc-kinds.mjs";
  * @property {readonly string[]} apiModules Globs of the app's API modules, which a `"use client"` file may not import.
  * @property {readonly string[]} errorBoundaries Error boundary components as `<package or repo file>#<export>`, which cover a `<Suspense>` inside them.
  * @property {readonly string[]} cachedModules Globs of the modules whose functions return a cached promise, which React's `use` may read.
+ * @property {import("./rule-settings.mjs").Settings["allow"]} [allow]
  * @property {Budgets} budgets
  *
  * The most lines each kind of doc may total. A kind with no entry has no budget yet.
@@ -322,7 +325,7 @@ function boundaries(value) {
  * @param {string} text
  * @returns {Config}
  */
-export function parseConfig(text) {
+function parseLegacyConfig(text) {
   let raw;
   try {
     raw = JSON.parse(text);
@@ -352,6 +355,23 @@ export function parseConfig(text) {
     errorBoundaries: errorBoundaries(top["error-boundaries"] ?? []),
     budgets: budgets(top.budgets ?? {}),
   });
+}
+
+/** @param {string} text @returns {Config} */
+export function parseConfig(text) {
+  let raw;
+  try { raw = JSON.parse(text); } catch { return parseLegacyConfig(text); }
+  if (raw && typeof raw === "object" && !Array.isArray(raw) &&
+      (Object.keys(raw).length === 0 || ["$schema", "ticket", "skip", "allow", "rules", "overrides"].some((key) => key in raw))) {
+    const settings = parseSettings(raw);
+    const duplicate = parseDocument(text).errors.find((error) => error.code === "DUPLICATE_KEY");
+    if (duplicate) {
+      const { line, col } = duplicate.linePos?.[0] ?? { line: 0, col: 0 };
+      throw new Error(`${FILE} repeats a key at line ${line}, column ${col}. Keep one copy of each key.`);
+    }
+    return Object.freeze({ ...parseLegacyConfig("{}"), pending: settings.skip, pr: settings.ticket === undefined ? {} : { "ticket-prefix": settings.ticket }, allow: settings.allow });
+  }
+  return parseLegacyConfig(text);
 }
 
 /**
@@ -386,5 +406,7 @@ export function loadConfig(root, tracks) {
     }
   }
   const path = join(root, FILE);
-  return parseConfig(existsSync(path) ? readFileSync(path, "utf8") : "{}");
+  const config = parseConfig(existsSync(path) ? readFileSync(path, "utf8") : "{}");
+  if (config.allow === undefined) process.stderr.write(`${FILE}: legacy settings are deprecated in 0.16.0. Use standard migrate to keep only $schema, ticket, skip and allow.\n`);
+  return config;
 }

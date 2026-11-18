@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 
 export const TEST_FILE = /\.(?:test|spec)\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
-export const NOT_PRODUCT = /\.(?:test|spec|stories)\.[^/]+$|(?:^|\/)(?:__tests__|tests?|__fixtures__|fixtures?)\//;
+export const NOT_PRODUCT = /\.(?:test|spec|stories)\.[^/]+$|(?:^|\/)(?:__tests__|tests?|__fixtures__|fixtures?|scripts|evals)\/|(?:^|\/)[^/]+\.config\.[^/]+$/;
 
 /**
  * @param {ReadonlySet<string>} manifests Tracked package.json paths.
