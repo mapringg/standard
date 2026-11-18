@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
 
-import { UI_APPS, describe, isGenerated, isTest, isTestSupport, locate, stem } from "./paths.mjs";
+import { DATABASE_SUITE, UI_APPS, describe, isGenerated, isTest, isTestSupport, locate, stem } from "./paths.mjs";
 
 const PACKAGES = new Set(["tokens", "i18n"]);
 const TOP_DIRS = new Set(["apps", "packages", "infra", "scripts", ".github", ".githooks", ".claude", ".vscode"]);
@@ -318,7 +318,9 @@ function scan(root) {
     if (!lintable.some((rel) => !isTest(rel) && rel.startsWith(`${key}.`)))
       for (const rel of list)
         add(rel, `Name the test after the source file next to it; ${key.split("/").at(-1)}.ts does not exist.`);
-    for (const rel of list.slice(1)) add(rel, `Merge this test into ${list[0]}, the one test file for its source.`);
+    const suites = Map.groupBy(list, (rel) => DATABASE_SUITE.exec(rel)?.[1] ?? "");
+    for (const suite of suites.values())
+      for (const rel of suite.slice(1)) add(rel, `Merge this test into ${suite[0]}, the one test file for its source.`);
   }
   const clean = lintable.find((rel) => !directives.includes(rel));
   for (const rel of directives)
