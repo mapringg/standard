@@ -406,7 +406,7 @@ The package ships one oxlint config, one oxfmt config and one tsconfig. The lint
 
 | Export | File | Holds |
 | --- | --- | --- |
-| `@mapringg/standard/oxlint` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names, no `any`, and bans on `Reflect.apply` and `Reflect.get`. |
+| `@mapringg/standard/oxlint-config` | `config/oxlint.json` | The `eslint`, `typescript`, `unicorn`, `oxc`, `import` and `promise` plugins, `correctness` as errors, type-aware linting with type checks, unused disable directives as errors, `import/no-cycle` to depth 3, kebab-case file names, no `any`, and bans on `Reflect.apply` and `Reflect.get`. |
 | `@mapringg/standard/oxfmt` | `config/oxfmt.json` | Type imports first, then grouped value imports; sorted `package.json` scripts; `.claude/**` ignored. |
 | `@mapringg/standard/tsconfig` | `config/tsconfig.json` | `strict` and each flag in its family, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` and `isolatedModules`; unreachable code and unused labels as errors. |
 
@@ -423,7 +423,7 @@ The package ships one oxlint config, one oxfmt config and one tsconfig. The lint
 
 ```ts
 import { defineConfig } from "oxlint";
-import standard from "@mapringg/standard/oxlint" with { type: "json" };
+import standard from "@mapringg/standard/oxlint-config" with { type: "json" };
 
 export default defineConfig({ extends: [standard], plugins: ["react"] });
 ```
@@ -549,3 +549,21 @@ mkdir -p .standard && git mv standard.json .standard/config.json
 ```
 
 `hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticket-prefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one. `boundaries` holds the `modules` and `forbid` rules of the `boundaries` check. `client-data` and `api-modules` configure the `client-data` check, `cached-modules` configures `use-promise`, and `error-boundaries` configures `suspense-errors`.
+
+### Fixed-path oxlint plugin
+
+Oxlint 1.93.0 loads `@mapringg/standard/oxlint` through `jsPlugins`. The JSON config export is now `@mapringg/standard/oxlint-config`; its direct `config/oxlint.json` path still works. Enable the plugin rules in your oxlint config:
+
+```json
+{
+  "jsPlugins": ["@mapringg/standard/oxlint"],
+  "rules": {
+    "standard/redis": "error", "standard/ai": "error",
+    "standard/ui": "error", "standard/swr": "error",
+    "standard/env": "error", "standard/json": "error",
+    "standard/log": "error", "standard/format": "error"
+  }
+}
+```
+
+Each package owns environment reads in `src/env.ts`, JSON parsing in `src/lib/json.ts`, logging in `src/lib/log.ts`, date formatting in `src/lib/format.ts`, Redis imports in `src/lib/redis.ts`, AI SDK imports in `src/lib/ai.ts`, SWR imports in `src/lib/swr.ts`, and primitive UI imports under `src/components/ui/`. Owners may use `.server.ts` and `.browser.ts` variants. Tests, fixtures, stories, scripts, evals and config files are excluded. Diagnostics name the owner's exported helpers when the owner exists. The CLI `banned` check remains available during migration.

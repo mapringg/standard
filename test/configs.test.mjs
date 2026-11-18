@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 test("an adopter imports the oxlint config by its export name", async () => {
-  const { default: config } = await import("@mapringg/standard/oxlint", { with: { type: "json" } });
+  const { default: config } = await import("@mapringg/standard/oxlint-config", { with: { type: "json" } });
   assert.deepEqual(config.categories, { correctness: "error" });
   assert.ok(config.plugins.includes("typescript"));
 });
@@ -24,7 +24,7 @@ test("an adopter extends the tsconfig by its export name and gets the strict fla
 });
 
 test("the oxlint config bans Reflect.apply and Reflect.get, each with its fix", async () => {
-  const { default: config } = await import("@mapringg/standard/oxlint", { with: { type: "json" } });
+  const { default: config } = await import("@mapringg/standard/oxlint-config", { with: { type: "json" } });
   const [level, ...entries] = config.rules["no-restricted-properties"];
   assert.equal(level, "error");
   assert.deepEqual(
