@@ -18,7 +18,8 @@ function isFunction(node, scope) {
   const init = definition?.type === "Variable" ? definition.node.init : null;
   return Boolean(init && FUNCTION.has(init.type));
 }
-const MESSAGE = "Pass retry a function that retries once and never retries 400, 401, 403, 404, 409, 413, 415 or 422 errors.";
+const MESSAGE =
+  "Pass retry a function that retries once and never retries 400, 401, 403, 404, 409, 413, 415 or 422 errors.";
 
 export default {
   meta: {
@@ -37,7 +38,8 @@ export default {
       Property(node) {
         if ((node.key?.name ?? node.key?.value) !== "retry") return;
         retries = true;
-        if (!isFunction(node.value, context.sourceCode.getScope(node))) context.report({ node: node.value, message: MESSAGE });
+        if (!isFunction(node.value, context.sourceCode.getScope(node)))
+          context.report({ node: node.value, message: MESSAGE });
       },
       "Program:exit"() {
         if (!retries) for (const node of clients) context.report({ node, message: MESSAGE });

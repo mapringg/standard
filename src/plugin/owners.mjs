@@ -1,6 +1,6 @@
 import { matchesGlob } from "node:path";
 
-import { importedName, locate, moduleVisitors } from "./paths.mjs";
+import { exportedIds, importedName, locate, moduleVisitors } from "./paths.mjs";
 
 const UI = ["web", "liff", "mobile", "marketing"];
 const API = ["api"];
@@ -327,9 +327,7 @@ export default {
       },
       ExportNamedDeclaration(node) {
         modules.ExportNamedDeclaration(node);
-        const names =
-          node.declaration?.declarations?.map((item) => item.id.name) ??
-          node.specifiers.map((item) => item.exported.name);
+        const names = exportedIds(node).map((id) => id.name ?? id.value);
         for (const entry of rules)
           if (entry.ban.export && names.some((name) => entry.ban.export.includes(name))) report(node, entry);
       },

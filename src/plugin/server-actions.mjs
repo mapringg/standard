@@ -1,4 +1,4 @@
-import { stem } from "./paths.mjs";
+import { exportedIds, stem } from "./paths.mjs";
 
 function directives(body) {
   const found = [];
@@ -7,12 +7,6 @@ function directives(body) {
     found.push(node);
   }
   return found;
-}
-
-function exportedNames(node) {
-  if (node.declaration?.type === "VariableDeclaration") return node.declaration.declarations.map((item) => item.id);
-  if (node.declaration?.id) return [node.declaration.id];
-  return node.specifiers.map((specifier) => specifier.exported);
 }
 
 export default {
@@ -53,7 +47,7 @@ export default {
       ArrowFunctionExpression: inline,
       ExportNamedDeclaration(node) {
         if (!actions || node.exportKind === "type" || node.declaration?.type?.startsWith("TS")) return;
-        for (const id of exportedNames(node)) {
+        for (const id of exportedIds(node)) {
           const name = id.name ?? id.value;
           if (!name.endsWith("Action")) context.report({ node: id, message: `Rename the action to ${name}Action.` });
         }

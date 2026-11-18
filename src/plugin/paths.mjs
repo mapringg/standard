@@ -110,3 +110,21 @@ export function importedName(specifier) {
   if (specifier.type === "ExportSpecifier") return specifier.local.name ?? specifier.local.value;
   return null;
 }
+
+export function patternIds(pattern) {
+  if (!pattern) return [];
+  if (pattern.type === "Identifier") return [pattern];
+  if (pattern.type === "ObjectPattern")
+    return pattern.properties.flatMap((item) => patternIds(item.type === "RestElement" ? item.argument : item.value));
+  if (pattern.type === "ArrayPattern") return pattern.elements.flatMap((item) => patternIds(item));
+  if (pattern.type === "RestElement") return patternIds(pattern.argument);
+  if (pattern.type === "AssignmentPattern") return patternIds(pattern.left);
+  return [];
+}
+
+export function exportedIds(node) {
+  if (node.declaration?.type === "VariableDeclaration")
+    return node.declaration.declarations.flatMap((item) => patternIds(item.id));
+  if (node.declaration?.id) return [node.declaration.id];
+  return (node.specifiers ?? []).map((specifier) => specifier.exported);
+}
