@@ -50,6 +50,9 @@ ${long}
     return c.json({ access_token: "x" }, 200);
   });
 `,
+    "apps/api/src/upstreams/vendor.ts": "export const parse = async (response: Response) => response.json();\n",
+    "apps/api/src/middleware/guard.ts":
+      'import { createMiddleware } from "hono/factory";\nexport const guard = createMiddleware(async (c) => c.json({}));\n',
     "apps/api/src/app.ts": `import { openAPIRouteHandler } from "hono-openapi";
 import { factory } from "@/factory";
 import { tasks } from "@/features/tasks/routes";
@@ -82,5 +85,6 @@ export const named = env.NODE_ENV === "development-like" && openAPIRouteHandler(
     "apps/api/src/features/users/routes.ts: Pass the status explicitly: c",
     "apps/api/src/features/users/routes.ts: Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path",
     "apps/api/src/features/users/routes.ts: Validate with v() from @/lib/validate and read the input with c",
+    "apps/api/src/middleware/guard.ts: Pass the status explicitly: c",
   ]);
 });
