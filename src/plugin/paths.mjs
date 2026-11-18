@@ -87,20 +87,24 @@ function moduleName(node) {
   return node?.type === "Literal" && typeof node.value === "string" ? node.value : null;
 }
 
+function aliasPath(source) {
+  return source.startsWith("#/") ? source.replace(/\.(?:[cm]?[jt]s|[jt]sx)$/, "") : source;
+}
+
 export function moduleVisitors(callback) {
   return {
     ImportDeclaration(node) {
-      callback(node.source.value, node, node.specifiers);
+      callback(aliasPath(node.source.value), node, node.specifiers);
     },
     ExportNamedDeclaration(node) {
-      if (node.source) callback(node.source.value, node, node.specifiers);
+      if (node.source) callback(aliasPath(node.source.value), node, node.specifiers);
     },
     ExportAllDeclaration(node) {
-      callback(node.source.value, node, []);
+      callback(aliasPath(node.source.value), node, []);
     },
     ImportExpression(node) {
       const name = moduleName(node.source);
-      if (name) callback(name, node, []);
+      if (name) callback(aliasPath(name), node, []);
     },
   };
 }

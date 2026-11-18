@@ -49,7 +49,7 @@ function webRoute(rest, name) {
   const file = stem(name);
   if (file === "loading")
     found.push(
-      "Delete loading.tsx and wrap the slow section in <Section fallback> from @/components/boundary/section.",
+      "Delete loading.tsx and wrap the slow section in <Section fallback> from #/components/boundary/section.",
     );
   else if (file === "default") found.push("Delete default.tsx and compose the sections inside one page.");
   else if (!NEXT_FILES.has(file))

@@ -7,7 +7,7 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.0.1",
+    "@mapringg/standard": "github:mapringg/standard#v1.1.0",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
@@ -28,15 +28,22 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 { "extends": ["./node_modules/@mapringg/standard/oxlint.json"] }
 ```
 
-Each app's `tsconfig.json`:
+Each app's and package's `tsconfig.json`:
 
 ```json
 {
   "extends": "@mapringg/standard/tsconfig.json",
-  "compilerOptions": { "paths": { "@/*": ["./src/*"] } },
   "include": ["src", "*.config.ts"]
 }
 ```
+
+Each app's and package's `package.json` maps `#/` to its own `src`:
+
+```json
+{ "imports": { "#/*": "./src/*" } }
+```
+
+Import as `#/lib/env.js`, with the `.js` extension, even for `.ts` and `.tsx` files. Node, TypeScript and the bundlers resolve `#/` against the importing file's own `package.json`, so one package can type check another's source.
 
 `.githooks/pre-push`:
 

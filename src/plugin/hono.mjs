@@ -157,7 +157,7 @@ export default {
         if (STATUS.has(method) && onContext && node.arguments.length < 2 && !inStream(node))
           report(node, `Pass the status explicitly: c.${method}(body, 200).`);
         if (RAW.has(method) && property(object) === "req" && !(webhook && RAW_BODY.has(method)))
-          report(node, "Validate with v() from @/lib/validate and read the input with c.req.valid().");
+          report(node, "Validate with v() from #/lib/validate and read the input with c.req.valid().");
         if (node.callee.type === "Identifier" && OPENAPI.has(node.callee.name) && !inDevelopmentBranch(node))
           report(node, 'Mount the OpenAPI spec and docs only inside env.NODE_ENV === "development".');
         if (method === "route" && app) {
