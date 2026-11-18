@@ -1,3 +1,4 @@
+import { NOT_PRODUCT } from "./support/packages.mjs";
 import { existsSync, realpathSync } from "node:fs";
 import { posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -433,7 +434,7 @@ function modeOf(file, kind, workspace, moduleResolution) {
  * @returns {string[]}
  */
 function sources(repo) {
-  return sourceFiles(repo);
+  return sourceFiles(repo).filter((path) => repo.config.allow === undefined || !NOT_PRODUCT.test(path));
 }
 
 /**

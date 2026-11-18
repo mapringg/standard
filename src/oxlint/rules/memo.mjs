@@ -1,9 +1,10 @@
-import { NON_PRODUCT } from "../fixed-path.mjs";
+import { productPath } from "../fixed-path.mjs";
+import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
   meta: { type: "problem", schema: [], messages: { compiler: "Let React Compiler memoize this code." } },
   create(context) {
-    if (NON_PRODUCT.test(context.filename)) return {};
+    if (NOT_PRODUCT.test(productPath(context))) return {};
     return {
       ImportDeclaration(node) {
         if (node.source.value !== "react" || node.importKind === "type") return;

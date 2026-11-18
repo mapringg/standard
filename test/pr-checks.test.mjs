@@ -556,3 +556,12 @@ test("baseline-growth ratchets skip across the legacy-to-modern transition", (t)
     assert.match(grown.stdout, /react/);
   }
 });
+
+test("modern docs budgets shrink without being parsed as finding baselines", (t) => {
+  const base = { ...pinned("0.16.0"), ".standard/config.json": {}, ".standard/baselines/docs.json": { readme: 2 }, "README.md": "# Example\n" };
+  const shrunk = checkGrowth(t, { base, head: { ".standard/baselines/docs.json": { readme: 1 } } });
+  assert.equal(shrunk.status, 0, shrunk.stdout + shrunk.stderr);
+  const grown = checkGrowth(t, { base, head: { ".standard/baselines/docs.json": { readme: 3 } } });
+  assert.equal(grown.status, 1);
+  assert.match(grown.stdout, /raises budgets.readme/);
+});

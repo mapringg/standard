@@ -14,5 +14,5 @@ test("ui runs in oxlint and permits only its fixed owner", (t) => {
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(diagnostics.length, 1, result.stdout);
   assert.equal(diagnostics[0].filename, "src/feature.ts");
-  assert.ok(diagnostics[0].message.includes("src/components/ui/"));
+  assert.ok(diagnostics[0].message.includes("Import owned from src/components/ui/button.tsx"));
 });
