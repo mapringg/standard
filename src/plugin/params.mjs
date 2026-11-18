@@ -1,17 +1,36 @@
 import { locate, stem } from "./paths.mjs";
 
-const BANNED_KEYS = new Set([
+const FIXED = new Set(["q", "sort", "cursor", "from", "to", "range"]);
+const SYNONYMS = new Set([
   "page",
   "skip",
   "offset",
+  "limit",
   "search",
   "query",
+  "keyword",
+  "term",
   "sortBy",
   "sortOrder",
   "order",
+  "orderBy",
+  "direction",
+  "start",
+  "end",
   "startDate",
   "endDate",
+  "since",
+  "until",
+  "before",
+  "after",
+  "preset",
+  "period",
 ]);
+const CAMEL = /^[a-z][a-zA-Z0-9]*$/;
+
+function allowed(key) {
+  return FIXED.has(key) || (key.length > 1 && CAMEL.test(key) && !SYNONYMS.has(key));
+}
 
 function keyName(property) {
   return property.key?.name ?? property.key?.value;
@@ -42,10 +61,10 @@ export default {
         if (node.callee.type !== "MemberExpression" || node.callee.property.name !== "object") return;
         for (const property of node.arguments[0]?.properties ?? []) {
           const key = keyName(property);
-          if (key && ((key.length === 1 && key !== "q") || BANNED_KEYS.has(key))) {
+          if (key && !allowed(key)) {
             context.report({
               node: property,
-              message: `Use the standard param names: q, sort, cursor, from/to, <field>From/<field>To, filters by field name. Not ${key}.`,
+              message: `Use the standard param names: q, sort, cursor, from/to, range, <field>From/<field>To and camelCase field names. Not ${key}.`,
             });
           }
         }
