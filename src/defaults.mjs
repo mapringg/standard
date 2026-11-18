@@ -15,7 +15,7 @@ export function defaults(repo) {
       ...["typecheck", "test"].filter((name) => root?.scripts?.[name]).map((name) => `pnpm ${name}`),
       ...(files.includes("scripts/pre-push.sh") ? ["sh scripts/pre-push.sh"] : []),
     ] },
-    pr: reactApps.length ? { ...repo.config.pr, screenshots: { when: reactApps.map(({ path }) => posix.join(posix.dirname(path), "**/*.{ts,tsx,js,jsx,css}")), uploader: "scripts/upload-evidence.mjs" } } : repo.config.pr,
+    pr: reactApps.length ? { ...repo.config.pr, screenshots: { when: reactApps.flatMap(({ path }) => ["ts", "tsx", "js", "jsx", "css"].map((ext) => posix.join(posix.dirname(path), `**/*.${ext}`))), uploader: "scripts/upload-evidence.mjs" } } : repo.config.pr,
     clientData: reactApps.filter(({ value }) => (value.dependencies?.vite || value.devDependencies?.vite) && !value.dependencies?.next && !value.devDependencies?.next).map(({ path }) => ({ app: posix.dirname(path), reason: /** @type {const} */ ("unreachable") })),
     budgets: readBudgets(repo),
     apiModules: ["**/src/lib/api/**"], cachedModules: ["**/*.cache.ts"],
