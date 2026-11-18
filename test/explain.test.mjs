@@ -58,7 +58,7 @@ test("explain keeps a warning-only check's baseline apart from whether it fails"
 
 test("explain refuses an unknown check and a flag other than --markdown", () => {
   const unknown = standard(process.cwd(), ["explain", "nope"]);
-  assert.match(unknown.stderr, /^standard: explain names "nope", which is not a check or plugin rule in this version\. Checks: commit-subject, .+, config, standard\/zod, .+, standard\/index-exports\.\n$/);
+  assert.match(unknown.stderr, /^standard: explain names "nope", which is not a check or plugin rule in this version\. Checks: commit-subject, .+, config, standard\/zod, .+, standard\/client-feature-import\.\n$/);
   assert.equal(unknown.status, 1);
   const flag = standard(process.cwd(), ["explain", "--json"]);
   assert.match(flag.stderr, /^standard: explain takes one check name or --markdown\./);

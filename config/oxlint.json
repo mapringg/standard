@@ -25,6 +25,7 @@
     "standard/ai-render": "error",
     "standard/server-entry": "error",
     "standard/index-exports": "error",
+    "standard/client-feature-import": "error",
 
     "import/no-cycle": ["error", { "maxDepth": 3 }],
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],

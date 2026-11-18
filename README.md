@@ -606,6 +606,7 @@ Every folder under an app's `src/`, `src/features/` and `src/components/` is a m
 | --- | --- |
 | `standard/server-entry` | Code that ships to the browser, a `"use client"` or `.browser` file or anything one reaches, imports no `*.server.*` file. Each import, re-export, `require()` and static `import()` is resolved through relative paths, tsconfig paths and package.json `imports`, so an alias or a re-export chain reaches the same verdict. |
 | `standard/index-exports` | A plain `index` imports and re-exports no `*.server.*` file and no API module, the derived `**/src/lib/api/**` or a legacy `api-modules` list. Those go in `index.server`. This is the early per-file guard; `standard/server-entry` follows chains. |
+| `standard/client-feature-import` | Code in `src/features/<a>` that ships to the browser, found the same way, imports nothing from another `src/features/<b>`, through its index, a deep path, a re-export or `import()`. A feature's index re-exports its widgets, so one shared constant pulled that way bundles the whole feature into every page. Features meet only in `src/app` routes; the shared pieces move to `src/lib` or `src/components/<group>`, and the message names them. Type-only imports pass. |
 
 The plugin builds the browser graph from the files on disk. In an editor it checks for changed files at most once a second and rebuilds then, so an unsaved edit counts only after it is saved, and a result can lag for up to a second. `standard check` and CI runs of oxlint start fresh and are authoritative.
 
