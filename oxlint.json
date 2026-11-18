@@ -126,6 +126,7 @@
     "vitest/require-top-level-describe": "off",
     "vitest/require-hook": "off",
     "vitest/no-hooks": "off",
+    "vitest/prefer-describe-function-title": "off",
     "vitest/consistent-test-it": [
       "error",
       {

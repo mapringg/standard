@@ -29,6 +29,8 @@ const NEXT_FILES = new Set([
   "twitter-image",
 ]);
 const API_FEATURE_FILES = new Set(["routes", "schema", "db", "service"]);
+const API_ROOT_FILES = new Set(["app.ts", "factory.ts", "env.ts", "server.ts", "client.ts"]);
+const API_DIRS = new Set(["middleware", "infra", "upstreams"]);
 const WEB_ROOT_FILES = new Set(["proxy", "instrumentation", "instrumentation-client"]);
 const CACHE_MS = 2000;
 const SKIP = new Set([".git", "node_modules"]);
@@ -92,7 +94,11 @@ function codeProblems(where) {
   const rest = local.slice(4);
   const parts = rest.split("/");
   const found = [];
-  if (isTestSupport(name) && !["features", "lib", "components"].includes(parts[0])) {
+  const apiPlaced =
+    kind === "api" &&
+    ((parts.length === 1 && API_ROOT_FILES.has(name.replace(/\.(?:test|fixture|test-utils)\.ts$/, ".ts"))) ||
+      (parts.length === 2 && API_DIRS.has(parts[0])));
+  if (isTestSupport(name) && !apiPlaced && !["features", "lib", "components"].includes(parts[0])) {
     found.push(
       parts[0] === routesDir(kind)
         ? "Move the test to the feature code it covers; route files never have tests."
@@ -112,8 +118,7 @@ function codeProblems(where) {
   }
   if (parts[0] === "lib") return found;
   if (kind === "api") {
-    if (parts.length === 1 && ["app.ts", "factory.ts", "env.ts", "server.ts", "client.ts"].includes(name)) return found;
-    if (parts.length === 2 && ["middleware", "infra", "upstreams"].includes(parts[0])) return found;
+    if (apiPlaced) return found;
     return [
       ...found,
       "Move the code into app.ts, factory.ts, env.ts, server.ts, client.ts, middleware/, lib/, infra/, upstreams/ or features/<resource>/.",
