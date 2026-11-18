@@ -1,0 +1,46 @@
+{
+  "name": "@mapringg/standard",
+  "version": "1.0.0",
+  "description": "One oxlint config and plugin for every repository.",
+  "license": "MIT",
+  "repository": "github:mapringg/standard",
+  "files": [
+    "oxlint.json",
+    "oxfmt.json",
+    "tsconfig.json",
+    "knip.json",
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./oxlint.json": "./oxlint.json",
+    "./oxfmt.json": "./oxfmt.json",
+    "./tsconfig.json": "./tsconfig.json",
+    "./knip.json": "./knip.json",
+    "./plugin": "./src/plugin/index.mjs"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "knip": "knip",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "knip": "6.45.1",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
+  },
+  "peerDependencies": {
+    "knip": "6.45.1",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "packageManager": "pnpm@12.18.0"
+}

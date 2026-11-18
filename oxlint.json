@@ -1,0 +1,225 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "promise",
+    "node",
+    "react",
+    "jsx-a11y",
+    "nextjs",
+    "vitest"
+  ],
+  "jsPlugins": ["./src/plugin/index.mjs"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error",
+    "pedantic": "error"
+  },
+  "options": {
+    "typeAware": true,
+    "typeCheck": true
+  },
+  "env": {
+    "builtin": true,
+    "es2024": true
+  },
+  "rules": {
+    "standard/feature-imports": "error",
+    "standard/hono": "error",
+    "standard/next-data": "error",
+    "standard/next-routes": "error",
+    "standard/no-chained-assertions": "error",
+    "standard/no-comments": "error",
+    "standard/no-return-types": "error",
+    "standard/no-typeof": "error",
+    "standard/owners": "error",
+    "standard/params": "error",
+    "standard/query-client": "error",
+    "standard/reducer": "error",
+    "standard/repo-shape": "error",
+    "standard/server-actions": "error",
+    "standard/style-prop": "error",
+    "standard/tests": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "^\\.{1,2}(/|$)",
+            "message": "Import through the @/ alias."
+          }
+        ]
+      }
+    ],
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase",
+        "ignore": ["^_layout\\.", "^__root\\.", "^\\+", "^\\[", "^\\$", "\\.d\\.ts$"]
+      }
+    ],
+    "react/jsx-no-literals": [
+      "error",
+      {
+        "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"]
+      }
+    ],
+    "typescript/switch-exhaustiveness-check": [
+      "error",
+      {
+        "considerDefaultExhaustiveForUnions": false
+      }
+    ],
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    "import/group-exports": "off",
+    "import/exports-last": "off",
+    "import/namespace": "off",
+    "import/no-namespace": "off",
+    "import/no-unassigned-import": "off",
+    "react/react-in-jsx-scope": "off",
+    "react/jsx-filename-extension": "off",
+    "react/jsx-props-no-spreading": "off",
+    "react/jsx-max-depth": "off",
+    "eslint/sort-keys": "off",
+    "eslint/sort-imports": "off",
+    "eslint/func-style": "off",
+    "eslint/one-var": "off",
+    "eslint/no-magic-numbers": "off",
+    "eslint/id-length": "off",
+    "eslint/no-ternary": "off",
+    "eslint/curly": "off",
+    "eslint/no-undefined": "off",
+    "eslint/no-void": "off",
+    "eslint/require-await": "off",
+    "eslint/no-console": "off",
+    "eslint/no-underscore-dangle": "off",
+    "typescript/explicit-function-return-type": "off",
+    "typescript/explicit-module-boundary-types": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "typescript/no-confusing-void-expression": "off",
+    "typescript/require-await": "off",
+    "typescript/explicit-member-accessibility": "off",
+    "oxc/no-async-await": "off",
+    "oxc/no-rest-spread-properties": "off",
+    "oxc/no-optional-chaining": "off",
+    "unicorn/no-null": "off",
+    "unicorn/max-nested-calls": "off",
+    "unicorn/prefer-top-level-await": "off",
+    "promise/valid-params": "off",
+    "node/no-process-env": "off",
+    "node/no-top-level-await": "off",
+    "vitest/require-test-timeout": "off",
+    "vitest/prefer-expect-assertions": "off",
+    "vitest/no-importing-vitest-globals": "off",
+    "vitest/require-top-level-describe": "off",
+    "vitest/require-hook": "off",
+    "vitest/no-hooks": "off",
+    "vitest/consistent-test-it": [
+      "error",
+      {
+        "fn": "test",
+        "withinDescribe": "test"
+      }
+    ],
+    "eslint/no-duplicate-imports": [
+      "error",
+      {
+        "allowSeparateTypeImports": true
+      }
+    ],
+    "promise/prefer-await-to-then": "off",
+    "unicorn/no-useless-undefined": "off",
+    "node/callback-return": "off",
+    "typescript/consistent-type-definitions": "off",
+    "eslint/new-cap": [
+      "error",
+      {
+        "capIsNewExceptions": ["Scalar"]
+      }
+    ],
+    "vitest/valid-title": [
+      "error",
+      {
+        "allowArguments": true
+      }
+    ],
+    "vitest/prefer-to-be-truthy": "off",
+    "vitest/prefer-to-be-falsy": "off",
+    "vitest/prefer-called-times": "off",
+    "typescript/non-nullable-type-assertion-style": "off",
+    "eslint/prefer-destructuring": [
+      "error",
+      {
+        "VariableDeclarator": {
+          "array": false,
+          "object": true
+        },
+        "AssignmentExpression": {
+          "array": false,
+          "object": false
+        }
+      }
+    ],
+    "react/forbid-component-props": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/src/app/**", "**/src/pages/**", "**/*.config.*"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["**/*.config.js", "**/*.config.cjs", "**/*.config.mjs"],
+      "rules": {
+        "import/no-commonjs": "off",
+        "import/unambiguous": "off",
+        "unicorn/prefer-module": "off",
+        "typescript/no-require-imports": "off",
+        "typescript/no-var-requires": "off",
+        "import/no-anonymous-default-export": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off"
+      }
+    },
+    {
+      "files": ["**/*.d.ts"],
+      "rules": {
+        "unicorn/require-module-specifiers": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-utils.ts", "**/*.fixture.ts"],
+      "rules": {
+        "vitest/no-restricted-matchers": [
+          "error",
+          {
+            "toMatchSnapshot": "Assert the specific outcome.",
+            "toMatchInlineSnapshot": "Assert the specific outcome.",
+            "toMatchFileSnapshot": "Assert the specific outcome.",
+            "toThrowErrorMatchingSnapshot": "Assert the specific error.",
+            "toThrowErrorMatchingInlineSnapshot": "Assert the specific error."
+          }
+        ],
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "waitFor": "Await the real event.",
+            "waitUntil": "Await the real event.",
+            "setConfig": "Make the test fast instead of raising its timeout."
+          }
+        ]
+      }
+    }
+  ]
+}
