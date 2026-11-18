@@ -1,5 +1,13 @@
+const WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "ParenthesizedExpression"]);
+
+function unwrap(node) {
+  let current = node;
+  while (WRAPPERS.has(current?.type)) current = current.expression;
+  return current;
+}
+
 function customPropertiesOnly(value) {
-  const object = value?.type === "JSXExpressionContainer" ? value.expression : null;
+  const object = value?.type === "JSXExpressionContainer" ? unwrap(value.expression) : null;
   return (
     object?.type === "ObjectExpression" &&
     object.properties.every(
