@@ -283,7 +283,12 @@ export default {
           entry.ban.property[1] === name &&
           (entry.ban.property[0] === null || entry.ban.property[0] === object),
       );
+    const namespaces = new Set();
     const modules = moduleVisitors((source, node, specifiers) => {
+      if (source === "react")
+        for (const specifier of specifiers)
+          if (specifier.type === "ImportNamespaceSpecifier" || specifier.type === "ImportDefaultSpecifier")
+            namespaces.add(specifier.local.name);
       for (const entry of rules) {
         if (source === "react" && entry.ban.react) {
           for (const specifier of specifiers)
@@ -302,7 +307,7 @@ export default {
         if (node.computed) return;
         const name = node.property.name;
         const object = node.object.type === "Identifier" ? node.object.name : null;
-        if (object === "React" && hooks.has(name)) report(node, hooks.get(name));
+        if (namespaces.has(object) && hooks.has(name)) report(node, hooks.get(name));
         if (object && VIA.has(object) && globals.has(name)) report(node, globals.get(name));
         if (node.object.type === "MetaProperty" && name === "env") {
           const entry = rules.find((candidate) => candidate.ban.meta === "env");
