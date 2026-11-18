@@ -271,6 +271,14 @@ test("docs resolves a pnpm script with no package flag against the doc's nearest
   );
 });
 
+test("docs reads a code span between equal backtick runs as code when it finds links", (t) => {
+  fails(
+    t,
+    { "AGENTS.md": "# Guide\n\nWrite `` ` `` around [code](code.md), and `` ` `` again.\n" },
+    "AGENTS.md reference: AGENTS.md names things that do not exist: line 3 [code](code.md) (code.md is not tracked). Fix each name, or move facts about an outside system to docs/external/.",
+  );
+});
+
 const reference = (path, ...misses) => `${path} reference: ${path} names things that do not exist: ${misses.join(", ")}. Fix each name, or move facts about an outside system to docs/external/.`;
 
 const UNCLOSED = "a quote is not closed, so no shell can run it; fix the quoting";

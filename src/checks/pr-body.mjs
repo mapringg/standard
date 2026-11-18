@@ -2,7 +2,7 @@ import { FILE } from "../config.mjs";
 import { evidenceLines, proseLines, rendered } from "./support/markdown.mjs";
 
 const MIN_BODY = 120;
-const REQUIRED_HEADINGS = ["Summary", "Evidence", "Merge Danger"];
+export const REQUIRED_HEADINGS = ["Summary", "Evidence", "Merge Danger"];
 const BEFORE_AFTER = /\*\*before:?\*\*[\s\S]*\*\*after:?\*\*/i;
 const TABLE_DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/;
 const DOOR = /\*\*door:?\*\*:?\s*(one|two)-way\b/i;
