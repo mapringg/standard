@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, matchesGlob } from "node:path";
 
 import { UI_APPS, describe, isGenerated, isTest, locate, stem } from "./paths.mjs";
 
@@ -31,19 +31,7 @@ const NEXT_FILES = new Set([
 const API_FEATURE_FILES = new Set(["routes", "schema", "db", "service"]);
 const WEB_ROOT_FILES = new Set(["proxy", "instrumentation", "instrumentation-client"]);
 const CACHE_MS = 2000;
-const SKIP = new Set([
-  ".git",
-  "node_modules",
-  ".next",
-  ".expo",
-  ".astro",
-  ".turbo",
-  ".vercel",
-  "dist",
-  "build",
-  "out",
-  "coverage",
-]);
+const SKIP = new Set([".git", "node_modules"]);
 const scans = new Map();
 
 function routesDir(kind) {
@@ -95,7 +83,7 @@ function codeProblems(where) {
   if (parts[0] === "features") {
     if (parts.length !== 3)
       return [...found, "Feature folders hold files only, no subfolders. Split a big feature into two features."];
-    const base = stem(name).replace(/\.test$/, "");
+    const base = stem(name).replace(/\.(?:test|spec)$/, "");
     if (kind === "api") {
       if (!API_FEATURE_FILES.has(base)) found.push("API feature files are routes.ts, schema.ts, db.ts and service.ts.");
     } else if (base !== feature && !base.startsWith(`${feature}-`)) {
@@ -152,33 +140,66 @@ function fileProblems(rel) {
   ) {
     found.push("Astro files live only in src/pages/ and src/components/layout/. Write components as .tsx.");
   }
+  if (/\.spec\.[cm]?[jt]sx?$/.test(name)) found.push("Name tests *.test.ts or *.test.tsx.");
+  if (
+    kind &&
+    UI_APPS.has(kind) &&
+    /(?:^|\/)(?:i18n|messages)\//.test(local) &&
+    !/^src\/lib\/i18n\/messages\/[a-z0-9-]+\.ts$/.test(local)
+  ) {
+    found.push("Dictionaries live only in src/lib/i18n/messages/<feature>.ts.");
+  }
+  if (kind === "marketing" && local.startsWith("src/pages/") && !local.startsWith("src/pages/[locale]/")) {
+    found.push("Marketing pages live under src/pages/[locale]/.");
+  }
   if (parts.length === 1 && CODE.test(name) && !/\.config\./.test(name))
     found.push("The top level holds only config. Move this code into an app or package.");
   if (base && CODE.test(name)) found.push(...codeProblems(where));
   return found;
 }
 
-function ignoredNames(root) {
-  const path = join(root, ".gitignore");
-  const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
-  return new Set([
-    ...SKIP,
-    ...lines.map((line) => line.trim().replace(/^\/|\/$/g, "")).filter((line) => line && !/[*!#/]/.test(line)),
-  ]);
+function ignoreRules(root, dir, file) {
+  const path = join(root, dir, file);
+  if (!existsSync(path)) return [];
+  const rules = [];
+  for (const raw of readFileSync(path, "utf8").split("\n")) {
+    const line = raw.replace(/\s+$/, "");
+    if (!line || line.startsWith("#")) continue;
+    const negate = line.startsWith("!");
+    let pattern = negate ? line.slice(1) : line;
+    const dirOnly = pattern.endsWith("/");
+    pattern = pattern.replace(/\/$/, "");
+    const anchored = pattern.includes("/");
+    rules.push({ dir, pattern: pattern.replace(/^\//, ""), negate, dirOnly, anchored });
+  }
+  return rules;
+}
+
+function ignored(rules, rel, isDir) {
+  let result = false;
+  for (const rule of rules) {
+    if (rule.dirOnly && !isDir) continue;
+    if (rule.dir && !rel.startsWith(`${rule.dir}/`)) continue;
+    const local = rule.dir ? rel.slice(rule.dir.length + 1) : rel;
+    const target = rule.anchored ? local : local.slice(local.lastIndexOf("/") + 1);
+    if (matchesGlob(target, rule.pattern)) result = !rule.negate;
+  }
+  return result;
 }
 
 function listFiles(root) {
-  const skip = ignoredNames(root);
   const files = [];
-  const walk = (dir) => {
+  const walk = (dir, inherited) => {
+    const rules = [...inherited, ...ignoreRules(root, dir, ".gitignore")];
     for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
-      if (skip.has(entry.name)) continue;
+      if (SKIP.has(entry.name)) continue;
       const rel = dir ? `${dir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(rel);
+      if (ignored(rules, rel, entry.isDirectory())) continue;
+      if (entry.isDirectory()) walk(rel, rules);
       else if (entry.isFile()) files.push(rel);
     }
   };
-  walk("");
+  walk("", ignoreRules(root, ".git/info", "exclude"));
   return files.sort();
 }
 

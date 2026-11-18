@@ -54,7 +54,7 @@ export function inside(local, prefix) {
 }
 
 export function isTest(name) {
-  return /\.test\.[cm]?[jt]sx?$/.test(name);
+  return /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(name);
 }
 
 export function isGenerated(name) {
