@@ -86,3 +86,13 @@ test("client-data follows computed, destructured and aliased globals, dynamic cl
   assert.deepEqual([...new Set(diagnostics.map(({ filename }) => filename))], ["apps/web/src/alias.tsx", "apps/web/src/computed.tsx", "apps/web/src/destructured.tsx", "apps/web/src/dynamic.tsx", "apps/web/src/escape.tsx", "apps/web/src/probe.tsx", "apps/web/src/query.ts", "apps/web/src/required.tsx"]);
   assert.equal(diagnostics.filter(({ filename }) => filename.endsWith("query.ts")).length, 3);
 });
+
+test("client-data skips typeof probes and type positions", (t) => {
+  const diagnostics = lint(t, {
+    "apps/web/package.json": NEXT,
+    "apps/web/src/probe.tsx": '"use client"; export const can = () => typeof globalThis.fetch === "function" && typeof window["WebSocket"] !== "undefined" && typeof fetch === "function";',
+    "apps/web/src/typed.tsx": '"use client"; export type Fetch = typeof globalThis.fetch; export type Socket = typeof WebSocket; export let f: typeof window.fetch | undefined;',
+    "apps/web/src/call.tsx": '"use client"; export const load = () => typeof globalThis.fetch("/x");',
+  });
+  assert.deepEqual([...new Set(diagnostics.map(({ filename }) => filename))], ["apps/web/src/call.tsx"]);
+});

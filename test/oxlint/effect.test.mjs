@@ -90,3 +90,13 @@ test("effect-cleanup knows every hook form and rejects async effects", (t) => {
   });
   assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/async.effect-subscribe.ts", "src/computed.effect-subscribe.ts", "src/destructured.effect-subscribe.ts"]);
 });
+
+test("an effect hook named in a type or read for a property is not passed on", (t) => {
+  const diagnostics = lint(t, "effect", {
+    "src/type.effect-sync.ts": 'import { useEffect } from "react"; import * as React from "react"; export type E = typeof useEffect; export type L = typeof React.useLayoutEffect; export function useA() { useEffect(() => {}); }',
+    "src/name.effect-sync.ts": 'import { useEffect } from "react"; export const label = useEffect.name; export const kind = typeof useEffect; export function useA() { useEffect(() => {}); }',
+    "src/apply.effect-sync.ts": 'import { useEffect } from "react"; export function useA(f) { useEffect.apply(null, [f]); }',
+    "src/bound.effect-sync.ts": 'import { useEffect } from "react"; export const run = useEffect.bind(null);',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/apply.effect-sync.ts", "src/bound.effect-sync.ts"]);
+});
