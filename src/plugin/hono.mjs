@@ -3,6 +3,8 @@ import { locate } from "./paths.mjs";
 const METHODS = new Set(["get", "post", "patch", "delete"]);
 const CHAIN = new Set([...METHODS, "put", "route", "use", "on", "all", "onError", "notFound", "basePath"]);
 const RAW = new Set(["query", "queries", "param", "json", "text", "formData", "parseBody", "arrayBuffer", "blob"]);
+const RAW_BODY = new Set(["text", "arrayBuffer", "blob"]);
+const STREAMS = new Set(["streamSSE", "streamText", "stream"]);
 const OPENAPI = new Set(["openAPIRouteHandler", "openAPISpecs", "generateSpecs", "Scalar"]);
 const FUNCTION = new Set(["FunctionExpression", "ArrowFunctionExpression"]);
 const MAX_LINES = 10;
@@ -31,6 +33,14 @@ function inDevelopmentBranch(node, source) {
   return false;
 }
 
+function inStream(node) {
+  for (let current = node.parent; current; current = current.parent) {
+    if (current.type === "CallExpression" && current.callee.type === "Identifier" && STREAMS.has(current.callee.name))
+      return true;
+  }
+  return false;
+}
+
 function isContext(node) {
   if (node?.type !== "Identifier") return false;
   for (let current = node.parent; current; current = current.parent) {
@@ -50,6 +60,7 @@ export default {
     if (where?.kind !== "api") return {};
     const routes = /^src\/features\/[^/]+\/routes\.ts$/.test(where.local);
     const source = context.sourceCode;
+    const webhook = where.local.startsWith("src/features/webhooks/");
     return {
       ExpressionStatement(node) {
         const call = node.expression;
@@ -65,14 +76,25 @@ export default {
       CallExpression(node) {
         const method = property(node.callee);
         const object = node.callee.object;
-        if (method === "json" && isContext(object) && node.arguments.length < 2) {
+        if (method === "json" && isContext(object) && node.arguments.length < 2 && !inStream(node)) {
           context.report({ node, message: "Pass the status explicitly: c.json(body, 200)." });
         }
-        if (RAW.has(method) && object?.type === "MemberExpression" && property(object) === "req") {
-          context.report({ node, message: "Read input only through c.req.valid() after v() from @/lib/validate." });
+        if (
+          RAW.has(method) &&
+          object?.type === "MemberExpression" &&
+          property(object) === "req" &&
+          !(webhook && RAW_BODY.has(method))
+        ) {
+          context.report({
+            node,
+            message: "Validate with v() from @/lib/validate and read the input with c.req.valid().",
+          });
         }
         if (node.callee.type === "Identifier" && OPENAPI.has(node.callee.name) && !inDevelopmentBranch(node, source)) {
-          context.report({ node, message: "Mount the OpenAPI spec and docs only when NODE_ENV is development." });
+          context.report({
+            node,
+            message: "Mount the OpenAPI spec and docs only inside a NODE_ENV development check.",
+          });
         }
         if (method === "route" && where.local === "src/app.ts") {
           const path = stringValue(node.arguments[0]);
@@ -81,16 +103,19 @@ export default {
         }
         if (!routes || !METHODS.has(method) || stringValue(node.arguments[0]) === null) return;
         const path = stringValue(node.arguments[0]);
-        const shape = method === "post" ? /^\/(?::id(?:\/[a-z]+(?:-[a-z]+)*)?)?$/ : /^\/(?::id)?$/;
+        const shape =
+          method === "post"
+            ? /^\/(?:[a-z]+(?:-[a-z]+)*|:id(?:\/[a-z]+(?:-[a-z]+)*)?)?$/
+            : /^\/(?:[a-z]+(?:-[a-z]+)*|:id)?$/;
         if (!shape.test(path))
           context.report({
             node: node.arguments[0],
-            message: "Paths are / and /:id, plus POST /:id/<verb> for actions.",
+            message: "Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path.",
           });
         if (!node.arguments.some((arg) => calls(arg, "describeRoute")))
           context.report({
             node: node.callee.property,
-            message: "Every route has describeRoute with its response schemas from schema.ts.",
+            message: "Add describeRoute with the response schemas from schema.ts to this route.",
           });
         const handler = node.arguments.at(-1);
         if (!FUNCTION.has(handler.type))
@@ -98,7 +123,7 @@ export default {
         else if (handler.loc.end.line - handler.loc.start.line + 1 > MAX_LINES) {
           context.report({
             node: handler,
-            message: `A route handler is at most ${MAX_LINES} lines. Move the logic into db.ts or service.ts.`,
+            message: `Move the logic into db.ts or service.ts so the handler fits in ${MAX_LINES} lines.`,
           });
         }
       },

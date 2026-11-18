@@ -12,10 +12,12 @@ test("hono checks chains, statuses, paths, docs and handler size", (t) => {
     "apps/api/src/features/tasks/routes.ts": `${head}export const tasks = factory
   .createApp()
   .get("/", describeRoute({}), async (c) => c.json([], 200))
+  .get("/current", describeRoute({}), async (c) => c.json({}, 200))
+  .get("/live", describeRoute({}), async (c) => streamSSE(c, async () => c.json({})))
   .post("/:id/archive", describeRoute({}), v("json", {}), async (c) => c.json(c.req.valid("json"), 201));
 `,
     "apps/api/src/features/users/routes.ts": `${head}const app = factory.createApp();
-app.get("/users", async (c) => c.json([]));
+app.get("/users/:id/x", async (c) => c.json([]));
 app.patch("/:id", describeRoute({}), async (c) => {
 ${long}
   return c.json(await c.req.json(), 200);
@@ -26,6 +28,10 @@ export const users = app;
   .createApp()
   .get("/", describeRoute({}), async (ctx) => ctx.json([]))
   .delete("/:id", async (ctx) => ctx.body(null, 204));
+`,
+    "apps/api/src/features/webhooks/routes.ts": `${head}export const webhooks = factory
+  .createApp()
+  .post("/line", describeRoute({}), async (c) => c.json({ body: await c.req.text() }, 200));
 `,
     "apps/api/src/app.ts": `import { openAPIRouteHandler } from "hono-openapi";
 import { factory } from "@/factory";
@@ -41,15 +47,15 @@ export const leaked = base.get("/api/docs", openAPIRouteHandler(base));
     .sort();
   deepEqual(found, [
     "apps/api/src/app.ts: Mount routers at /api/<plural-kebab>",
-    "apps/api/src/app.ts: Mount the OpenAPI spec and docs only when NODE_ENV is development",
-    "apps/api/src/features/notes/routes.ts: Every route has describeRoute with its response schemas from schema",
+    "apps/api/src/app.ts: Mount the OpenAPI spec and docs only inside a NODE_ENV development check",
+    "apps/api/src/features/notes/routes.ts: Add describeRoute with the response schemas from schema",
     "apps/api/src/features/notes/routes.ts: Pass the status explicitly: c",
-    "apps/api/src/features/users/routes.ts: A route handler is at most 10 lines",
+    "apps/api/src/features/users/routes.ts: Add describeRoute with the response schemas from schema",
     "apps/api/src/features/users/routes.ts: Build each router as one chain: factory",
     "apps/api/src/features/users/routes.ts: Build each router as one chain: factory",
-    "apps/api/src/features/users/routes.ts: Every route has describeRoute with its response schemas from schema",
+    "apps/api/src/features/users/routes.ts: Move the logic into db",
     "apps/api/src/features/users/routes.ts: Pass the status explicitly: c",
-    "apps/api/src/features/users/routes.ts: Paths are / and /:id, plus POST /:id/<verb> for actions",
-    "apps/api/src/features/users/routes.ts: Read input only through c",
+    "apps/api/src/features/users/routes.ts: Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path",
+    "apps/api/src/features/users/routes.ts: Validate with v() from @/lib/validate and read the input with c",
   ]);
 });

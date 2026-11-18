@@ -1,9 +1,12 @@
-import { isTest } from "./paths.mjs";
+import { isTestSupport } from "./paths.mjs";
 
 const TESTS = new Set(["test", "it"]);
 const BLOCKS = new Set(["test", "it", "describe", "suite"]);
 const MOCKERS = new Set(["vi", "jest"]);
-const MOCKS = new Set(["mock", "doMock", "unstable_mockModule"]);
+const MOCKS = new Set(["mock", "doMock", "unstable_mockModule", "setMock", "stubGlobal", "stubEnv", "mocked"]);
+const FAKES =
+  /^(?:mockImplementation|mockImplementationOnce|mockReturnValue|mockReturnValueOnce|mockResolvedValue|mockResolvedValueOnce|mockRejectedValue|mockRejectedValueOnce)$/;
+const DOUBLE = "Fake the network with MSW handlers; use the real module otherwise.";
 const RENDERS = new Set(["render", "renderRouter", "renderHook", "mount"]);
 const PRESENCE = new Set(["toBeInTheDocument", "toBeTruthy", "toBeDefined", "toBeVisible", "toBeOnTheScreen"]);
 const CALL_CHECK =
@@ -48,6 +51,16 @@ function inLoop(node) {
   return false;
 }
 
+function strictListen(node) {
+  const options = node.arguments[0];
+  return (
+    options?.type === "ObjectExpression" &&
+    options.properties.some(
+      (item) => (item.key?.name ?? item.key?.value) === "onUnhandledRequest" && item.value.value === "error",
+    )
+  );
+}
+
 function hasTimeout(node) {
   return (
     node?.type === "ObjectExpression" &&
@@ -58,7 +71,7 @@ function hasTimeout(node) {
 export default {
   meta: {
     type: "problem",
-    docs: { description: "Tests are deterministic, assert outcomes and mock only what leaves the repo." },
+    docs: { description: "Tests are deterministic, assert outcomes and fake only the network, through MSW." },
   },
   create(context) {
     const name = context.filename.split(/[\\/]/).at(-1);
@@ -67,15 +80,19 @@ export default {
         Property(node) {
           const key = node.key?.name ?? node.key?.value;
           if (key === "thresholds" || key === "coverageThreshold")
-            context.report({ node, message: "No coverage thresholds." });
+            context.report({
+              node,
+              message: "Remove the coverage threshold; keep only tests that protect a contract.",
+            });
         },
       };
     }
-    if (!isTest(name)) return {};
+    if (!isTestSupport(name)) return {};
     const report = (node, message) => context.report({ node, message });
     const bodies = new Map();
     const clocks = [];
     let fake = false;
+    let msw = false;
     const bodyOf = (node) => {
       for (let current = node.parent; current; current = current.parent)
         if (bodies.has(current)) return bodies.get(current);
@@ -86,10 +103,10 @@ export default {
         const callee = node.callee;
         const property = callee.type === "MemberExpression" ? callee.property.name : null;
         if (isBlock(node, BLOCKS)) {
-          if (inLoop(node)) report(node, "No tests inside loops. Use test.each with a table.");
+          if (inLoop(node)) report(node, "Write one test.each with a table instead of a loop.");
           const args = node.arguments;
           if (typeof args[2]?.value === "number" || hasTimeout(args[2]) || hasTimeout(args[1]))
-            report(node, "No per-test timeouts. Make the test fast and deterministic.");
+            report(node, "Drop the timeout and make the test fast and deterministic.");
           if (isBlock(node, TESTS)) {
             const body = args.findLast((arg) => FUNCTION.has(arg.type));
             if (body) bodies.set(body, { node, render: false, matchers: [] });
@@ -97,38 +114,45 @@ export default {
         }
         if (memberCall(node, MOCKERS, new Set(["useFakeTimers", "setSystemTime"]))) fake = true;
         if (memberCall(node, new Set(["Date", "performance"]), new Set(["now"]))) clocks.push(node);
-        if (memberCall(node, MOCKERS, MOCKS)) {
-          const target = node.arguments[0];
-          const source = target?.type === "ImportExpression" ? target.source.value : target?.value;
-          if (typeof source === "string" && /^(?:@\/|\.)/.test(source))
-            report(
-              node,
-              "Mock only what leaves the repo (network, LINE SDK, next/*, time). Use the real in-repo module.",
-            );
-        }
+        if (memberCall(node, MOCKERS, MOCKS)) report(node, DOUBLE);
+        if (memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
+        if (property && FAKES.test(property)) report(node, DOUBLE);
+        if (property === "defineProperty" && rootName(callee) === "Object") report(node, DOUBLE);
+        if (property === "listen" && msw && !strictListen(node))
+          report(node, 'Start the MSW server with listen({ onUnhandledRequest: "error" }).');
         const body = bodyOf(node);
         if (!body) return;
         if (callee.type === "Identifier" && RENDERS.has(callee.name)) body.render = true;
         if (property?.startsWith("to") && rootName(callee) === "expect") body.matchers.push(property);
+      },
+      ImportDeclaration(node) {
+        if (/^msw(?:\/|$)/.test(node.source.value)) msw = true;
+      },
+      AssignmentExpression(node) {
+        const target = node.left;
+        if (target.type !== "MemberExpression") return;
+        const text = context.sourceCode.getText(target);
+        if (/(?:^|\.)prototype\./.test(text) || /^(?:globalThis|window|global|self)\./.test(text)) report(node, DOUBLE);
       },
       NewExpression(node) {
         if (node.callee.type === "Identifier" && node.callee.name === "Date" && node.arguments.length === 0)
           clocks.push(node);
       },
       WhileStatement(node) {
-        report(node, "No polling loops in tests. Await the real event.");
+        report(node, "Await the real event instead of looping.");
       },
       DoWhileStatement(node) {
-        report(node, "No polling loops in tests. Await the real event.");
+        report(node, "Await the real event instead of looping.");
       },
       "Program:exit"() {
         if (!fake)
-          for (const node of clocks) report(node, "No real clock in tests. Use fake timers and set the system time.");
+          for (const node of clocks)
+            report(node, "Call vi.useFakeTimers() and vi.setSystemTime() instead of reading the real clock.");
         for (const { node, render, matchers } of bodies.values()) {
           if (render && matchers.every((matcher) => PRESENCE.has(matcher)))
-            report(node, "No render-only component tests. Assert behavior after an interaction, or drop the test.");
+            report(node, "Assert behavior after an interaction, or delete the render-only test.");
           else if (matchers.length > 0 && matchers.every((matcher) => CALL_CHECK.test(matcher)))
-            report(node, "A test that only checks calls proves nothing. Assert the outcome.");
+            report(node, "Assert the outcome the user or caller sees, not only that a function was called.");
         }
       },
     };
