@@ -24,7 +24,7 @@ const MESSAGE =
 export default {
   meta: {
     type: "problem",
-    docs: { description: "The query client in lib/query.ts retries with a function that skips client errors." },
+    docs: { description: "The query client in lib/query.ts passes retry a function." },
   },
   create(context) {
     const where = locate(context.filename);
