@@ -35,3 +35,21 @@ test("every export of a use server file is an inline function", (t) => {
   assert.equal(diagnostics.length, 5, JSON.stringify(diagnostics));
   assert.equal(diagnostics[0].message, "Export each Server Action as an inline async function, export async function name(raw) {}, so its arguments can be checked.");
 });
+
+test("a schema is a project import or a module const built from the validator, never a package parser", (t) => {
+  const diagnostics = lint(t, "action-schema", {
+    "apps/web/package.json": { dependencies: { next: "16", react: "19", superjson: "2", yaml: "2" }, imports: { "#schema": "./src/schema.ts", "#superjson": "superjson" } },
+    "apps/web/node_modules/superjson/package.json": { name: "superjson", main: "index.js" },
+    "apps/web/node_modules/superjson/index.js": "export default { parse: (value) => value };",
+    "apps/web/node_modules/yaml/package.json": { name: "yaml", main: "index.js" },
+    "apps/web/node_modules/yaml/index.js": "export const parse = (value) => value; export default { parse };",
+    [`${S}/schema.ts`]: 'import { z } from "zod"; export const input = z.string();',
+    [`${S}/superjson.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport superjson from "superjson";\nexport async function a(raw) { superjson.parse(raw); return raw; }\n',
+    [`${S}/yaml.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport YAML from "yaml";\nexport async function a(raw) { YAML.parse(raw); return raw; }\n',
+    [`${S}/aliased.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport sj from "#superjson";\nexport async function a(raw) { sj.parse(raw); return raw; }\n',
+    [`${S}/relative.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport { input } from "./schema";\nexport async function a(raw) { input.parse(raw); return raw; }\n',
+    [`${S}/alias.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport { input } from "@/schema";\nexport async function a(raw) { input.parse(raw); return raw; }\n',
+    [`${S}/imports.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport { input } from "#schema";\nexport async function a(raw) { input.parse(raw); return raw; }\n',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), [`${S}/aliased.actions.ts`, `${S}/superjson.actions.ts`, `${S}/yaml.actions.ts`]);
+});

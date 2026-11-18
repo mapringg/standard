@@ -19,3 +19,15 @@ test("only use server files, route handlers and the AI owner import src/lib/ai",
   assert.deepEqual(diagnostics.map(({ filename }) => filename), [`${S}/app/dynamic/page.tsx`, `${S}/app/page.tsx`, `${S}/features/summary/summary.server.ts`, `${S}/lib/other.ts`]);
   assert.equal(diagnostics.find(({ filename }) => filename === `${S}/app/page.tsx`).message, "Call generateSummary only from a \"use server\" file or a route handler and store the result, so render reads what was stored and never generates.");
 });
+
+test("ai-render resolves package imports and aliases to src/lib/ai", (t) => {
+  const diagnostics = lint(t, "ai-render", {
+    "apps/web/package.json": { dependencies: { next: "16", react: "19" }, imports: { "#ai": "./src/lib/ai.ts", "#gen": "./src/lib/generate.ts" } },
+    [`${S}/lib/ai.ts`]: "export async function generateSummary() { return 1; }\n",
+    [`${S}/lib/generate.ts`]: "export const other = 1;\n",
+    [`${S}/app/page.tsx`]: 'import { generateSummary } from "#ai";\nexport default async function Page() { return <p>{await generateSummary()}</p>; }\n',
+    [`${S}/app/other/page.tsx`]: 'import { other } from "#gen";\nexport default function Page() { return <p>{other}</p>; }\n',
+    [`${S}/app/lazy/page.tsx`]: 'export default async function Page() { const { generateSummary } = await import(`#ai`); return <p>{await generateSummary()}</p>; }\n',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), [`${S}/app/lazy/page.tsx`, `${S}/app/page.tsx`]);
+});
