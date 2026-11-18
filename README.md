@@ -318,7 +318,7 @@ The agreed rule list. `(L)` = lint enforces, `(T)` = types enforce, `(R)` = revi
 - Marketing may pin its own TypeScript version for `astro check`; the only exception to one version per dependency. (R)
 - The user's time zone is stored with the account in the API and sent at sign-in; servers render dates in it. (R)
 - Owner files: if an app needs the thing, it lives at that path with that shape; apps don't carry unused owner files. (L for path, R for shape)
-- `lib/query.ts` sets `retry: 1`. (R)
+- `lib/query.ts` passes `retry` a function: retry once, never on 400, 401, 403, 404, 409, 413, 415 or 422. (L)
 - Jobs are routes: `POST /api/jobs/<name>` in `features/jobs/`, protected by a service token, triggered by the platform scheduler (Kubernetes CronJob, Cloudflare Cron Trigger). No in-process schedulers. (L for location, R for the rest)
 - `service.ts` only when one action touches more than one store or outside service. (R)
 
@@ -341,7 +341,7 @@ Where these differ from earlier lines, these win.
 - Allowed outside apps: top-level `infra/` (deployment manifests), `apps/<service>/migrations/`, `scripts/` for operational tools (no custom check scripts). (L)
 - `style` prop only with CSS custom properties (every key starts with `--`). (L)
 - `.astro` components allowed only in marketing; text from content collections or props. (L)
-- Gaps: clear the browser query cache on sign-out/account change; separate wire types for dates (`YYYY-MM-DD`), instants (ISO), zoned ranges; never auto-retry 401/403/400/422-class errors in queries or mutations. (R, `lib/query.ts` retry function L)
+- Gaps: clear the browser query cache on sign-out/account change; separate wire types for dates (`YYYY-MM-DD`), instants (ISO), zoned ranges; never auto-retry 4xx errors in queries or mutations. (R)
 - Markdown stays README/AGENTS only; ops knowledge moves into AGENTS.md.
 - knip: treat route files (`src/app/**`, `src/pages/**`) as entries.
 

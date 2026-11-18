@@ -1,7 +1,7 @@
 import { UI_APPS, locate } from "./paths.mjs";
 
 const FUNCTION = new Set(["FunctionExpression", "ArrowFunctionExpression", "Identifier"]);
-const MESSAGE = "Pass retry a function that never retries 400, 401, 403 or 422 errors.";
+const MESSAGE = "Pass retry a function that retries once and never retries 400, 401, 403, 404, 409, 413, 415 or 422 errors.";
 
 export default {
   meta: {
