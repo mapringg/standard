@@ -1,6 +1,7 @@
 import { moduleVisitors, stem } from "./paths.mjs";
 
 const FUNCTION = ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"];
+const SERVER_MODULE = /\.server(?:\.[cm]?[jt]sx?)?$/;
 const TAGS = new Set(["cacheTag", "updateTag", "revalidateTag"]);
 
 function directiveList(body) {
@@ -45,6 +46,7 @@ export default {
     const routers = new Set();
     let fileCached = false;
     let serverOnly = false;
+    let client = false;
     const enter = (node) => {
       const own = directiveList(node.body?.body).some((directive) => directive.startsWith("use cache"));
       if (!own && !(fileCached && !enclosingFunction(node))) return;
@@ -65,10 +67,17 @@ export default {
       Program(program) {
         const top = directiveList(program.body);
         fileCached = top.some((directive) => directive.startsWith("use cache"));
+        client = top.includes("use client");
       },
       ...Object.fromEntries(FUNCTION.map((type) => [type, enter])),
-      ...moduleVisitors((source) => {
+      ...moduleVisitors((source, node) => {
         if (source === "server-only") serverOnly = true;
+        if (client && SERVER_MODULE.test(source))
+          context.report({
+            node,
+            message:
+              "Load the data in a Server Component and pass it to this client component as props instead of importing *.server.ts.",
+          });
       }),
       VariableDeclarator(node) {
         if (
