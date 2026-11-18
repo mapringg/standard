@@ -3,6 +3,7 @@ import { posix } from "node:path";
 import { parseSync } from "oxc-parser";
 
 import { FILE } from "../config.mjs";
+import { parseName } from "../oxlint/roles.mjs";
 import { NOT_PRODUCT, reactApps } from "./support/packages.mjs";
 import { sourceFacts } from "./support/source.mjs";
 
@@ -53,7 +54,7 @@ const EFFECTS = /** @type {BannedRule} */ ({
   paths: ["react#useEffect", "react#useLayoutEffect", "react#useInsertionEffect"],
   files: [],
   except: [],
-  fix: `Replace the effect with what it does: read data in a Server Component and pass it down as props, or with useSWR or useSWRInfinite from src/lib/swr.ts when it must load in the browser, compute derived state in render, act on an event in its handler, reset state on a prop change with a key, read an external store with useSyncExternalStore, measure or focus the DOM in a ref callback, read the latest props from a callback with useEffectEvent instead of copying them into a ref, and run a timer with useTimeout, useInterval or useAnimationFrame from ${TIMER}, copied from node_modules/@mapringg/standard/templates/timer.ts. A wrapper that must keep an effect goes in effect-wrappers in ${FILE} with its reason.`,
+  fix: `Replace the effect with what it does: read data in a Server Component and pass it down as props, or with useSWR or useSWRInfinite from src/lib/swr.ts when it must load in the browser, compute derived state in render, act on an event in its handler, reset state on a prop change with a key, read an external store with useSyncExternalStore, measure or focus the DOM in a ref callback, read the latest props from a callback with useEffectEvent instead of copying them into a ref, and run a timer with useTimeout, useInterval or useAnimationFrame from ${TIMER}, copied from node_modules/@mapringg/standard/templates/timer.ts. A wrapper that must keep an effect is named <name>.effect-<sync|route|subscribe>.ts.`,
 });
 
 /** The bindings that hold react's whole namespace, from a namespace or default import, require or import(). */
@@ -186,7 +187,7 @@ export default {
   retired: ["no-process-env", "no-bare-json-parse", "no-module-mocking", "no-manual-memo"].flatMap((rule) => [`packages/oxlint-plugin-*/rules/${rule}.ts`, `packages/oxlint-plugin-*/rules/${rule}.test.ts`]),
   applies: () => ({ on: true }),
   run(repo) {
-    const wrappers = new Set([...repo.config.effectWrappers.map((wrapper) => wrapper.file), ...reactApps(repo).map((app) => posix.join(app, TIMER))]);
+    const wrappers = new Set([...repo.config.effectWrappers.map((wrapper) => wrapper.file), ...reactApps(repo).map((app) => posix.join(app, TIMER)), ...repo.files().filter((path) => parseName(path).effect.length)]);
     const parseError = (/** @type {{ path: string, error: string }} */ file) => ({ key: `${file.path} parse`, fix: `${file.path} does not parse, so banned cannot read it: ${file.error}. Fix the syntax.` });
     return [...oxlintConflicts(repo), ...sourceFacts(repo).flatMap((file) => {
       if ("error" in file) return [parseError(file)];

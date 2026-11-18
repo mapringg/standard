@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { tempDir, write, installPackage } from "../helpers.mjs";
 
-function lint(t, files, { config, dirs = ["."] } = {}) {
+function lint(t, files, { config, dirs = ["apps"] } = {}) {
   const root = tempDir(t, "client-data");
   installPackage(root);
   write(root, { "package.json": { type: "module" }, "oxlint.json": { jsPlugins: ["@mapringg/standard/oxlint"], categories: { correctness: "off" }, rules: { "standard/client-data": "error" } }, ...(config ? { ".standard/config.json": config } : {}), ...files });

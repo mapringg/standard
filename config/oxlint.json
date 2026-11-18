@@ -16,6 +16,10 @@
     "standard/json": "error",
     "standard/log": "error",
     "standard/format": "error",
+    "standard/effect": "error",
+    "standard/effect-cleanup": "error",
+    "standard/client-data": "error",
+    "standard/names": "error",
 
     "import/no-cycle": ["error", { "maxDepth": 3 }],
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],

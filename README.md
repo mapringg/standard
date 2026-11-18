@@ -562,12 +562,27 @@ Oxlint 1.93.0 loads `@mapringg/standard/oxlint` through `jsPlugins`. The JSON co
     "standard/redis": "error", "standard/ai": "error",
     "standard/ui": "error", "standard/timer": "error", "standard/swr": "error",
     "standard/env": "error", "standard/json": "error",
-    "standard/log": "error", "standard/format": "error"
+    "standard/log": "error", "standard/format": "error",
+    "standard/effect": "error", "standard/effect-cleanup": "error",
+    "standard/client-data": "error", "standard/names": "error"
   }
 }
 ```
 
 Each package owns environment reads in `src/env.ts`, JSON parsing in `src/lib/json.ts`, logging in `src/lib/log.ts`, date formatting in `src/lib/format.ts`, Redis imports in `src/lib/redis.ts`, AI SDK imports in `src/lib/ai.ts`, SWR imports in `src/lib/swr.ts`, and primitive UI imports under `src/components/ui/`. Owners may use `.server.ts` and `.browser.ts` variants. Tests, fixtures, stories, scripts, evals and config files are excluded. Diagnostics name the owner's exported helpers when the owner exists. The CLI `banned` check remains available during migration.
+
+### Roles in file names
+
+A file that many files share a role with names it as `<name>.<role>-<reason>.<ext>`, before `.browser`, `.server` and `.test`, such as `session-sync.data-unreachable.effect-route.tsx`.
+
+| Rule | Only these files may |
+| --- | --- |
+| `standard/effect` | call `useEffect` or `useLayoutEffect`: `.effect-sync` keeps an outside system in step, `.effect-route` reacts to the URL Next exposes only through hooks, `.effect-subscribe` adds a listener. Tests and `src/lib/timer.ts` are exempt. |
+| `standard/effect-cleanup` | pass: every effect in an `.effect-subscribe` file is an inline function whose every `return` hands back a cleanup function or the name of one, and whose last statement is that `return`. |
+| `standard/client-data` | load data in the browser: `.data-pages`, `.data-live`, `.data-client-state` and `.data-unreachable`. Loading means a `use*` hook of `src/lib/swr.ts` or swr, or, in code that ships to the browser, `fetch`, `XMLHttpRequest`, `ky`, `axios` or an import of `src/lib/api/`. A Vite React app's `src/` is unreachable as a whole. |
+| `standard/names` | carry a role segment: the reason is one of the words above, and the segment, `.cache` included, sits before `.browser`, `.server` and `.test`. |
+
+`<name>.cache.ts` names a module whose functions return a cached promise that `use` may read. The CLI `banned` and `client-data` checks accept the same names. During adoption the plugin and the CLI still read the legacy `effect-wrappers` and `client-data` lists, with a deprecation notice; they are not in the new schema. `standard migrate names --write` renames the files they list.
 
 ### Configuration in 0.16.0
 

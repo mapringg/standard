@@ -23,5 +23,5 @@ test("the legacy lists print their own deprecation notice", (t) => {
   write(cwd, { "src/a.ts": "export const a = 1;\n" });
   git(cwd, "add", "-A");
   const run = standard(cwd, ["check", "banned"]);
-  assert.match(run.stderr, /effect-wrappers and client-data are deprecated in 0\.17\.0\. Run standard migrate names --write to move each file's role into its name\./);
+  assert.ok(run.listsNotice, run.stderr);
 });

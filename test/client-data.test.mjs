@@ -17,8 +17,8 @@ const APPS = {
   "apps/web/src/data/format.ts": "export const format = String;\n",
 };
 const API = { "api-modules": ["apps/web/src/api/**"] };
-const LISTED_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, list the file in client-data in .standard/config.json with its reason: pages, live, client-state or unreachable.";
-const FETCH_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, list the file in client-data in .standard/config.json with its reason: pages, live, client-state or unreachable.";
+const LISTED_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action that refreshes the cache with revalidatePath or revalidateTag. If the browser must load the data, name the file <name>.data-<pages|live|client-state|unreachable>.tsx.";
+const FETCH_FIX = "Read the data in a Server Component and pass it down as props, and send a write through a Server Action. If the browser must load the data, name the file <name>.data-<pages|live|client-state|unreachable>.tsx.";
 /** TypeScript 7's API server prints this when the check closes it, after the run has finished. */
 const TSGO_SHUTDOWN = /^context canceled\n/m;
 const NO_BASELINE = "Fix each as its line says. The check has no baseline, so it allows none; never create one to make it pass.";
@@ -68,11 +68,11 @@ test("client-data fails the template's useSWR, or its former name, through any i
       "apps/web/src/feed.stories.tsx": useData(),
       "apps/web/src/__fixtures__/feed.tsx": useData(),
     },
-    `apps/web/src/barrel.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
-    `apps/web/src/bound.tsx uses useSWR on lines 3, 4, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
-    `apps/web/src/direct.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
-    `apps/web/src/feed.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
-    `apps/web/src/seeded.tsx uses useServerSeeded on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/barrel.tsx uses useSWR on lines 2, 3, and its name carries no data role. ${LISTED_FIX}`,
+    `apps/web/src/bound.tsx uses useSWR on lines 3, 4, and its name carries no data role. ${LISTED_FIX}`,
+    `apps/web/src/direct.tsx uses useSWR on lines 2, 3, and its name carries no data role. ${LISTED_FIX}`,
+    `apps/web/src/feed.tsx uses useSWR on lines 2, 3, and its name carries no data role. ${LISTED_FIX}`,
+    `apps/web/src/seeded.tsx uses useServerSeeded on lines 2, 3, and its name carries no data role. ${LISTED_FIX}`,
   );
 });
 
@@ -235,7 +235,7 @@ test("client-data passes a type-only use of useSWR, and fails it through a two-l
       "apps/web/src/types.ts": 'export type { useSWR } from "@/lib/swr";\n',
       "apps/web/src/members.tsx": '"use client";\nexport const load = () => fetch.call(globalThis, "/a");\nexport const bound = fetch.bind(globalThis);\n',
     },
-    `apps/web/src/chain.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/chain.tsx uses useSWR on lines 2, 3, and its name carries no data role. ${LISTED_FIX}`,
     `apps/web/src/members.tsx uses fetch on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
   );
 });
@@ -261,7 +261,7 @@ test("client-data fails swr/immutable anywhere, and XMLHttpRequest, ky and axios
       "apps/web/src/typed.tsx": '"use client";\nimport type { Options } from "ky";\nexport const options: Options = {};\n',
     },
     `apps/web/src/axios.tsx uses axios on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
-    `apps/web/src/immutable.tsx uses useSWR on lines 2, 3, and client-data in .standard/config.json does not list it. ${LISTED_FIX}`,
+    `apps/web/src/immutable.tsx uses useSWR on lines 2, 3, and its name carries no data role. ${LISTED_FIX}`,
     `apps/web/src/ky.tsx uses ky on lines 2, 3, and "use client" runs it in the browser. ${FETCH_FIX}`,
     `apps/web/src/wrapped.tsx imports @/lib/http on line 2, which reaches axios in apps/web/src/lib/http.ts, and "use client" runs it in the browser. ${FETCH_FIX}`,
     `apps/web/src/xhr.tsx uses XMLHttpRequest on line 2, and "use client" runs it in the browser. ${FETCH_FIX}`,
