@@ -4,6 +4,7 @@ import boundaries from "./checks/boundaries.mjs";
 import clientData from "./checks/client-data.mjs";
 import commitSubject from "./checks/commit-subject.mjs";
 import deadCode from "./checks/dead-code.mjs";
+import docs from "./checks/docs.mjs";
 import duplicates from "./checks/duplicates.mjs";
 import noComments from "./checks/no-comments.mjs";
 import prBody from "./checks/pr-body.mjs";
@@ -49,4 +50,4 @@ import wiring from "./checks/wiring.mjs";
  */
 
 /** @type {Check[]} */
-export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned, react, clientData, routeAwait, usePromise, suspenseErrors, cacheComponents, noComments];
+export const registry = [commitSubject, prTitle, prBody, prScreenshot, prSize, baselineGrowth, wiring, deadCode, duplicates, typecheck, tests, prTests, boundaries, banned, react, clientData, routeAwait, usePromise, suspenseErrors, cacheComponents, noComments, docs];
