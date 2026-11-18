@@ -7,7 +7,7 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.1.1",
+    "@mapringg/standard": "github:mapringg/standard#v1.1.2",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
@@ -36,6 +36,8 @@ Each app's and package's `tsconfig.json`:
   "include": ["src", "*.config.ts"]
 }
 ```
+
+To pass CSS variables in `style`, add ``declare module "react" { interface CSSProperties { [key: `--${string}`]: string | number } }`` to a `.d.ts` file.
 
 Each app's and package's `package.json` maps `#/` to its own `src`:
 

@@ -88,3 +88,25 @@ test("owners bans forwardRef in every UI app", (t) => {
   });
   deepEqual(filesWith(result, "owners"), ["apps/web/src/components/ui/button.tsx"]);
 });
+
+test("owners lets an owner file's own test use what the owner owns", (t) => {
+  const result = lint(t, {
+    "apps/web/src/lib/log.ts": "export const log = (message: string) => console.log(message);\n",
+    "apps/web/src/lib/log.test.ts": "export const spy = () => console.log;\n",
+    "apps/web/src/lib/query.ts": 'export { QueryClient } from "@tanstack/react-query";\n',
+    "apps/web/src/lib/query.test.ts": 'export { QueryClient } from "@tanstack/react-query";\n',
+    "apps/web/src/components/boundary/section.tsx": 'export { Suspense } from "react";\n',
+    "apps/web/src/components/boundary/section.test.tsx": 'export { Suspense } from "react";\n',
+    "apps/web/src/lib/format.ts": "export const format = (n: number) => n.toLocaleString();\n",
+    "apps/web/src/lib/format.test.ts": "export const format = (n: number) => n.toLocaleString();\n",
+    "apps/web/src/lib/clock.ts": "export const now = () => 1;\n",
+    "apps/web/src/lib/clock.test.ts": "export const spy = () => console.log;\n",
+    "apps/web/src/features/task/log.ts": "export const log = 1;\n",
+    "apps/web/src/features/task/log.test.ts": "export const spy = () => console.log;\n",
+    "apps/api/src/features/tasks/db.ts": 'import postgres from "postgres";\nexport const sql = postgres;\n',
+    "apps/api/src/features/tasks/db.test.ts": 'import postgres from "postgres";\nexport const sql = postgres;\n',
+    "apps/api/src/lib/env.ts": "export const port = process.env.PORT;\n",
+    "apps/api/src/lib/env.test.ts": "export const port = process.env.PORT;\n",
+  });
+  deepEqual(filesWith(result, "owners"), ["apps/web/src/features/task/log.test.ts", "apps/web/src/lib/clock.test.ts"]);
+});

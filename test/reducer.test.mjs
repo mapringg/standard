@@ -30,3 +30,27 @@ test("reducer allows one useReducer per component with a reducer from -state", (
     "apps/web/src/features/task/task-twice.tsx",
   ]);
 });
+
+test("reducer accepts an instantiated or asserted reducer from -state", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-state.ts": [
+      'export const rowsReducer = <T,>(rows: T[], action: { type: "add"; row: T }) =>',
+      '  action.type === "add" ? [...rows, action.row] : rows;',
+      "",
+    ].join("\n"),
+    "apps/web/src/features/task/task-rows.tsx": [
+      'import { useReducer } from "react";',
+      'import { rowsReducer } from "#/features/task/task-state";',
+      "type Row = { id: string };",
+      "export function Rows() { const [rows] = useReducer(rowsReducer<Row>, []); return rows.length; }",
+      "export function Cast() { const [rows] = useReducer(rowsReducer as typeof rowsReducer<Row>, []); return rows.length; }",
+      "export function Pin() { const [rows] = useReducer(rowsReducer<Row> satisfies unknown, []); return rows.length; }",
+    ].join("\n"),
+    "apps/web/src/features/task/task-local.tsx": [
+      'import { useReducer } from "react";',
+      "const local = <T,>(rows: T[]) => rows;",
+      "export function Local() { const [rows] = useReducer(local<string>, []); return rows.length; }",
+    ].join("\n"),
+  });
+  deepEqual(filesWith(result, "reducer"), ["apps/web/src/features/task/task-local.tsx"]);
+});
