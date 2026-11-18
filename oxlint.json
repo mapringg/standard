@@ -148,9 +148,17 @@
     "eslint/new-cap": [
       "error",
       {
-        "capIsNewExceptions": ["Scalar"]
+        "capIsNew": false
       }
     ],
+    "eslint/class-methods-use-this": [
+      "error",
+      {
+        "enforceForClassFields": false
+      }
+    ],
+    "typescript/promise-function-async": "off",
+    "unicorn/no-document-cookie": "off",
     "vitest/valid-title": [
       "error",
       {

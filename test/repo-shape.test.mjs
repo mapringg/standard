@@ -172,3 +172,20 @@ test("repo-shape allows one plain suite plus one suite per database", (t) => {
     ],
   );
 });
+
+test("repo-shape flags test setup files but not product files named setup", (t) => {
+  const rename = "Rename the file to <name>.fixture.ts or <name>.test-utils.ts.";
+  deepEqual(
+    findings(t, {
+      "apps/web/src/features/account/account-setup.tsx": code,
+      "apps/web/src/setup.ts": code,
+      "apps/web/src/test-setup.ts": code,
+      "apps/web/src/vitest.setup.ts": code,
+    }).filter((line) => line.endsWith(rename)),
+    [
+      `apps/web/src/setup.ts | ${rename}`,
+      `apps/web/src/test-setup.ts | ${rename}`,
+      `apps/web/src/vitest.setup.ts | ${rename}`,
+    ],
+  );
+});

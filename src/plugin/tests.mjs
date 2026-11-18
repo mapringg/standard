@@ -156,7 +156,7 @@ export default {
           if (scope) toggles.push({ ...scope, order: node.range[0], fake: FAKE_TIMERS.has(property) });
         }
         if (memberCall(node, new Set(["Date", "performance"]), new Set(["now"]))) clocks.push(node);
-        if (memberCall(node, MOCKERS, MOCKS)) report(node, DOUBLE);
+        if (memberCall(node, MOCKERS, MOCKS) && !(fixture && property === "stubEnv")) report(node, DOUBLE);
         if (!fixture && memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
         if (!fixture && property && FAKES.test(property)) report(node, DOUBLE);
         if (property === "defineProperty" && rootName(callee) === "Object") report(node, DOUBLE);
@@ -180,6 +180,7 @@ export default {
         const target = node.left;
         if (target.type !== "MemberExpression") return;
         const text = context.sourceCode.getText(target);
+        if (fixture && node.operator === "??=" && /^(?:globalThis|window|self)\.\w+$/.test(text)) return;
         if (/(?:^|\.)prototype\./.test(text) || /^(?:globalThis|window|global|self)\./.test(text)) report(node, DOUBLE);
       },
       NewExpression(node) {
