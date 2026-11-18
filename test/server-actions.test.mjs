@@ -1,7 +1,7 @@
 import { deepEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { filesWith, lint } from "./lint.mjs";
+import { filesWith, lint, only } from "./lint.mjs";
 
 test("server-actions keeps actions in -actions.ts with Action names", (t) => {
   const result = lint(t, {
@@ -20,4 +20,15 @@ test("server-actions keeps actions in -actions.ts with Action names", (t) => {
     "apps/web/src/features/task/task-inline.tsx",
     "apps/web/src/features/task/task-missing-actions.ts",
   ]);
+});
+
+test("server-actions asks a component named *-actions.tsx to be renamed", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-row-actions.tsx":
+      '"use client";\nexport function TaskRowActions() { return null; }\n',
+  });
+  deepEqual(
+    only(result, "server-actions").map((item) => item.message),
+    ["Rename this component file so it does not end in -actions; <feature>-actions.ts holds only Server Actions."],
+  );
 });
