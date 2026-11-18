@@ -88,3 +88,27 @@ test("legacy facts emit a notice and cannot mix with modern keys", (t) => {
   assert.equal(result.status, 0);
   assert.equal(result.migrationNotice, true);
 });
+
+test("allow offers only tree checks and plugin rules", () => {
+  for (const { name, subject } of registry) {
+    if (subject !== "tree") assert.throws(() => parseConfig(JSON.stringify({ allow: { [name]: ["src/**"] } })), /unknown key/);
+  }
+});
+
+test("a whole-tree allow cannot suppress pathless doc budget findings", (t) => {
+  const root = tempRepo(t, { allow: { docs: ["**"] } });
+  write(root, { "README.md": "# Example\n", ".standard/baselines/docs.json": { readme: 0 } });
+  git(root, "add", ".");
+  const result = standard(root, ["check", "config"]);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /changes no findings/);
+});
+
+test("oxlint allow severity cannot disable standard plugin rules", (t) => {
+  const root = tempRepo(t, {});
+  write(root, { ".oxlintrc.json": { rules: { "standard/log": "allow" } } });
+  git(root, "add", ".");
+  const result = standard(root, ["check", "config"]);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /Keep standard\/log at error/);
+});
