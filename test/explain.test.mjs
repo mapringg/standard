@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import plugin from "../src/oxlint/rules.mjs";
 import { registry } from "../src/registry.mjs";
 import { standard } from "./helpers.mjs";
 
@@ -29,7 +30,7 @@ test("every check describes what it enforces and the fix it names", () => {
 
 test("explain prints one line per check, and explain <check> prints it in full", () => {
   const lines = standard(process.cwd(), ["explain"]).stdout.trimEnd().split("\n");
-  assert.deepEqual(lines.map((line) => line.split(" ")[0]), registry.map((check) => check.name));
+  assert.deepEqual(lines.map((line) => line.split(" ")[0]), [...registry.map((check) => check.name), ...Object.keys(plugin.rules).map((name) => `standard/${name}`)]);
   assert.match(lines.find((line) => line.startsWith("pr-body")) ?? "", /^pr-body +0\.2\.0 +baseline-free +config: pr\.ticket-prefix +The description follows/);
   assert.match(lines.find((line) => line.startsWith("react")) ?? "", /^react +0\.12\.0 +baseline +config: none /);
 
@@ -57,7 +58,7 @@ test("explain keeps a warning-only check's baseline apart from whether it fails"
 
 test("explain refuses an unknown check and a flag other than --markdown", () => {
   const unknown = standard(process.cwd(), ["explain", "nope"]);
-  assert.match(unknown.stderr, /^standard: explain names "nope", which is not a check in this version\. Checks: commit-subject, .+, no-doc-pointers, config\.\n$/);
+  assert.match(unknown.stderr, /^standard: explain names "nope", which is not a check or plugin rule in this version\. Checks: commit-subject, .+, config, standard\/zod, .+, standard\/ai-render\.\n$/);
   assert.equal(unknown.status, 1);
   const flag = standard(process.cwd(), ["explain", "--json"]);
   assert.match(flag.stderr, /^standard: explain takes one check name or --markdown\./);

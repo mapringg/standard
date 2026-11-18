@@ -4,7 +4,7 @@ import { writeBudgets } from "../src/doc-budgets.mjs";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 
-import { explainAll, explainMarkdown, explainOne } from "../src/explain.mjs";
+import { explainAll, explainMarkdown, explainOne, explainPlugin } from "../src/explain.mjs";
 import { HOOKS } from "../src/hook.mjs";
 import { install } from "../src/install.mjs";
 import { merge } from "../src/merge.mjs";
@@ -61,7 +61,7 @@ const COMMANDS = {
   },
   explain(args) {
     if (args.length > 1 || args[0]?.startsWith("--") && args[0] !== "--markdown") throw new Error(`explain takes one check name or --markdown.\n${USAGE}`);
-    const lines = args[0] === "--markdown" ? explainMarkdown(registry) : args[0] ? explainOne(registry, args[0]) : explainAll(registry);
+    const lines = args[0] === "--markdown" ? explainMarkdown(registry) : args[0] ? explainOne(registry, args[0]) : [...explainAll(registry), ...explainPlugin()];
     for (const line of lines) console.log(line);
     return 0;
   },

@@ -573,6 +573,8 @@ Oxlint 1.93.0 loads `@mapringg/standard/oxlint` through `jsPlugins`. The JSON co
 
 Each package owns environment reads in `src/env.ts`, JSON parsing in `src/lib/json.ts`, logging in `src/lib/log.ts`, date formatting in `src/lib/format.ts`, Redis imports in `src/lib/redis.ts`, AI SDK imports in `src/lib/ai.ts`, SWR imports in `src/lib/swr.ts`, and primitive UI imports under `src/components/ui/`. Owners may use `.server.ts` and `.browser.ts` variants. Tests, fixtures, stories, scripts, evals and config files are excluded. Diagnostics name the owner's exported helpers when the owner exists. The CLI `banned` check remains available during migration.
 
+`standard explain` lists every `standard/<rule>` beside the checks, and `standard explain standard/<rule>` prints one, since `allow` takes those ids.
+
 ### Roles in file names
 
 A file that many files share a role with names it as `<name>.<role>-<reason>.<ext>`, before `.browser`, `.server` and `.test`, such as `session-sync.data-unreachable.effect-route.tsx`.
@@ -592,9 +594,9 @@ A file that many files share a role with names it as `<name>.<role>-<reason>.<ex
 
 | Rule | What it requires |
 | --- | --- |
-| `standard/action-schema` | Every Server Action, an export of a `"use server"` file or a function with its own `"use server"`, takes plain parameters and parses each one before any other statement, with the validator the file imports: `schema.parse(raw)` and its `safeParse` and async forms for zod and zod/mini, or `parse(schema, raw)` for zod/mini and valibot. A file that imports no validator fails each action that takes an argument. |
-| `standard/cache-tag` | Every `use cache` scope, a function with the directive or each export of a file with it, calls `cacheTag` from `next/cache` as a statement at its top level. |
-| `standard/ai-render` | A Server Component, a `.tsx` or `.jsx` file in a Next app without `"use client"` or `"use server"`, and a file with a `use cache` scope import no value from `src/lib/ai.ts`, its `.server` and `.browser` variants, or a module that re-exports one of them. Generate in a Server Action or route handler and store the result. |
+| `standard/action-schema` | Every export of a `"use server"` file is an inline function, and every Server Action, such an export or a function with its own `"use server"`, takes plain parameters and parses each one before any other statement. Only a throwing parse counts: `schema.parse(raw)` or `parseAsync` for zod and zod/mini, or `parse(schema, raw)` for zod/mini and valibot, where the schema is an imported binding or a module-level `const` built from the validator. `schema.parse(Object.fromEntries(formData))` parses a form. A file that imports no validator fails each action that takes an argument. |
+| `standard/cache-tag` | Every `use cache` scope, a function with the directive or an export of a file with it, is an inline function that calls `cacheTag` from `next/cache` with at least one tag as a top-level statement. A file-level `use cache` file exports only inline functions. |
+| `standard/ai-render` | Only a `"use server"` file, a `route.*` handler and `src/lib/ai.ts` with its `.server` and `.browser` variants import `src/lib/ai`. Every other file fails, so a Server Component, a `use cache` function and any wrapper they could reach never generate. |
 
 ### Configuration in 0.16.0
 

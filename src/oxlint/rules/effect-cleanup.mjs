@@ -24,7 +24,7 @@ export function returnsCleanup(callback) {
 }
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
-  meta: { type: "problem", schema: [], messages: { cleanup: "Write the subscription inline and end every path with return () => unsubscribe(), or return a const that holds such a function." } },
+  meta: { type: "problem", docs: { description: "Every effect in an .effect-subscribe file is inline and returns a function cleanup on every path.", fix: "End every path with return () => unsubscribe()." }, schema: [], messages: { cleanup: "Write the subscription inline and end every path with return () => unsubscribe(), or return a const that holds such a function." } },
   create(context) {
     if (!rolesOf(context.filename).effect.includes("subscribe")) return {};
     return {

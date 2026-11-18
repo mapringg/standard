@@ -16,14 +16,31 @@ export function directives(node) {
 /** @param {Node} node */
 export const isFunction = (node) => FUNCTIONS.has(node?.type);
 
-/** @param {Node} program @returns {Node[]} The functions a module exports by declaration. */
-export function exportedFunctions(program) {
-  return program.body.flatMap((/** @type {Node} */ node) => {
-    if (node.type === "ExportDefaultDeclaration") return isFunction(node.declaration) ? [node.declaration] : [];
-    if (node.type !== "ExportNamedDeclaration" || !node.declaration) return [];
-    if (isFunction(node.declaration)) return [node.declaration];
-    return node.declaration.type === "VariableDeclaration" ? node.declaration.declarations.flatMap((/** @type {Node} */ item) => isFunction(item.init) ? [item.init] : []) : [];
-  });
+/**
+ * @param {Node} program
+ * @returns {{ functions: Node[], others: Node[] }} The inline functions a module exports, and every other value export, such as
+ *   `export { f }`, `export default f`, an export of a call, or a re-export. Type exports are neither.
+ */
+export function moduleExports(program) {
+  /** @type {{ functions: Node[], others: Node[] }} */
+  const found = { functions: [], others: [] };
+  for (const node of program.body) {
+    if (node.exportKind === "type") continue;
+    if (node.type === "ExportAllDeclaration") found.others.push(node);
+    else if (node.type === "ExportDefaultDeclaration") (isFunction(node.declaration) ? found.functions : found.others).push(node.declaration);
+    else if (node.type === "ExportNamedDeclaration") {
+      const declaration = node.declaration;
+      if (!declaration) {
+        if (node.specifiers.some((/** @type {Node} */ specifier) => specifier.exportKind !== "type")) found.others.push(node);
+      } else if (isFunction(declaration)) found.functions.push(declaration);
+      else if (declaration.type === "VariableDeclaration") for (const item of declaration.declarations) {
+        if (isFunction(item.init)) found.functions.push(item.init);
+        else found.others.push(item);
+      }
+      else if (!/^TS(?:Interface|TypeAlias|Module)Declaration$/.test(declaration.type)) found.others.push(declaration);
+    }
+  }
+  return found;
 }
 
 /** @param {Node} fn @returns {Node[]} A function's top-level statements; an expression body counts as one. */

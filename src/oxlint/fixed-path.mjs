@@ -51,7 +51,7 @@ function chain(node) {
  */
 export function fixedPathRule({ owner, modules, globals, properties }) {
   return {
-    meta: { type: "problem", schema: [], messages: { owner: "{{fix}}" } },
+    meta: { type: "problem", docs: { description: `Only ${owner} ${modules.length ? `imports ${modules.join(", ")}` : `uses ${[...globals, ...properties].join(", ")}`}.`, fix: `Import the exports of ${owner}.` }, schema: [], messages: { owner: "{{fix}}" } },
     create(context) {
       const filename = context.filename;
       const root = packageRoot(filename, context.cwd);
