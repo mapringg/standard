@@ -37,6 +37,8 @@ Each app's and package's `tsconfig.json`:
 }
 ```
 
+To pass CSS variables in `style`, add ``declare module "react" { interface CSSProperties { [key: `--${string}`]: string | number } }`` to a `.d.ts` file.
+
 Each app's and package's `package.json` maps `#/` to its own `src`:
 
 ```json

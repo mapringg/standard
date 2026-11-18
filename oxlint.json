@@ -201,7 +201,8 @@
     {
       "files": ["**/*.d.ts"],
       "rules": {
-        "unicorn/require-module-specifiers": "off"
+        "unicorn/require-module-specifiers": "off",
+        "typescript/consistent-indexed-object-style": "off"
       }
     },
     {
