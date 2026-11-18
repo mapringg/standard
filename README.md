@@ -598,6 +598,15 @@ A file that many files share a role with names it as `<name>.<role>-<reason>.<ex
 | `standard/cache-tag` | Every `use cache` scope, a function with the directive or an export of a file with it, is an inline function that calls `cacheTag` from `next/cache` with at least one tag as a top-level statement. A file-level `use cache` file exports only inline functions. |
 | `standard/ai-render` | In a package that depends on `next`, only a `"use server"` file, a `route.*` handler and `src/lib/ai.ts` with its `.server` and `.browser` variants import `src/lib/ai`. Every other file fails, so a Server Component, a `use cache` function and any wrapper they could reach never generate. Outside a Next app there is no render, so the rule skips it; `standard/ai` still keeps the SDK and `ai` behind `src/lib/ai*`. |
 
+### Module entries
+
+Every folder under an app's `src/`, `src/features/` and `src/components/` is a module, so shared components are imported by group, such as `@/components/chart`. `src/lib` and `src/components/ui` stay open. A module has up to three entries: `index`, `index.server` and `routes`. `index.server` is the module's server-only surface, and route files may import it even though they may not import a feature's other `*.server.*` files.
+
+| Rule | What it requires |
+| --- | --- |
+| `standard/server-entry` | Code that ships to the browser, a `"use client"` or `.browser` file or anything one reaches, imports no `index.server` entry. |
+| `standard/index-exports` | A plain `index` imports and re-exports no `*.server.*` file and no `src/lib/api` module. Those go in `index.server`. |
+
 ### Configuration in 0.16.0
 
 An empty `.standard/config.json` enables every check. The schema has four keys: `$schema`, `ticket`, `skip` and `allow`. `skip` is temporary rollout debt and may only shrink. `allow` is the only file exception, for CLI checks and `standard/<rule>` plugin rules alike.

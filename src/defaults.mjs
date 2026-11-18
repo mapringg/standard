@@ -20,11 +20,11 @@ export function defaults(repo) {
     budgets: readBudgets(repo),
     apiModules: ["**/src/lib/api/**"], cachedModules: ["**/*.cache.ts"],
     boundaries: {
-      modules: [{ folders: ["**/src/*", "**/src/features/*"], entries: ["index", "routes"], open: ["**/src/lib", "**/src/components/ui"], except: [] }],
+      modules: [{ folders: ["**/src/*", "**/src/features/*", "**/src/components/*"], entries: ["index", "index.server", "routes"], open: ["**/src/lib", "**/src/components/ui"], except: [] }],
       forbid: nextApps.flatMap((app) => [
         { files: [posix.join(app, "src/features/**")], except: [], imports: [posix.join(app, "src/app/**")], fix: "Let the route compose the feature." },
         { files: [posix.join(app, "src/{components,lib,hooks}/**")], except: [], imports: [posix.join(app, "src/features/**")], fix: "Move feature behavior into the feature." },
-        { files: [posix.join(app, "src/app/**")], except: [], imports: [posix.join(app, "src/features/**/*.server.*")], fix: "Import the feature entry instead." },
+        { files: [posix.join(app, "src/app/**")], except: [], imports: [posix.join(app, "src/features/**/!(index).server.*")], fix: "Import the feature's index or index.server entry instead." },
       ]),
     },
   });

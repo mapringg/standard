@@ -23,6 +23,8 @@
     "standard/action-schema": "error",
     "standard/cache-tag": "error",
     "standard/ai-render": "error",
+    "standard/server-entry": "error",
+    "standard/index-exports": "error",
 
     "import/no-cycle": ["error", { "maxDepth": 3 }],
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
