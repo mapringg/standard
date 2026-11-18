@@ -108,15 +108,16 @@ export function migrateNames(root, { write, picks }) {
   }
   for (const [from, to] of renames) git(root, "mv", from, to);
   const escape = (/** @type {string} */ text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const movePaths = (/** @type {string} */ text) => [...renames].reduce((current, [from, to]) => current.replace(new RegExp(`${escape(from)}(?![\\w.-])`, "g"), to), text);
   for (const baseline of files.filter((file) => file.startsWith(".standard/baselines/") && file.endsWith(".json"))) {
     const before = readFileSync(join(root, baseline), "utf8");
     let after = before;
     for (const [file, list] of edits) for (const { from, to } of list) after = after.replace(new RegExp(`("${escape(file)}\\s[^"]*?)${escape(from)}(?=["\\s:])`, "g"), `$1${to}`);
-    for (const [from, to] of renames) after = after.replace(new RegExp(`${escape(from)}(?![\\w.-])`, "g"), to);
+    after = movePaths(after);
     if (after !== before) writeFileSync(join(root, baseline), after);
   }
   const keep = (/** @type {string} */ file) => pending.has(file) || !segments.has(file);
-  const nextConfig = { ...config, "effect-wrappers": wrappers.filter(({ file }) => keep(file)).map((entry) => ({ ...entry, file: renames.get(entry.file) ?? entry.file })), "client-data": data.filter((entry) => entry.app) };
+  const nextConfig = { ...JSON.parse(movePaths(JSON.stringify(config))), "effect-wrappers": wrappers.filter(({ file }) => keep(file)).map((entry) => ({ ...entry, file: renames.get(entry.file) ?? entry.file })), "client-data": data.filter((entry) => entry.app) };
   for (const key of ["effect-wrappers", "client-data"]) if (nextConfig[key].length === 0) delete nextConfig[key];
   if (JSON.stringify(nextConfig) !== JSON.stringify(config)) writeFileSync(path, `${JSON.stringify(nextConfig, null, 2)}\n`);
   return [...lines.filter((line) => line.startsWith("pick ")), `Renamed ${renames.size} files and rewrote ${count} imports in ${edits.size} files. ${pending.size} effect wrapper${pending.size === 1 ? " needs" : "s need"} a reason.`];
