@@ -15,6 +15,14 @@ function isReducerCall(node) {
   );
 }
 
+const WRAPPERS = new Set(["TSInstantiationExpression", "TSAsExpression", "TSSatisfiesExpression"]);
+
+function unwrap(node) {
+  let current = node;
+  while (current && WRAPPERS.has(current.type)) current = current.expression;
+  return current;
+}
+
 function returnsSecondParam(node) {
   const second = node.params[1];
   if (second?.type !== "Identifier") return false;
@@ -55,7 +63,7 @@ export default {
             node,
             message: "Merge the state into one useReducer with one union in <feature>-state.ts.",
           });
-        const reducer = node.arguments[0];
+        const reducer = unwrap(node.arguments[0]);
         const fromState =
           reducer?.type === "Identifier"
             ? stateImports.has(reducer.name)
