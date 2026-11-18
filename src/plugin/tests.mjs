@@ -6,7 +6,8 @@ const MOCKERS = new Set(["vi", "jest"]);
 const MOCKS = new Set(["mock", "doMock", "unstable_mockModule", "setMock", "stubGlobal", "stubEnv", "mocked"]);
 const FAKES =
   /^(?:mockImplementation|mockImplementationOnce|mockReturnValue|mockReturnValueOnce|mockResolvedValue|mockResolvedValueOnce|mockRejectedValue|mockRejectedValueOnce)$/;
-const DOUBLE = "Fake the network with MSW handlers; use the real module otherwise.";
+const DOUBLE = "Fake HTTP with MSW handlers and other boundaries with a typed fake in *.fixture.ts.";
+const HTTP_FAKE = "Fake HTTP with MSW handlers instead of a fetch fake.";
 const RENDERS = new Set(["render", "renderRouter", "renderHook", "mount"]);
 const PRESENCE = new Set(["toBeInTheDocument", "toBeTruthy", "toBeDefined", "toBeVisible", "toBeOnTheScreen"]);
 const CALL_CHECK =
@@ -88,6 +89,7 @@ export default {
       };
     }
     if (!isTestSupport(name)) return {};
+    const fixture = /\.fixture\.[cm]?[jt]sx?$/.test(name);
     const report = (node, message) => context.report({ node, message });
     const bodies = new Map();
     const clocks = [];
@@ -115,8 +117,8 @@ export default {
         if (memberCall(node, MOCKERS, new Set(["useFakeTimers", "setSystemTime"]))) fake = true;
         if (memberCall(node, new Set(["Date", "performance"]), new Set(["now"]))) clocks.push(node);
         if (memberCall(node, MOCKERS, MOCKS)) report(node, DOUBLE);
-        if (memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
-        if (property && FAKES.test(property)) report(node, DOUBLE);
+        if (!fixture && memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
+        if (!fixture && property && FAKES.test(property)) report(node, DOUBLE);
         if (property === "defineProperty" && rootName(callee) === "Object") report(node, DOUBLE);
         if (property === "listen" && msw && !strictListen(node))
           report(node, 'Start the MSW server with listen({ onUnhandledRequest: "error" }).');
@@ -124,6 +126,9 @@ export default {
         if (!body) return;
         if (callee.type === "Identifier" && RENDERS.has(callee.name)) body.render = true;
         if (property?.startsWith("to") && rootName(callee) === "expect") body.matchers.push(property);
+      },
+      Property(node) {
+        if (fixture && (node.key?.name ?? node.key?.value) === "fetch") report(node, HTTP_FAKE);
       },
       ImportDeclaration(node) {
         if (/^msw(?:\/|$)/.test(node.source.value)) msw = true;

@@ -5,7 +5,7 @@ import { lint, only } from "./lint.mjs";
 
 const source = "export const add = (a: number, b: number) => a + b;\n";
 const vitest = 'import { expect, test, vi } from "vitest";\nimport { add } from "@/lib/add";\n';
-const double = "Fake the network with MSW handlers; use the real module otherwise";
+const double = "Fake HTTP with MSW handlers and other boundaries with a typed fake in *.fixture.ts";
 
 test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => {
   const result = lint(t, {
@@ -36,13 +36,24 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
       'import { render, screen } from "@testing-library/react";\nimport { expect, test } from "vitest";\nimport { View } from "@/view";\ntest("renders", () => { render(<View />); expect(screen.getByRole("main")).toBeInTheDocument(); });\n',
     "packages/i18n/src/mocked.ts": source,
     "packages/i18n/src/mocked.test.ts": `${vitest}vi.mock("ky");\nconst stub = vi.fn(() => 1);\nvi.stubGlobal("fetch", stub);\nvi.spyOn(Math, "random").mockReturnValue(0);\nDate.prototype.getDay = () => 1;\ntest("mocked", () => { expect(add(1, 2)).toBe(3); });\n`,
+    "packages/i18n/src/cdp.ts": source,
+    "packages/i18n/src/cdp.fixture.ts":
+      'import { vi } from "vitest";\nexport const cdp = { send: vi.fn(async () => ({ ok: true })), fetch: vi.fn() };\nexport const page = { title: vi.fn<() => string>().mockReturnValue("x") };\n',
+    "packages/i18n/src/stream.ts": "export async function* chunks() { yield await Promise.resolve(1); }\n",
+    "packages/i18n/src/stream.test.ts":
+      'import { expect, test } from "vitest";\nimport { chunks } from "@/stream";\ntest("streams", async () => { const seen: number[] = []; for await (const chunk of chunks()) seen.push(chunk); expect(seen).toStrictEqual([1]); });\n',
     "packages/i18n/vitest.config.ts": "export default { test: { coverage: { thresholds: { lines: 90 } } } };\n",
   });
   const found = only(result, "tests")
     .map((item) => `${item.file.split("/").at(-1)}: ${item.message.replace(/\.$/, "")}`)
     .sort();
+  deepEqual(
+    result.filter((item) => item.file.endsWith("stream.test.ts") && /loop|await|standard/.test(item.rule)),
+    [],
+  );
   deepEqual(found, [
     "calls.test.ts: Assert the outcome the user or caller sees, not only that a function was called",
+    "cdp.fixture.ts: Fake HTTP with MSW handlers instead of a fetch fake",
     "clock.test.ts: Call vi.useFakeTimers() and vi.setSystemTime() instead of reading the real clock",
     "loop.test.ts: Write one test.each with a table instead of a loop",
     'loose.test-utils.ts: Start the MSW server with listen({ onUnhandledRequest: "error" })',
