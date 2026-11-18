@@ -1,7 +1,7 @@
 import { deepEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { crashes, filesWith, lint } from "./lint.mjs";
+import { crashes, filesWith, lint, only } from "./lint.mjs";
 
 const imports =
   'import { cacheLife, cacheTag } from "next/cache";\nimport { taskTag } from "@/features/task/task-cache";\n';
@@ -30,7 +30,25 @@ test("next-data checks use cache, tags and server-only", (t) => {
 test("next-data and server-actions accept expression-bodied arrows", (t) => {
   const result = lint(t, {
     "apps/web/src/features/task/task-cleanup.ts": "export const cleanup = () => () => 1;\n",
-    "apps/web/src/features/task/task-actions.ts": '"use server";\nexport const saveAction = async () => ({ ok: true });\n',
+    "apps/web/src/features/task/task-actions.ts":
+      '"use server";\nexport const saveAction = async () => ({ ok: true });\n',
   });
   deepEqual(crashes(result), []);
+});
+
+test("next-data keeps *.server.ts out of client components", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-data.server.ts":
+      'import "server-only";\nexport const listTasks = async () => [];\n',
+    "apps/web/src/features/task/task-picker.tsx":
+      '"use client";\nimport { listTasks } from "@/features/task/task-data.server";\nexport const TaskPicker = () => listTasks;\n',
+    "apps/web/src/features/task/task-list.tsx":
+      'import { listTasks } from "@/features/task/task-data.server";\nexport const TaskList = () => listTasks;\n',
+  });
+  deepEqual(
+    only(result, "next-data").map((item) => `${item.file}: ${item.message}`),
+    [
+      "apps/web/src/features/task/task-picker.tsx: Load the data in a Server Component and pass it to this client component as props instead of importing *.server.ts.",
+    ],
+  );
 });
