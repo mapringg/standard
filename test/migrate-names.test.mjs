@@ -8,6 +8,7 @@ import { git, standard, tempRepo, write } from "./helpers.mjs";
 const WEB = "apps/web/src";
 const CONFIG = {
   pr: { "ticket-prefix": "ABC" },
+  banned: [{ global: "navigator", files: ["apps/web/src/**"], except: [`${WEB}/map/use-bind.browser.ts`], fix: "Use the map." }],
   "effect-wrappers": [
     { file: `${WEB}/hooks/use-window-event.ts`, reason: "Subscribes a listener to a window event while active." },
     { file: `${WEB}/app-shell/nav-sync.tsx`, reason: "Rolls the session after a navigation; Next exposes the pathname only through a hook." },
@@ -63,7 +64,7 @@ test("migrate names --write renames, rewrites imports and prunes the legacy list
   assert.ok(!existsSync(join(cwd, `${WEB}/map/use-bind.browser.ts`)));
   assert.equal(readFileSync(join(cwd, `${WEB}/app/layout.tsx`), "utf8"), 'import { NavSync } from "@/app-shell/nav-sync.data-unreachable.effect-route";\nimport { useBind } from \'@/map/use-bind.effect-sync.browser\';\nexport * from "../features/list.data-pages";\nexport const lazy = () => import("../home/panel");\nexport { NavSync, useBind };\n');
   assert.equal(readFileSync(join(cwd, `${WEB}/features/list.data-pages.tsx`), "utf8"), 'import { useWindowEvent } from "../hooks/use-window-event.effect-subscribe";\nexport { useWindowEvent };\n');
-  assert.deepEqual(JSON.parse(readFileSync(join(cwd, ".standard/config.json"), "utf8")), { pr: { "ticket-prefix": "ABC" }, "effect-wrappers": [CONFIG["effect-wrappers"][3]] });
+  assert.deepEqual(JSON.parse(readFileSync(join(cwd, ".standard/config.json"), "utf8")), { pr: { "ticket-prefix": "ABC" }, banned: [{ ...CONFIG.banned[0], except: [`${WEB}/map/use-bind.effect-sync.browser.ts`] }], "effect-wrappers": [CONFIG["effect-wrappers"][3]] });
   assert.deepEqual(JSON.parse(readFileSync(join(cwd, ".standard/baselines/client-data.json"), "utf8")), { findings: [`${WEB}/features/list.data-pages.tsx imports ../hooks/use-window-event.effect-subscribe`] });
   assert.match(git(cwd, "status", "--porcelain"), new RegExp(`R  ${WEB}/map/use-bind.browser.ts -> ${WEB}/map/use-bind.effect-sync.browser.ts`));
   const again = standard(cwd, ["migrate", "names", "--write"]);
