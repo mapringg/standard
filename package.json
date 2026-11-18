@@ -10,9 +10,10 @@
   },
   "exports": {
     "./package.json": "./package.json",
-    "./oxlint": "./config/oxlint.json",
+    "./oxlint": "./src/oxlint/index.mjs",
     "./oxfmt": "./config/oxfmt.json",
-    "./tsconfig": "./config/tsconfig.json"
+    "./tsconfig": "./config/tsconfig.json",
+    "./oxlint-config": "./config/oxlint.json"
   },
   "files": [
     "bin",
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "@types/mdast": "4.0.4",
+    "@types/node": "^26.6.6",
     "@types/react": "19.3.0",
     "jsdom": "31.0.1",
     "oxfmt": "0.78.0",
