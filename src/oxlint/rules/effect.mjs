@@ -1,7 +1,12 @@
 import { productPath } from "../fixed-path.mjs";
 import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
 import { EFFECT, rolesOf, withSegment } from "../roles.mjs";
-import { EFFECT_HOOKS as HOOKS, called, hookName, keyName as nameOf, reactNamespace } from "../hooks.mjs";
+import { EFFECT_HOOKS as HOOKS, called, hookName, inType, keyName as nameOf, reactNamespace, typeofOperand } from "../hooks.mjs";
+
+const INVOKE = new Set(["call", "apply", "bind"]);
+
+/** @param {any} node Whether the hook is only read for its type or a property, so it never runs through another name. */
+const inspected = (node) => inType(node) || typeofOperand(node) || node.parent?.type === "MemberExpression" && node.parent.object === node && !INVOKE.has(node.parent.computed && node.parent.property.type !== "Literal" ? "call" : nameOf(node.parent.property));
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
   meta: {
@@ -20,7 +25,7 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
     /** @param {any} node */
     const use = (node) => { if (!named) context.report({ node, messageId: "name", data }); };
     /** @param {any} node */
-    const pass = (node) => { if (!called(node) && hookName(context, node)) context.report({ node, messageId: "pass" }); };
+    const pass = (node) => { if (!called(node) && !inspected(node) && hookName(context, node)) context.report({ node, messageId: "pass" }); };
     return {
       ImportDeclaration(node) {
         if (node.source.value !== "react" || node.importKind === "type") return;

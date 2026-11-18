@@ -33,3 +33,13 @@ export function hookName(context, node, hooks = EFFECT_HOOKS) {
 
 /** @param {any} node Whether the node is the callee of a call. */
 export const called = (node) => node.parent?.type === "CallExpression" && node.parent.callee === node;
+
+/** @param {any} node Whether the node names a value inside a type, as in `type T = typeof a.b`. */
+export function inType(node) {
+  let current = node;
+  while (current.parent?.type === "TSQualifiedName") current = current.parent;
+  return current.parent?.type === "TSTypeQuery";
+}
+
+/** @param {any} node Whether the node is the operand of a typeof expression. */
+export const typeofOperand = (node) => node.parent?.type === "UnaryExpression" && node.parent.operator === "typeof";

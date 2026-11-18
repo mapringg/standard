@@ -4,7 +4,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { productPath } from "../fixed-path.mjs";
 import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
 import { shipsToBrowser, viteApp } from "../browser.mjs";
-import { keyName } from "../hooks.mjs";
+import { inType, keyName, typeofOperand } from "../hooks.mjs";
 import { DATA, rolesOf, withSegment } from "../roles.mjs";
 
 const HOOKS = new Set(["useSWR", "useSWRInfinite", "useSWRSubscription", "useServerData", "useServerSeeded"]);
@@ -68,11 +68,12 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
         if (node.callee.type === "Identifier" && node.callee.name === "require" && client(text(node.arguments[0]))) inBrowser(node);
       },
       Identifier(node) {
+        if (inType(node) || typeofOperand(node)) return;
         if (GLOBALS.has(node.name)) { if (global(node)) inBrowser(node); return; }
         if (!GLOBAL_OBJECTS.has(node.name) || !global(node)) return;
         const parent = /** @type {any} */ (node).parent;
-        if (parent.type === "UnaryExpression" && parent.operator === "typeof") return;
         const member = parent.type === "MemberExpression" && parent.object === node;
+        if (member && typeofOperand(parent)) return;
         const probe = parent.type === "BinaryExpression" && parent.operator === "in" && parent.right === node && parent.left.type === "Literal";
         const name = member && (!parent.computed || parent.property.type === "Literal") || probe ? keyName(member ? parent.property : parent.left) : undefined;
         if (name === undefined || GLOBALS.has(name)) inBrowser(member ? parent : node);
