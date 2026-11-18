@@ -52,3 +52,15 @@ test("next-data keeps *.server.ts out of client components", (t) => {
     ],
   );
 });
+
+test("next-data lets client components import types from *.server.ts", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-data.server.ts":
+      'import "server-only";\nexport type Task = { id: string };\nexport const listTasks = async () => [];\n',
+    "apps/web/src/features/task/task-row.tsx":
+      '"use client";\nimport type { Task } from "@/features/task/task-data.server";\nexport const TaskRow = (props: { task: Task }) => props.task.id;\n',
+    "apps/web/src/features/task/task-cell.tsx":
+      '"use client";\nimport { type Task } from "@/features/task/task-data.server";\nexport type { Task } from "@/features/task/task-data.server";\nexport const TaskCell = (props: { task: Task }) => props.task.id;\n',
+  });
+  deepEqual(filesWith(result, "next-data"), []);
+});

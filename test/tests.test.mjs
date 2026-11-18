@@ -76,3 +76,14 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
     "vitest.config.ts: Remove the coverage threshold; keep only tests that protect a contract",
   ]);
 });
+
+test("tests rule follows setup hooks in the order they run", (t) => {
+  const result = lint(t, {
+    "packages/i18n/src/add.ts": source,
+    "packages/i18n/src/order.test.ts": `import { beforeEach, expect, test, vi } from "vitest";\nimport { add } from "@/lib/add";\nbeforeEach(() => { vi.useFakeTimers(); });\nbeforeEach(() => { vi.useRealTimers(); });\ntest("real", () => { expect(Date.now()).toBeGreaterThan(add(0, 0)); });\n`,
+  });
+  deepEqual(
+    only(result, "tests").map((item) => item.file.split("/").at(-1)),
+    ["order.test.ts"],
+  );
+});

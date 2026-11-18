@@ -70,3 +70,11 @@ test("owners lets only owner files use what they own", (t) => {
     "apps/web/src/lib/task-link.ts",
   ]);
 });
+
+test("owners ignores a local binding that shadows a react namespace", (t) => {
+  const result = lint(t, {
+    "apps/web/src/features/task/task-shadow.tsx":
+      'import * as R from "react";\nexport const node = R.createElement("div");\nexport function read(R: { useEffect: () => number }) { return R.useEffect(); }\n',
+  });
+  deepEqual(filesWith(result, "owners"), []);
+});
