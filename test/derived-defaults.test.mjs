@@ -81,3 +81,19 @@ test("each src/components folder is its own module, ui stays open, and index.ser
   const keys = (await boundaries.run(repo, [])).map(({ key }) => key).sort();
   assert.deepEqual(keys, ["src/app/page.ts imports ../components/chart/line", "src/components/chart/line.ts imports ../table/cell"]);
 });
+
+test("a module finding lists only the entries that apply to its importer", async (t) => {
+  const repo = fixture(t, {
+    "src/components/table/cell.ts": "export const cell = 1;",
+    "src/features/report/view.ts": "export const view = 1;",
+    "src/app/page.ts": 'import { cell } from "../components/table/cell"; import { view } from "../features/report/view"; export const page = [cell, view];',
+    "src/app/chart.tsx": '"use client";\nimport { cell } from "../components/table/cell"; import { view } from "../features/report/view"; export const chart = [cell, view];',
+  });
+  const fixes = Object.fromEntries((await boundaries.run(repo, [])).map(({ key, fix }) => [key, fix.replace(/^.*Import it through /, "").replace(/, and export.*$/, "")]));
+  assert.deepEqual(fixes, {
+    "src/app/chart.tsx imports ../components/table/cell": "src/components/table/index",
+    "src/app/chart.tsx imports ../features/report/view": "src/features/report/index or src/features/report/routes",
+    "src/app/page.ts imports ../components/table/cell": "src/components/table/index or src/components/table/index.server",
+    "src/app/page.ts imports ../features/report/view": "src/features/report/index or src/features/report/index.server or src/features/report/routes",
+  });
+});
