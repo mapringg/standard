@@ -73,7 +73,8 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
         const parent = /** @type {any} */ (node).parent;
         if (parent.type === "UnaryExpression" && parent.operator === "typeof") return;
         const member = parent.type === "MemberExpression" && parent.object === node;
-        const name = member && (!parent.computed || parent.property.type === "Literal") ? keyName(parent.property) : undefined;
+        const probe = parent.type === "BinaryExpression" && parent.operator === "in" && parent.right === node && parent.left.type === "Literal";
+        const name = member && (!parent.computed || parent.property.type === "Literal") || probe ? keyName(member ? parent.property : parent.left) : undefined;
         if (name === undefined || GLOBALS.has(name)) inBrowser(member ? parent : node);
       },
     };
