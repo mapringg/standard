@@ -6,6 +6,23 @@ import { dirname, join } from "node:path";
 const PACKAGE = join(import.meta.dirname, "..");
 const OXLINT = join(PACKAGE, "node_modules/.bin/oxlint");
 
+const FRAMEWORK = { web: "next", liff: "vite", mobile: "expo", marketing: "astro" };
+
+function scaffold(files) {
+  const apps = new Set(
+    Object.keys(files)
+      .filter((path) => path.startsWith("apps/"))
+      .map((path) => path.split("/")[1]),
+  );
+  const extra = {};
+  for (const app of apps) {
+    if (FRAMEWORK[app])
+      extra[`apps/${app}/package.json`] = JSON.stringify({ dependencies: { [FRAMEWORK[app]]: "1.0.0" } });
+    if (app === "api") extra["apps/api/src/factory.ts"] = "export const factory = 1;\n";
+  }
+  return extra;
+}
+
 export function lint(t, files) {
   const root = mkdtempSync(join(tmpdir(), "standard-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -13,7 +30,7 @@ export function lint(t, files) {
   symlinkSync(join(PACKAGE, "node_modules"), join(root, "node_modules"));
   writeFileSync(join(root, ".gitignore"), "node_modules\n");
   writeFileSync(join(root, ".oxlintrc.json"), JSON.stringify({ extends: [join(PACKAGE, "oxlint.json")] }));
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Object.entries({ ...scaffold(files), ...files })) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), text);
   }

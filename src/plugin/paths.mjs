@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 
 const roots = new Map();
+const kinds = new Map();
 
 export function repoRoot(filename) {
   const start = dirname(filename);
@@ -24,19 +25,38 @@ export function locate(filename) {
   return describe(relative(root, filename).split(sep).join("/"), root);
 }
 
+export function appKind(root, base) {
+  const key = `${root}\0${base}`;
+  if (kinds.has(key)) return kinds.get(key);
+  const dir = join(root ?? "", base);
+  let kind = null;
+  if (existsSync(join(dir, "src/factory.ts"))) kind = "api";
+  else {
+    const path = join(dir, "package.json");
+    const manifest = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+    const deps = { ...manifest.dependencies, ...manifest.devDependencies };
+    if (deps.next) kind = "web";
+    else if (deps.astro) kind = "marketing";
+    else if (deps.expo) kind = "mobile";
+    else if (deps.vite) kind = "liff";
+  }
+  kinds.set(key, kind);
+  return kind;
+}
+
 export function describe(rel, root = null) {
   const parts = rel.split("/");
-  const inside = parts[0] === "apps" || parts[0] === "packages";
-  const kind = inside && parts.length > 2 ? parts[1] : null;
-  const base = kind ? `${parts[0]}/${kind}` : null;
-  const local = kind ? parts.slice(2).join("/") : rel;
-  const name = parts.at(-1);
+  const grouped = (parts[0] === "apps" || parts[0] === "packages") && parts.length > 2;
+  const base = grouped ? `${parts[0]}/${parts[1]}` : null;
+  const local = grouped ? parts.slice(2).join("/") : rel;
+  const app = parts[0] === "apps" && grouped ? parts[1] : null;
   return {
     root,
     rel,
-    name,
-    kind: parts[0] === "apps" ? kind : null,
-    pkg: parts[0] === "packages" ? kind : null,
+    name: parts.at(-1),
+    app,
+    kind: app ? appKind(root, base) : null,
+    pkg: parts[0] === "packages" && grouped ? parts[1] : null,
     base,
     local,
     feature: /^src\/features\/([^/]+)\//.exec(local)?.[1] ?? null,
@@ -54,7 +74,11 @@ export function inside(local, prefix) {
 }
 
 export function isTest(name) {
-  return /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(name);
+  return /\.test\.[cm]?[jt]sx?$/.test(name);
+}
+
+export function isTestSupport(name) {
+  return isTest(name) || /\.(?:fixture|test-utils)\.[cm]?[jt]sx?$/.test(name);
 }
 
 export function isGenerated(name) {
