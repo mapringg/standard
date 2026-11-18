@@ -62,6 +62,47 @@ function importEdits(root, files, renames) {
 }
 
 /**
+ * Removes the entries of top-level lists that keep rejects, and a list it empties, and leaves every other byte of the JSON text as written.
+ * @param {string} text @param {Record<string, (entry: any) => boolean>} keeps
+ */
+function dropEntries(text, keeps) {
+  const { program } = parseSync("config.ts", `(${text})`);
+  /** @type {any} */
+  let root = /** @type {any} */ (program.body[0]).expression;
+  while (root.type === "ParenthesizedExpression") root = root.expression;
+  const props = root.properties;
+  /** @type {{ start: number, end: number, text: string }[]} */
+  const edits = [];
+  /** @type {Set<number>} */
+  const removed = new Set();
+  props.forEach((/** @type {any} */ prop, /** @type {number} */ index) => {
+    const keep = keeps[prop.key.value];
+    if (!keep || prop.value.type !== "ArrayExpression") return;
+    const items = prop.value.elements;
+    const kept = items.filter((/** @type {any} */ item) => keep(JSON.parse(text.slice(item.start - 1, item.end - 1))));
+    if (kept.length === items.length) return;
+    if (kept.length === 0) { removed.add(index); return; }
+    const separator = items.length > 1 ? text.slice(items[0].end - 1, items[1].start - 1) : ", ";
+    edits.push({ start: items[0].start - 1, end: items.at(-1).end - 1, text: kept.map((/** @type {any} */ item) => text.slice(item.start - 1, item.end - 1)).join(separator) });
+  });
+  const stay = props.flatMap((/** @type {any} */ prop, /** @type {number} */ index) => removed.has(index) ? [] : [prop]);
+  /** @type {[number, number][]} */
+  const cuts = [...removed].map((index) => {
+    const prop = props[index];
+    const next = stay.find((/** @type {any} */ item) => item.start > prop.start);
+    const previous = stay.findLast((/** @type {any} */ item) => item.end < prop.start);
+    return next ? [prop.start, next.start] : previous ? [previous.end, prop.end] : [prop.start, prop.end];
+  });
+  for (const [start, end] of cuts.toSorted((a, b) => a[0] - b[0]).reduce((/** @type {[number, number][]} */ merged, cut) => {
+    const last = merged.at(-1);
+    if (last && cut[0] <= last[1]) last[1] = Math.max(last[1], cut[1]);
+    else merged.push([...cut]);
+    return merged;
+  }, [])) edits.push({ start: start - 1, end: end - 1, text: "" });
+  return edits.toSorted((a, b) => b.start - a.start).reduce((current, { start, end, text: replacement }) => current.slice(0, start) + replacement + current.slice(end), text);
+}
+
+/**
  * Moves each file the legacy `effect-wrappers` and `client-data` lists name into a name that carries its role, and rewrites the imports
  * that reach it. Without write it only prints the plan.
  * @param {string} root @param {{ write: boolean, picks: ReadonlyMap<string, string> }} options @returns {string[]}
@@ -116,9 +157,12 @@ export function migrateNames(root, { write, picks }) {
     after = movePaths(after);
     if (after !== before) writeFileSync(join(root, baseline), after);
   }
-  const keep = (/** @type {string} */ file) => pending.has(file) || !segments.has(file);
-  const nextConfig = { ...JSON.parse(movePaths(JSON.stringify(config))), "effect-wrappers": wrappers.filter(({ file }) => keep(file)).map((entry) => ({ ...entry, file: renames.get(entry.file) ?? entry.file })), "client-data": data.filter((entry) => entry.app) };
-  for (const key of ["effect-wrappers", "client-data"]) if (nextConfig[key].length === 0) delete nextConfig[key];
-  if (JSON.stringify(nextConfig) !== JSON.stringify(config)) writeFileSync(path, `${JSON.stringify(nextConfig, null, 2)}\n`);
+  const original = new Map([...renames].map(([from, to]) => [to, from]));
+  const keep = (/** @type {string} */ moved) => { const file = original.get(moved) ?? moved; return pending.has(file) || !segments.has(file); };
+  if (existsSync(path)) {
+    const before = readFileSync(path, "utf8");
+    const after = dropEntries(movePaths(before), { "effect-wrappers": (/** @type {{ file: string }} */ entry) => keep(entry.file), "client-data": (/** @type {{ app?: string }} */ entry) => Boolean(entry.app) });
+    if (after !== before) writeFileSync(path, after);
+  }
   return [...lines.filter((line) => line.startsWith("pick ")), `Renamed ${renames.size} files and rewrote ${count} imports in ${edits.size} files. ${pending.size} effect wrapper${pending.size === 1 ? " needs" : "s need"} a reason.`];
 }
