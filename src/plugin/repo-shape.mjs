@@ -102,7 +102,9 @@ function codeProblems(where) {
     found.push(
       parts[0] === routesDir(kind)
         ? "Move the test to the feature code it covers; route files never have tests."
-        : "Move the test next to the code it tests in features/, lib/ or components/.",
+        : kind === "api"
+          ? "Move the test next to the code it tests in features/, lib/, middleware/, infra/, upstreams/ or beside app.ts, factory.ts, env.ts, server.ts or client.ts."
+          : "Move the test next to the code it tests in features/, lib/ or components/.",
     );
   }
   if (parts[0] === "features") {
@@ -179,6 +181,7 @@ function fileProblems(rel, root, localized) {
     kind &&
     UI_APPS.has(kind) &&
     /(?:^|\/)(?:i18n|messages)\//.test(local) &&
+    !local.startsWith(`src/${routesDir(kind)}/`) &&
     !/^src\/lib\/i18n\/messages\/[a-z0-9-]+\.ts$/.test(local)
   ) {
     found.push("Move the dictionary to src/lib/i18n/messages/<feature>.ts.");

@@ -36,3 +36,16 @@ test("punctuation is plain JSX text and words still need a message", (t) => {
     ],
   );
 });
+
+test("a decorative image takes an empty alt and a real alt still needs a message", (t) => {
+  const result = lint(t, {
+    "apps/web/src/components/ui/divider.tsx":
+      'export function Divider() {\n  return <img src="/line.svg" alt="" />;\n}\n',
+    "apps/web/src/components/ui/logo.tsx":
+      'export function Logo() {\n  return <img src="/logo.svg" alt="Logo" />;\n}\n',
+  });
+  deepEqual(
+    result.filter((item) => item.rule === "react(jsx-no-literals)").map((item) => item.file),
+    ["apps/web/src/components/ui/logo.tsx"],
+  );
+});
