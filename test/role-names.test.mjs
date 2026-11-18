@@ -25,3 +25,18 @@ test("the legacy lists print their own deprecation notice", (t) => {
   const run = standard(cwd, ["check", "banned"]);
   assert.ok(run.listsNotice, run.stderr);
 });
+
+test("the CLI treats a Vite app as unreachable only with index.html or a vite config", (t) => {
+  const cwd = tempRepo(t, {});
+  const app = (name, extra) => ({
+    [`apps/${name}/package.json`]: { dependencies: { react: "19.0.0", vite: "8.0.0" } },
+    [`apps/${name}/src/lib/swr.ts`]: 'import useSWRBase from "swr";\nexport function useSWR() {\n  return useSWRBase();\n}\n',
+    [`apps/${name}/src/feature.tsx`]: 'import { useSWR } from "./lib/swr";\nexport function useFeature() {\n  return useSWR();\n}\n',
+    ...extra,
+  });
+  write(cwd, { ...app("liff", { "apps/liff/index.html": "<div></div>\n" }), ...app("kit", {}) });
+  git(cwd, "add", "-A");
+  const run = standard(cwd, ["check", "client-data"]);
+  assert.match(run.stdout, /apps\/kit\/src\/feature\.tsx useSWR/);
+  assert.doesNotMatch(run.stdout, /apps\/liff/);
+});

@@ -39,7 +39,11 @@ test("an effect-subscribe effect returns its cleanup on every path", (t) => {
   const body = (effect) => `import { useEffect, useLayoutEffect as useBefore } from "react"; export function useThing(target) { ${effect} }`;
   const diagnostics = lint(t, "effect-cleanup", {
     "src/arrow.effect-subscribe.ts": body("useEffect(() => { target.addEventListener('x', f); return () => target.removeEventListener('x', f); }, []);"),
-    "src/named.effect-subscribe.ts": body("useBefore(() => { const stop = target.subscribe(f); return stop; }, []);"),
+    "src/named.effect-subscribe.ts": body("useBefore(() => { const stop = target.subscribe(f); return () => stop(); }, []);"),
+    "src/bound.effect-subscribe.ts": body("useEffect(() => { target.addEventListener('x', f); const cleanup = () => target.removeEventListener('x', f); return cleanup; }, []);"),
+    "src/undefined.effect-subscribe.ts": body("useEffect(() => { if (!target) return undefined; return () => {}; }, []);"),
+    "src/maybe.effect-subscribe.ts": body("useEffect(() => { let stop; if (target) stop = target.subscribe(f); return stop; }, []);"),
+    "src/result.effect-subscribe.ts": body("useEffect(() => { const stop = target.subscribe(f); return stop; }, []);"),
     "src/missing.effect-subscribe.ts": body("useEffect(() => { target.addEventListener('x', f); }, []);"),
     "src/early.effect-subscribe.ts": body("useEffect(() => { if (!target) return; return () => {}; }, []);"),
     "src/expression.effect-subscribe.ts": body("useEffect(() => target.subscribe(f), []);"),
@@ -47,6 +51,20 @@ test("an effect-subscribe effect returns its cleanup on every path", (t) => {
     "src/passed.effect-subscribe.ts": body("useEffect(subscribe, []);"),
     "src/sync.effect-sync.ts": body("useEffect(() => { target.addEventListener('x', f); }, []);"),
   });
-  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/call.effect-subscribe.ts", "src/early.effect-subscribe.ts", "src/expression.effect-subscribe.ts", "src/missing.effect-subscribe.ts", "src/passed.effect-subscribe.ts"]);
-  assert.equal(diagnostics[0].message, "Write the subscription inline and return its cleanup on every path, as a function or the name of one: return () => target.removeEventListener(...) or return unsubscribe.");
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/call.effect-subscribe.ts", "src/early.effect-subscribe.ts", "src/expression.effect-subscribe.ts", "src/maybe.effect-subscribe.ts", "src/missing.effect-subscribe.ts", "src/passed.effect-subscribe.ts", "src/result.effect-subscribe.ts", "src/undefined.effect-subscribe.ts"]);
+  assert.equal(diagnostics[0].message, "Write the subscription inline and end every path with return () => unsubscribe(), or return a const that holds such a function.");
+});
+
+test("effect follows useInsertionEffect, re-exports and destructured namespaces", (t) => {
+  const diagnostics = lint(t, "effect", {
+    "src/insertion.ts": 'import { useInsertionEffect } from "react"; useInsertionEffect(() => {});',
+    "src/reexport.effect-sync.ts": 'export { useEffect as useMounted } from "react";',
+    "src/star.effect-sync.ts": 'export * from "react";',
+    "src/local.effect-sync.ts": 'import { useEffect } from "react"; export { useEffect };',
+    "src/destructure.ts": 'import * as React from "react"; const { useEffect: run } = React; run(() => {});',
+    "src/default.ts": 'import React from "react"; const { useLayoutEffect } = React;',
+    "src/state.ts": 'import * as React from "react"; const { useState } = React; useState(1);',
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["src/default.ts", "src/destructure.ts", "src/insertion.ts", "src/local.effect-sync.ts", "src/reexport.effect-sync.ts", "src/star.effect-sync.ts"]);
+  assert.equal(diagnostics.find(({ filename }) => filename === "src/reexport.effect-sync.ts").message, "Export the hook that calls the effect, never the effect hook itself, so every file that runs an effect carries an effect name.");
 });

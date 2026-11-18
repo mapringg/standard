@@ -38,11 +38,34 @@ test("client data loads only in .data-<reason> files", (t) => {
 });
 
 test("a Vite React app is unreachable as a whole", (t) => {
-  const diagnostics = lint(t, { "apps/liff/package.json": { dependencies: { react: "19", vite: "8" } }, "apps/liff/src/feature.tsx": SWR, "apps/web/package.json": NEXT, "apps/web/src/feature.tsx": SWR });
+  const diagnostics = lint(t, { "apps/liff/package.json": { dependencies: { react: "19", vite: "8" } }, "apps/liff/vite.config.ts": "export default {};", "apps/liff/src/feature.tsx": SWR, "apps/web/package.json": NEXT, "apps/web/src/feature.tsx": SWR });
   assert.deepEqual(diagnostics.map(({ filename }) => filename), ["apps/web/src/feature.tsx"]);
 });
 
 test("client-data reads the legacy client-data list during adoption", (t) => {
   const diagnostics = lint(t, { "apps/web/package.json": NEXT, "apps/web/src/listed.tsx": SWR, "apps/web/src/other.tsx": SWR }, { config: { "client-data": [{ file: "apps/web/src/listed.tsx", reason: "pages" }] } });
   assert.deepEqual(diagnostics.map(({ filename }) => filename), ["apps/web/src/other.tsx"]);
+});
+
+test("client-data reports global members and streaming transports in browser code", (t) => {
+  const diagnostics = lint(t, {
+    "apps/web/package.json": NEXT,
+    "apps/web/src/window.tsx": '"use client"; export const load = () => window.fetch("/x");',
+    "apps/web/src/global.tsx": '"use client"; export const load = () => globalThis.fetch("/x");',
+    "apps/web/src/self.tsx": '"use client"; export const load = () => self.fetch("/x");',
+    "apps/web/src/events.tsx": '"use client"; export const open = () => new EventSource("/x");',
+    "apps/web/src/socket.tsx": '"use client"; export const open = () => new WebSocket("/x");',
+    "apps/web/src/server.ts": "export const load = () => globalThis.fetch(\"/x\");",
+  });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["apps/web/src/events.tsx", "apps/web/src/global.tsx", "apps/web/src/self.tsx", "apps/web/src/socket.tsx", "apps/web/src/window.tsx"]);
+});
+
+test("a Vite app needs index.html or a vite config beside its manifest", (t) => {
+  const diagnostics = lint(t, { "apps/liff/package.json": { dependencies: { react: "19", vite: "8" } }, "apps/liff/index.html": "<div></div>", "apps/liff/src/feature.tsx": SWR, "apps/kit/package.json": { dependencies: { react: "19", vite: "8" } }, "apps/kit/src/feature.tsx": SWR });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["apps/kit/src/feature.tsx"]);
+});
+
+test("the plugin ignores legacy lists in a config the CLI rejects", (t) => {
+  const diagnostics = lint(t, { "apps/web/package.json": NEXT, "apps/web/src/listed.tsx": SWR }, { config: { $schema: "x", "client-data": [{ file: "apps/web/src/listed.tsx", reason: "pages" }] } });
+  assert.deepEqual(diagnostics.map(({ filename }) => filename), ["apps/web/src/listed.tsx"]);
 });
