@@ -14,6 +14,10 @@ const CALL_CHECK =
   /^(?:toHaveBeenCalled|toBeCalled|toHaveBeenLastCalledWith|toHaveBeenNthCalledWith|lastCalledWith|nthCalledWith)/;
 const LOOPS = new Set(["ForStatement", "ForInStatement", "ForOfStatement", "WhileStatement", "DoWhileStatement"]);
 const FUNCTION = new Set(["FunctionExpression", "ArrowFunctionExpression"]);
+const BEFORE_HOOKS = new Set(["beforeEach", "beforeAll"]);
+const AFTER_HOOKS = new Set(["afterEach", "afterAll"]);
+const FAKE_TIMERS = new Set(["useFakeTimers", "setSystemTime"]);
+const TIMER_CALLS = new Set([...FAKE_TIMERS, "useRealTimers"]);
 const CONFIG = /^(?:vitest|vite|jest)\.config\.[cm]?[jt]s$/;
 
 function rootName(node) {
@@ -50,6 +54,28 @@ function inLoop(node) {
       return true;
   }
   return false;
+}
+
+function calledName(call) {
+  return call.callee.type === "Identifier" ? call.callee.name : null;
+}
+
+function timerScope(node) {
+  for (let current = node.parent; current; current = current.parent) {
+    const call = current.parent;
+    if (!FUNCTION.has(current.type) || call?.type !== "CallExpression" || !call.arguments.includes(current)) continue;
+    if (AFTER_HOOKS.has(calledName(call))) return null;
+    if (BEFORE_HOOKS.has(calledName(call))) {
+      const scope = timerScope(call);
+      return scope && { container: scope.container, start: scope.container?.range[0] ?? 0 };
+    }
+    if (isBlock(call, BLOCKS)) return { container: current, start: node.range[0] };
+  }
+  return { container: null, start: node.range[0] };
+}
+
+function contains(outer, inner) {
+  return !outer || (outer.range[0] <= inner.range[0] && inner.range[1] <= outer.range[1]);
 }
 
 function strictListen(node) {
@@ -93,7 +119,11 @@ export default {
     const report = (node, message) => context.report({ node, message });
     const bodies = new Map();
     const clocks = [];
-    let fake = false;
+    const toggles = [];
+    const faked = (node) => {
+      const before = toggles.filter((item) => item.start < node.range[0] && contains(item.container, node));
+      return before.length > 0 && before.reduce((last, item) => (item.start > last.start ? item : last)).fake;
+    };
     let msw = false;
     const bodyOf = (node) => {
       for (let current = node.parent; current; current = current.parent)
@@ -114,7 +144,10 @@ export default {
             if (body) bodies.set(body, { node, render: false, matchers: [] });
           }
         }
-        if (memberCall(node, MOCKERS, new Set(["useFakeTimers", "setSystemTime"]))) fake = true;
+        if (memberCall(node, MOCKERS, TIMER_CALLS)) {
+          const scope = timerScope(node);
+          if (scope) toggles.push({ ...scope, fake: FAKE_TIMERS.has(property) });
+        }
         if (memberCall(node, new Set(["Date", "performance"]), new Set(["now"]))) clocks.push(node);
         if (memberCall(node, MOCKERS, MOCKS)) report(node, DOUBLE);
         if (!fixture && memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
@@ -150,8 +183,8 @@ export default {
         report(node, "Await the real event instead of looping.");
       },
       "Program:exit"() {
-        if (!fake)
-          for (const node of clocks)
+        for (const node of clocks)
+          if (!faked(node))
             report(node, "Call vi.useFakeTimers() and vi.setSystemTime() instead of reading the real clock.");
         for (const { node, render, matchers } of bodies.values()) {
           if (render && matchers.every((matcher) => PRESENCE.has(matcher)))
