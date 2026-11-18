@@ -564,7 +564,9 @@ Oxlint 1.93.0 loads `@mapringg/standard/oxlint` through `jsPlugins`. The JSON co
     "standard/env": "error", "standard/json": "error",
     "standard/log": "error", "standard/format": "error",
     "standard/effect": "error", "standard/effect-cleanup": "error",
-    "standard/client-data": "error", "standard/names": "error"
+    "standard/client-data": "error", "standard/names": "error",
+    "standard/action-schema": "error", "standard/cache-tag": "error",
+    "standard/ai-render": "error"
   }
 }
 ```
@@ -585,6 +587,14 @@ A file that many files share a role with names it as `<name>.<role>-<reason>.<ex
 `<name>.cache.ts` names a module whose functions return a cached promise that `use` may read. The CLI `banned` and `client-data` checks accept the same names. During adoption the plugin and the CLI still read the legacy `effect-wrappers` and `client-data` lists, with a deprecation notice, but only from a legacy config the CLI accepts; they are not in the new schema. `standard migrate names --write` renames the files they list.
 
 `standard migrate names` prints the plan and changes nothing. With `--write` it renames each listed file with `git mv`, adding `data-<reason>` from its `client-data` reason and `effect-<reason>` from words in its `effect-wrappers` reason. Colocated tests, `<name>.*.test.*` and the like, are renamed with their file. It rewrites every relative and tsconfig `paths` specifier that resolves to a renamed file, in imports, `export from`, `import()`, `require()` and the `vi.mock` family, in tracked and untracked sources. It updates the renamed paths in tracked Markdown, including a shorter tail such as a bare file name when it names only that file, `.standard/baselines/` and the rest of `.standard/config.json`, and drops the migrated entries from the lists. Before it changes anything it refuses the whole run, and exits 1, when a source is untracked, a destination exists, or a specifier reaches a renamed file but cannot follow it, such as an exact tsconfig alias or a computed `import()`. An index file keeps its name, and an effect reason that names no role or more than one is printed for a person to pick; pass the pick as `--effect <file>=<sync|route|subscribe>`, or rewrite the effect. A second run changes nothing.
+
+### Server-first rules
+
+| Rule | What it requires |
+| --- | --- |
+| `standard/action-schema` | Every Server Action, an export of a `"use server"` file or a function with its own `"use server"`, takes plain parameters and parses each one before any other statement, with the validator the file imports: `schema.parse(raw)` and its `safeParse` and async forms for zod and zod/mini, or `parse(schema, raw)` for zod/mini and valibot. A file that imports no validator fails each action that takes an argument. |
+| `standard/cache-tag` | Every `use cache` scope, a function with the directive or each export of a file with it, calls `cacheTag` from `next/cache` as a statement at its top level. |
+| `standard/ai-render` | A Server Component, a `.tsx` or `.jsx` file in a Next app without `"use client"` or `"use server"`, and a file with a `use cache` scope import no value from `src/lib/ai.ts`, its `.server` and `.browser` variants, or a module that re-exports one of them. Generate in a Server Action or route handler and store the result. |
 
 ### Configuration in 0.16.0
 
