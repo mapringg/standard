@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { lint, only } from "./lint.mjs";
 
 const code = "export const a = 1;\n";
+const astro = '---\nconst { title } = Astro.props;\n---\n<section><h1>{title}</h1><script>const a = 1;</script></section>\n';
 const base = {
   "apps/web/src/app/(app)/page.tsx": code,
   "apps/web/src/app/(app)/error.tsx": code,
@@ -45,7 +46,11 @@ test("repo-shape accepts the standard layout", (t) => {
       "apps/web/src/features/notes/notes-list.tsx": code,
       "apps/web/e2e/notes.test.ts": code,
       "apps/web/src/lib/i18n/messages/task.ts": code,
-      "apps/marketing/src/pages/index.astro": "x",
+      "apps/marketing/src/pages/index.astro": astro,
+      "apps/marketing/src/components/hero/hero.astro": astro,
+      "infra/k8s/web.yaml": "x",
+      "scripts/deploy.ts": code,
+      "apps/api/migrations/0001-init.ts": code,
       "apps/marketing/src/lib/log.ts": code,
       "apps/web/.gitignore": "/generated\n*.local.ts\n",
       "apps/web/generated/schema.ts": code,
@@ -84,7 +89,10 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
       "apps/web/src/features/task/messages/task.ts": code,
       "apps/marketing/src/pages/about.astro": "x",
       "apps/marketing/src/lib/log.ts": code,
-      "apps/marketing/src/pages/[locale]/index.astro": "x",
+      "apps/marketing/src/pages/[locale]/index.astro": astro,
+      "apps/marketing/src/lib/seo.astro": astro,
+      "apps/web/src/components/ui/card.astro": astro,
+      "scripts/check-links.ts": code,
       "apps/web/src/features/task/task-helpers.ts": code,
       "apps/web/src/lib/mocks.ts": code,
       "apps/web/e2e/deep/flow.test.ts": code,
@@ -118,6 +126,10 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
       "apps/web/src/lib/log.spec.ts | Rename the test to *.test.ts or *.test.tsx.",
       "apps/web/src/lib/mocks.ts | Rename the file to <name>.fixture.ts or <name>.test-utils.ts.",
       "apps/web/src/lib/orphan.test.ts | Name the test after the source file next to it; orphan.ts does not exist.",
+      "apps/marketing/src/lib/log.ts | apps/marketing/src/lib/seo.astro: Write this component as .tsx; .astro files live only in the marketing app's routes and components.",
+      "apps/marketing/src/lib/log.ts | apps/marketing/src/pages/about.astro: Move the text into a content collection entry or pass it as a prop.",
+      "apps/web/src/app/(admin)/page.tsx | apps/web/src/components/ui/card.astro: Write this component as .tsx; .astro files live only in the marketing app's routes and components.",
+      "scripts/check-links.ts | Delete the check script and add the check to the standard; scripts/ holds operational tools.",
     ].sort(),
   );
 });

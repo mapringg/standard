@@ -4,7 +4,8 @@ import { join, matchesGlob } from "node:path";
 import { UI_APPS, describe, isGenerated, isTest, isTestSupport, locate, stem } from "./paths.mjs";
 
 const PACKAGES = new Set(["tokens", "i18n"]);
-const TOP_DIRS = new Set(["apps", "packages", ".github", ".githooks", ".claude", ".vscode"]);
+const TOP_DIRS = new Set(["apps", "packages", "infra", "scripts", ".github", ".githooks", ".claude", ".vscode"]);
+const CHECK_SCRIPT = /(?:^|[-.])(?:check|lint|verify|validate|audit|enforce)(?:[-.]|$)/;
 const DOCS = new Set(["README.md", "AGENTS.md"]);
 const CODE = /\.[cm]?[jt]sx?$/;
 const DIRECTIVE = /(?:\/\/|\/\*)\s*(?:eslint|oxlint)-(?:disable|enable)/;
@@ -61,6 +62,18 @@ function webRoute(rest, name) {
   return found;
 }
 
+function astroText(text) {
+  let rest = text
+    .replace(/^---[\s\S]*?---/, "")
+    .replace(/<(script|style)\b[\s\S]*?<\/\1>/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+  for (let previous = ""; previous !== rest; ) {
+    previous = rest;
+    rest = rest.replace(/\{[^{}]*\}/g, "");
+  }
+  return /\p{L}/u.test(rest.replace(/<[^>]*>/g, ""));
+}
+
 function codeProblems(where) {
   const { kind, pkg, local, name, feature } = where;
   if (isGenerated(name)) return [];
@@ -69,6 +82,7 @@ function codeProblems(where) {
       ? []
       : ["Move the journey to apps/<app>/e2e/<journey>.test.ts."];
   }
+  if (kind === "api" && local.startsWith("migrations/")) return [];
   if (!local.includes("/"))
     return /\.config\./.test(name)
       ? []
@@ -138,12 +152,14 @@ function fileProblems(rel, root, localized) {
     found.push("Replace the preprocessor file with Tailwind classes and the one global CSS file.");
   if (name.endsWith(".module.css")) found.push("Replace the CSS module with Tailwind classes.");
   if (name.endsWith(".css") && !base) found.push("Move the CSS into the app's one global CSS file.");
-  if (
-    name.endsWith(".astro") &&
-    !(kind === "marketing" && (local.startsWith("src/pages/") || local.startsWith("src/components/layout/")))
-  ) {
-    found.push("Write this component as .tsx; .astro files live only in src/pages/ and src/components/layout/.");
+  if (name.endsWith(".astro")) {
+    if (kind !== "marketing" || !local.startsWith("src/") || local.startsWith("src/lib/"))
+      found.push("Write this component as .tsx; .astro files live only in the marketing app's routes and components.");
+    else if (astroText(readFileSync(join(root, rel), "utf8")))
+      found.push("Move the text into a content collection entry or pass it as a prop.");
   }
+  if (parts[0] === "scripts" && CHECK_SCRIPT.test(name))
+    found.push("Delete the check script and add the check to the standard; scripts/ holds operational tools.");
   if (/\.spec\.[cm]?[jt]sx?$/.test(name)) found.push("Rename the test to *.test.ts or *.test.tsx.");
   if (
     CODE.test(name) &&
