@@ -1,3 +1,5 @@
+import plugin from "./oxlint/rules.mjs";
+
 /**
  * @typedef {import("./registry.mjs").Check} Check
  * @typedef {{ name: string, enforces: string, fix: string, config: readonly string[], since: string, baselineFree: boolean }} Row
@@ -25,10 +27,23 @@ export function explainAll(checks) {
   return rows.map((each) => `${each.name.padEnd(width)}  ${each.since.padEnd(6)}  ${each.baselineFree ? "baseline-free" : "baseline    "}  config: ${keys(each.config)}  ${each.enforces} Fix: ${each.fix}`);
 }
 
+/** @type {() => { name: string, description: string, fix: string }[]} Each plugin rule as `standard/<id>`, the id allow takes. */
+const pluginRules = () => Object.entries(plugin.rules).map(([id, rule]) => {
+  const docs = /** @type {{ docs?: { description?: string, fix?: string } }} */ (rule.meta ?? {}).docs;
+  return { name: `standard/${id}`, description: docs?.description ?? "", fix: docs?.fix ?? "" };
+});
+
+/** @type {() => string[]} One line per plugin rule. */
+export function explainPlugin() {
+  return pluginRules().map(({ name, description, fix }) => `${name} ${description} Fix: ${fix}`);
+}
+
 /** @type {(checks: readonly Check[], name: string) => string[]} */
 export function explainOne(checks, name) {
+  const rule = pluginRules().find((each) => each.name === name);
+  if (rule) return [rule.name, `  Enforces: ${rule.description}`, `  Fix: ${rule.fix}`, "  Runs in: oxlint, through @mapringg/standard/oxlint", "  Baseline: none; allow takes its id"];
   const check = checks.find((each) => each.name === name);
-  if (!check) throw new Error(`explain names "${name}", which is not a check in this version. Checks: ${checks.map((each) => each.name).join(", ")}.`);
+  if (!check) throw new Error(`explain names "${name}", which is not a check or plugin rule in this version. Checks: ${[...checks.map((each) => each.name), ...pluginRules().map((each) => each.name)].join(", ")}.`);
   const each = row(check);
   return [
     each.name,

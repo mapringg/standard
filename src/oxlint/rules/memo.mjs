@@ -2,7 +2,7 @@ import { productPath } from "../fixed-path.mjs";
 import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
-  meta: { type: "problem", schema: [], messages: { compiler: "Let React Compiler memoize this code." } },
+  meta: { type: "problem", docs: { description: "No useMemo, useCallback or memo, which React Compiler does for you.", fix: "Delete the manual memo." }, schema: [], messages: { compiler: "Let React Compiler memoize this code." } },
   create(context) {
     if (NOT_PRODUCT.test(productPath(context))) return {};
     return {

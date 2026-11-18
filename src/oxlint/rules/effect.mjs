@@ -5,7 +5,7 @@ import { EFFECT_HOOKS as HOOKS, called, hookName, keyName as nameOf, reactNamesp
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
   meta: {
-    type: "problem",
+    type: "problem", docs: { description: "useEffect, useLayoutEffect and useInsertionEffect run only in .effect-sync, .effect-route and .effect-subscribe files, and no file re-exports one.", fix: "Replace the effect, or name the file with its effect role." },
     schema: [],
     messages: {
       name: "Replace the effect with what it does, or name the file {{name}} when it keeps an outside system in step, reacts to the route or subscribes.",

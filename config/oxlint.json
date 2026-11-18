@@ -20,6 +20,9 @@
     "standard/effect-cleanup": "error",
     "standard/client-data": "error",
     "standard/names": "error",
+    "standard/action-schema": "error",
+    "standard/cache-tag": "error",
+    "standard/ai-render": "error",
 
     "import/no-cycle": ["error", { "maxDepth": 3 }],
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],

@@ -10,6 +10,19 @@ export function viteApp(folder, manifest) {
   return Boolean(deps.react && deps.vite && !deps.next) && (existsSync(join(folder, "index.html")) || readdirSync(folder).some((/** @type {string} */ name) => /^vite\.config\.[cm]?[jt]s$/.test(name)));
 }
 
+/** @type {ResolverFactory | undefined} */
+let shared;
+
+/** @param {string} from @param {string} specifier @returns {string | undefined} The project file a specifier resolves to from a file, through relative paths, tsconfig paths and package.json imports, or undefined for a package or an unresolved specifier. */
+export function projectFile(from, specifier) {
+  shared ??= new ResolverFactory({ tsconfig: "auto", conditionNames: ["browser", "import", "default"], mainFields: ["browser", "module", "main"], extensions: [".ts", ".tsx", ".mts", ".js", ".jsx", ".mjs"], extensionAlias: { ".js": [".ts", ".tsx", ".js"], ".mjs": [".mts", ".mjs"] } });
+  const path = shared.resolveFileSync(from, specifier).path;
+  return path && !path.split(/[\\/]/).includes("node_modules") ? path : undefined;
+}
+
+/** @param {any} node @returns {string | undefined} The text of a string literal or a template without expressions. */
+export const staticText = (node) => node?.type === "Literal" && typeof node.value === "string" ? node.value : node?.type === "TemplateLiteral" && node.expressions.length === 0 ? node.quasis[0].value.cooked : undefined;
+
 /** @type {Map<string, Set<string>>} */
 const graphs = new Map();
 

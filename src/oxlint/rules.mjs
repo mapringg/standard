@@ -13,5 +13,8 @@ import effect from "./rules/effect.mjs";
 import effectCleanup from "./rules/effect-cleanup.mjs";
 import clientData from "./rules/client-data.mjs";
 import names from "./rules/names.mjs";
+import actionSchema from "./rules/action-schema.mjs";
+import cacheTag from "./rules/cache-tag.mjs";
+import aiRender from "./rules/ai-render.mjs";
 
-export default { meta: { name: "standard", version: "0.16.0" }, rules: { zod, memo, timer, redis, ai, ui, swr, env, json, log, format, effect, "effect-cleanup": effectCleanup, "client-data": clientData, names } };
+export default { meta: { name: "standard", version: "0.17.0" }, rules: { zod, memo, timer, redis, ai, ui, swr, env, json, log, format, effect, "effect-cleanup": effectCleanup, "client-data": clientData, names, "action-schema": actionSchema, "cache-tag": cacheTag, "ai-render": aiRender } };

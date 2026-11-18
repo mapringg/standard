@@ -29,7 +29,7 @@ function viteSource(filename) {
 }
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
-  meta: { type: "problem", schema: [], messages: { data: "Read the data in a Server Component and pass it down as props, or name the file {{name}} when the browser must load it." } },
+  meta: { type: "problem", docs: { description: "Browser data loading runs only in .data-pages, .data-live, .data-client-state and .data-unreachable files.", fix: "Read the data in a Server Component, or name the file with its data role." }, schema: [], messages: { data: "Read the data in a Server Component and pass it down as props, or name the file {{name}} when the browser must load it." } },
   create(context) {
     const path = productPath(context);
     if (NOT_PRODUCT.test(path) || /(?:^|\/)src\/lib\/(?:swr(?:\.browser)?\.ts|api\/)/.test(path) || rolesOf(context.filename).data || viteSource(context.filename)) return {};
