@@ -20,4 +20,4 @@ import serverEntry from "./rules/server-entry.mjs";
 import indexExports from "./rules/index-exports.mjs";
 import clientFeatureImport from "./rules/client-feature-import.mjs";
 
-export default { meta: { name: "standard", version: "0.17.0" }, rules: { zod, memo, timer, redis, ai, ui, swr, env, json, log, format, effect, "effect-cleanup": effectCleanup, "client-data": clientData, names, "action-schema": actionSchema, "cache-tag": cacheTag, "ai-render": aiRender, "server-entry": serverEntry, "index-exports": indexExports, "client-feature-import": clientFeatureImport } };
+export default { meta: { name: "standard", version: "0.17.1" }, rules: { zod, memo, timer, redis, ai, ui, swr, env, json, log, format, effect, "effect-cleanup": effectCleanup, "client-data": clientData, names, "action-schema": actionSchema, "cache-tag": cacheTag, "ai-render": aiRender, "server-entry": serverEntry, "index-exports": indexExports, "client-feature-import": clientFeatureImport } };
