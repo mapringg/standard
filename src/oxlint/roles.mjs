@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, posix, relative, sep } from "node:path";
 
+import { parseConfig } from "../config.mjs";
+
 export const DATA = ["pages", "live", "client-state", "unreachable"];
 export const EFFECT = ["sync", "route", "subscribe"];
 const VARIANTS = new Set(["browser", "server", "test", "spec", "stories"]);
@@ -17,7 +19,7 @@ export function parseName(file) {
     if (VARIANTS.has(part)) { variant = true; continue; }
     const match = ROLE.exec(part);
     if (!match && part !== "cache") continue;
-    if (variant || match && !(match[1] === "data" ? DATA : EFFECT).includes(match[2])) { name.wrong.push(part); continue; }
+    if (variant || match && !(match[1] === "data" ? DATA : EFFECT).includes(match[2]) || !match && !file.endsWith(".cache.ts")) { name.wrong.push(part); continue; }
     if (!match) name.cache = true;
     else name[/** @type {"data" | "effect"} */ (match[1])].push(match[2]);
   }
@@ -41,9 +43,14 @@ function legacyLists(filename) {
     if (legacy.has(root)) return legacy.get(root);
     const path = join(root, ".standard/config.json");
     if (existsSync(path)) {
-      const config = JSON.parse(readFileSync(path, "utf8"));
-      const data = config["client-data"] ?? [];
-      const lists = { root, effects: new Set((config["effect-wrappers"] ?? []).map((/** @type {{ file: string }} */ entry) => entry.file)), data: new Set(data.flatMap((/** @type {{ file?: string }} */ entry) => entry.file ?? [])), apps: data.flatMap((/** @type {{ app?: string }} */ entry) => entry.app ? [entry.app.replace(/\/$/, "")] : []) };
+      /** @type {{ root: string, effects: Set<string>, data: Set<string>, apps: string[] } | null} */
+      let lists = null;
+      try {
+        const config = parseConfig(readFileSync(path, "utf8"));
+        if (config.allow === undefined) lists = { root, effects: new Set(config.effectWrappers.map((entry) => entry.file)), data: new Set(config.clientData.flatMap((entry) => "file" in entry ? [entry.file] : [])), apps: config.clientData.flatMap((entry) => "app" in entry ? [entry.app] : []) };
+      } catch {
+        lists = null;
+      }
       legacy.set(root, lists);
       return lists;
     }

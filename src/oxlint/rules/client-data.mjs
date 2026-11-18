@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 
 import { productPath } from "../fixed-path.mjs";
@@ -10,16 +10,18 @@ const HOOKS = new Set(["useSWR", "useSWRInfinite", "useSWRSubscription", "useSer
 const TEMPLATE = /(?:^|\/)lib\/swr(?:\.browser)?(?:\.[cm]?[jt]sx?)?$|^swr(?:\/|$)/;
 const API = /(?:^|\/)lib\/api(?:\/|$)/;
 const CLIENTS = new Set(["ky", "axios"]);
-const GLOBALS = new Set(["fetch", "XMLHttpRequest"]);
+const GLOBALS = new Set(["fetch", "XMLHttpRequest", "EventSource", "WebSocket"]);
+const GLOBAL_OBJECTS = new Set(["globalThis", "window", "self"]);
 
-/** @param {string} filename The path from the file's package to it, when the package is a Vite React app. */
+/** @param {string} filename Whether the file sits in the src folder of a Vite React app, which has index.html or a vite config beside its manifest. */
 function viteSource(filename) {
   for (let folder = dirname(filename); dirname(folder) !== folder; folder = dirname(folder)) {
     const path = join(folder, "package.json");
     if (!existsSync(path)) continue;
     const manifest = JSON.parse(readFileSync(path, "utf8"));
     const deps = { ...manifest.dependencies, ...manifest.devDependencies };
-    return Boolean(deps.react && deps.vite && !deps.next) && relative(folder, filename).split(sep)[0] === "src";
+    const app = existsSync(join(folder, "index.html")) || readdirSync(folder).some((name) => /^vite\.config\.[cm]?[jt]s$/.test(name));
+    return Boolean(deps.react && deps.vite && !deps.next) && app && relative(folder, filename).split(sep)[0] === "src";
   }
   return false;
 }
@@ -50,6 +52,11 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
       },
       ImportExpression(node) {
         if (node.source.type === "Literal" && typeof node.source.value === "string" && API.test(node.source.value)) inBrowser(node);
+      },
+      MemberExpression(node) {
+        if (node.object.type !== "Identifier" || !GLOBAL_OBJECTS.has(node.object.name) || node.computed || node.property.type !== "Identifier" || !GLOBALS.has(node.property.name)) return;
+        const reference = context.sourceCode.getScope(node).references.find((item) => item.identifier === node.object);
+        if (!reference?.resolved?.defs.length) inBrowser(node);
       },
       Identifier(node) {
         if (!GLOBALS.has(node.name)) return;

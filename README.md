@@ -577,12 +577,12 @@ A file that many files share a role with names it as `<name>.<role>-<reason>.<ex
 
 | Rule | Only these files may |
 | --- | --- |
-| `standard/effect` | call `useEffect` or `useLayoutEffect`: `.effect-sync` keeps an outside system in step, `.effect-route` reacts to the URL Next exposes only through hooks, `.effect-subscribe` adds a listener. Tests and `src/lib/timer.ts` are exempt. |
-| `standard/effect-cleanup` | pass: every effect in an `.effect-subscribe` file is an inline function whose every `return` hands back a cleanup function or the name of one, and whose last statement is that `return`. |
-| `standard/client-data` | load data in the browser: `.data-pages`, `.data-live`, `.data-client-state` and `.data-unreachable`. Loading means a `use*` hook of `src/lib/swr.ts` or swr, or, in code that ships to the browser, `fetch`, `XMLHttpRequest`, `ky`, `axios` or an import of `src/lib/api/`. A Vite React app's `src/` is unreachable as a whole. |
-| `standard/names` | carry a role segment: the reason is one of the words above, and the segment, `.cache` included, sits before `.browser`, `.server` and `.test`. |
+| `standard/effect` | call `useEffect`, `useLayoutEffect` or `useInsertionEffect`, imported, read from the namespace or destructured from it: `.effect-sync` keeps an outside system in step, `.effect-route` reacts to the URL Next exposes only through hooks, `.effect-subscribe` adds a listener. Tests and `src/lib/timer.ts` are exempt. No file re-exports an effect hook. |
+| `standard/effect-cleanup` | pass: every effect in an `.effect-subscribe` file is an inline function whose last statement is a `return`, and every `return` hands back an inline function or a `const` the effect binds to one. |
+| `standard/client-data` | load data in the browser: `.data-pages`, `.data-live`, `.data-client-state` and `.data-unreachable`. Loading means a `use*` hook of `src/lib/swr.ts` or swr, or, in code that ships to the browser, `fetch`, `XMLHttpRequest`, `EventSource` or `WebSocket`, bare or on `window`, `self` or `globalThis`, `ky`, `axios` or an import of `src/lib/api/`. The `src/` of a Vite React app, one with `index.html` or `vite.config.*` beside its `package.json`, is unreachable as a whole. |
+| `standard/names` | carry a role segment: the reason is one of the words above, and the segment sits before `.browser`, `.server` and `.test`, and `.cache` appears only as `<name>.cache.ts`. |
 
-`<name>.cache.ts` names a module whose functions return a cached promise that `use` may read. The CLI `banned` and `client-data` checks accept the same names. During adoption the plugin and the CLI still read the legacy `effect-wrappers` and `client-data` lists, with a deprecation notice; they are not in the new schema. `standard migrate names --write` renames the files they list.
+`<name>.cache.ts` names a module whose functions return a cached promise that `use` may read. The CLI `banned` and `client-data` checks accept the same names. During adoption the plugin and the CLI still read the legacy `effect-wrappers` and `client-data` lists, with a deprecation notice, but only from a legacy config the CLI accepts; they are not in the new schema. `standard migrate names --write` renames the files they list.
 
 ### Configuration in 0.16.0
 

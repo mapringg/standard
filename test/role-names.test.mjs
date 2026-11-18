@@ -37,6 +37,6 @@ test("the CLI treats a Vite app as unreachable only with index.html or a vite co
   write(cwd, { ...app("liff", { "apps/liff/index.html": "<div></div>\n" }), ...app("kit", {}) });
   git(cwd, "add", "-A");
   const run = standard(cwd, ["check", "client-data"]);
-  assert.match(run.stdout, /apps\/kit\/src\/feature\.tsx useSWR/);
+  assert.match(run.stdout, /apps\/kit\/src\/feature\.tsx uses useSWR/);
   assert.doesNotMatch(run.stdout, /apps\/liff/);
 });

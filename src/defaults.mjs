@@ -16,7 +16,7 @@ export function defaults(repo) {
       ...(files.includes("scripts/pre-push.sh") ? ["sh scripts/pre-push.sh"] : []),
     ] },
     pr: reactApps.length ? { ...repo.config.pr, screenshots: { when: [...manifests.filter(({ value }) => value.dependencies?.react || value.devDependencies?.react || value.peerDependencies?.react).flatMap(({ path }) => ["ts", "tsx", "js", "jsx", "css"].map((ext) => posix.join(posix.dirname(path), `**/*.${ext}`))), ...["test", "spec", "stories"].map((kind) => `!**/*.${kind}.*`), ...["__tests__", "test", "tests", "__fixtures__", "fixture", "fixtures", "scripts", "evals"].map((folder) => `!**/${folder}/**`), "!**/*.config.*"], uploader: "scripts/upload-evidence.mjs" } } : repo.config.pr,
-    clientData: reactApps.filter(({ value }) => (value.dependencies?.vite || value.devDependencies?.vite) && !value.dependencies?.next && !value.devDependencies?.next).map(({ path }) => ({ app: posix.dirname(path), reason: /** @type {const} */ ("unreachable") })),
+    clientData: reactApps.filter(({ path, value }) => (value.dependencies?.vite || value.devDependencies?.vite) && !value.dependencies?.next && !value.devDependencies?.next && files.some((file) => posix.dirname(file) === posix.dirname(path) && /^(?:index\.html|vite\.config\.[cm]?[jt]s)$/.test(posix.basename(file)))).map(({ path }) => ({ app: posix.dirname(path), reason: /** @type {const} */ ("unreachable") })),
     budgets: readBudgets(repo),
     apiModules: ["**/src/lib/api/**"], cachedModules: ["**/*.cache.ts"],
     boundaries: {
