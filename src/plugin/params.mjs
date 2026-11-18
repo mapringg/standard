@@ -52,7 +52,7 @@ export default {
         if (where?.kind !== "liff" || keyName(node) !== "validateSearch") return;
         const value = node.value.type === "MemberExpression" ? node.value.object : node.value;
         const source = value.type === "Identifier" ? imports.get(value.name) : null;
-        if (!source || !source.endsWith("-params"))
+        if (!source || !source.replace(/\.[cm]?[jt]sx?$/, "").endsWith("-params"))
           context.report({ node, message: "Set validateSearch to the params schema from <feature>-params.ts." });
       },
     };
