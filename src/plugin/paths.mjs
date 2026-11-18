@@ -111,7 +111,7 @@ export function importedName(specifier) {
   return null;
 }
 
-export function patternIds(pattern) {
+function patternIds(pattern) {
   if (!pattern) return [];
   if (pattern.type === "Identifier") return [pattern];
   if (pattern.type === "ObjectPattern")
