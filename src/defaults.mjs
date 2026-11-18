@@ -2,6 +2,8 @@ import { readBudgets } from "./doc-budgets.mjs";
 import { posix } from "node:path";
 
 export const API_MODULES = ["**/src/lib/api/**"];
+/** The files a page renders from, inside each React package. */
+const RENDERED = ["public/**", ...["ts", "tsx", "js", "jsx", "css", "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "woff", "woff2", "ttf", "otf"].map((ext) => `**/*.${ext}`)];
 
 /** @param {import("./repo.mjs").Repo} repo */
 export function defaults(repo) {
@@ -17,7 +19,7 @@ export function defaults(repo) {
       ...["typecheck", "test"].filter((name) => root?.scripts?.[name]).map((name) => `pnpm ${name}`),
       ...(files.includes("scripts/pre-push.sh") ? ["sh scripts/pre-push.sh"] : []),
     ] },
-    pr: reactApps.length ? { ...repo.config.pr, screenshots: { when: [...manifests.filter(({ value }) => value.dependencies?.react || value.devDependencies?.react || value.peerDependencies?.react).flatMap(({ path }) => ["ts", "tsx", "js", "jsx", "css"].map((ext) => posix.join(posix.dirname(path), `**/*.${ext}`))), ...["test", "spec", "stories"].map((kind) => `!**/*.${kind}.*`), ...["__tests__", "test", "tests", "__fixtures__", "fixture", "fixtures", "scripts", "evals"].map((folder) => `!**/${folder}/**`), "!**/*.config.*"], uploader: "scripts/upload-evidence.mjs" } } : repo.config.pr,
+    pr: reactApps.length ? { ...repo.config.pr, screenshots: { when: [...manifests.filter(({ value }) => value.dependencies?.react || value.devDependencies?.react || value.peerDependencies?.react).flatMap(({ path }) => RENDERED.map((glob) => posix.join(posix.dirname(path), glob))), ...["test", "spec", "stories"].map((kind) => `!**/*.${kind}.*`), ...["__tests__", "test", "tests", "__fixtures__", "fixture", "fixtures", "scripts", "evals"].map((folder) => `!**/${folder}/**`), "!**/*.config.*"], uploader: "scripts/upload-evidence.mjs" } } : repo.config.pr,
     clientData: reactApps.filter(({ path, value }) => (value.dependencies?.vite || value.devDependencies?.vite) && !value.dependencies?.next && !value.devDependencies?.next && files.some((file) => posix.dirname(file) === posix.dirname(path) && /^(?:index\.html|vite\.config\.[cm]?[jt]s)$/.test(posix.basename(file)))).map(({ path }) => ({ app: posix.dirname(path), reason: /** @type {const} */ ("unreachable") })),
     budgets: readBudgets(repo),
     apiModules: API_MODULES, cachedModules: ["**/*.cache.ts"],
