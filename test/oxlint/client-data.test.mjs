@@ -79,8 +79,10 @@ test("client-data follows computed, destructured and aliased globals, dynamic cl
     "apps/web/src/dynamic.tsx": '"use client"; export const load = async () => (await import("ky")).default("/x");',
     "apps/web/src/required.tsx": '"use client"; const axios = require("axios"); export const load = () => axios.get("/x");',
     "apps/web/src/query.ts": 'import { useQuery, useInfiniteQuery, useSuspenseQuery } from "@tanstack/react-query"; export const hooks = [useQuery, useInfiniteQuery, useSuspenseQuery];',
-    "apps/web/src/location.tsx": '"use client"; export const here = () => window.location.href;',
+    "apps/web/src/location.tsx": '"use client"; export const here = () => typeof window === "undefined" || !("document" in globalThis) ? "" : window.location.href;',
+    "apps/web/src/probe.tsx": '"use client"; export const can = () => "fetch" in window;',
+    "apps/web/src/escape.tsx": '"use client"; export const target = () => window;',
   });
-  assert.deepEqual([...new Set(diagnostics.map(({ filename }) => filename))], ["apps/web/src/alias.tsx", "apps/web/src/computed.tsx", "apps/web/src/destructured.tsx", "apps/web/src/dynamic.tsx", "apps/web/src/query.ts", "apps/web/src/required.tsx"]);
+  assert.deepEqual([...new Set(diagnostics.map(({ filename }) => filename))], ["apps/web/src/alias.tsx", "apps/web/src/computed.tsx", "apps/web/src/destructured.tsx", "apps/web/src/dynamic.tsx", "apps/web/src/escape.tsx", "apps/web/src/probe.tsx", "apps/web/src/query.ts", "apps/web/src/required.tsx"]);
   assert.equal(diagnostics.filter(({ filename }) => filename.endsWith("query.ts")).length, 3);
 });
