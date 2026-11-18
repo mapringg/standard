@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { lint, only } from "./lint.mjs";
 
 const source = "export const add = (a: number, b: number) => a + b;\n";
-const vitest = 'import { expect, test, vi } from "vitest";\nimport { add } from "@/lib/add";\n';
+const vitest = 'import { expect, test, vi } from "vitest";\nimport { add } from "#/lib/add";\n';
 const double = "Fake HTTP with MSW handlers and other boundaries with a typed fake in *.fixture.ts";
 
 test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => {
@@ -28,7 +28,7 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
     "packages/i18n/src/restored.ts": source,
     "packages/i18n/src/restored.test.ts": `${vitest}vi.useFakeTimers();\nvi.useRealTimers();\ntest("real", () => { expect(Date.now()).toBeGreaterThan(add(0, 0)); });\n`,
     "packages/i18n/src/hooked.ts": source,
-    "packages/i18n/src/hooked.test.ts": `import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";\nimport { add } from "@/lib/add";\ndescribe("hooked", () => {\n  test("fake", () => { expect(Date.now()).toBe(add(0, 0)); });\n  beforeEach(() => { vi.useFakeTimers(); });\n  afterEach(() => { vi.useRealTimers(); });\n});\n`,
+    "packages/i18n/src/hooked.test.ts": `import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";\nimport { add } from "#/lib/add";\ndescribe("hooked", () => {\n  test("fake", () => { expect(Date.now()).toBe(add(0, 0)); });\n  beforeEach(() => { vi.useFakeTimers(); });\n  afterEach(() => { vi.useRealTimers(); });\n});\n`,
     "packages/i18n/src/slow.ts": source,
     "packages/i18n/src/slow.test.ts": `${vitest}test("slow", () => { expect(add(1, 1)).toBe(2); }, 10000);\n`,
     "packages/i18n/src/loop.ts": source,
@@ -39,7 +39,7 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
     "packages/i18n/src/calls.test.ts": `${vitest}test("calls", () => { const spy = vi.spyOn(console, "info"); add(1, 2); expect(spy).toHaveBeenCalledWith(1, 2); });\n`,
     "packages/i18n/src/view.tsx": "export const View = () => null;\n",
     "packages/i18n/src/view.test.tsx":
-      'import { render, screen } from "@testing-library/react";\nimport { expect, test } from "vitest";\nimport { View } from "@/view";\ntest("renders", () => { render(<View />); expect(screen.getByRole("main")).toBeInTheDocument(); });\n',
+      'import { render, screen } from "@testing-library/react";\nimport { expect, test } from "vitest";\nimport { View } from "#/view";\ntest("renders", () => { render(<View />); expect(screen.getByRole("main")).toBeInTheDocument(); });\n',
     "packages/i18n/src/mocked.ts": source,
     "packages/i18n/src/mocked.test.ts": `${vitest}vi.mock("ky");\nconst stub = vi.fn(() => 1);\nvi.stubGlobal("fetch", stub);\nvi.spyOn(Math, "random").mockReturnValue(0);\nDate.prototype.getDay = () => 1;\ntest("mocked", () => { expect(add(1, 2)).toBe(3); });\n`,
     "packages/i18n/src/cdp.ts": source,
@@ -47,7 +47,7 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
       'import { vi } from "vitest";\nexport const cdp = { send: vi.fn(async () => ({ ok: true })), fetch: vi.fn() };\nexport const page = { title: vi.fn<() => string>().mockReturnValue("x") };\n',
     "packages/i18n/src/stream.ts": "export async function* chunks() { yield await Promise.resolve(1); }\n",
     "packages/i18n/src/stream.test.ts":
-      'import { expect, test } from "vitest";\nimport { chunks } from "@/stream";\ntest("streams", async () => { const seen: number[] = []; for await (const chunk of chunks()) seen.push(chunk); expect(seen).toStrictEqual([1]); });\n',
+      'import { expect, test } from "vitest";\nimport { chunks } from "#/stream";\ntest("streams", async () => { const seen: number[] = []; for await (const chunk of chunks()) seen.push(chunk); expect(seen).toStrictEqual([1]); });\n',
     "packages/i18n/vitest.config.ts": "export default { test: { coverage: { thresholds: { lines: 90 } } } };\n",
   });
   const found = only(result, "tests")
@@ -80,7 +80,7 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
 test("tests rule follows setup hooks in the order they run", (t) => {
   const result = lint(t, {
     "packages/i18n/src/add.ts": source,
-    "packages/i18n/src/order.test.ts": `import { beforeEach, expect, test, vi } from "vitest";\nimport { add } from "@/lib/add";\nbeforeEach(() => { vi.useFakeTimers(); });\nbeforeEach(() => { vi.useRealTimers(); });\ntest("real", () => { expect(Date.now()).toBeGreaterThan(add(0, 0)); });\n`,
+    "packages/i18n/src/order.test.ts": `import { beforeEach, expect, test, vi } from "vitest";\nimport { add } from "#/lib/add";\nbeforeEach(() => { vi.useFakeTimers(); });\nbeforeEach(() => { vi.useRealTimers(); });\ntest("real", () => { expect(Date.now()).toBeGreaterThan(add(0, 0)); });\n`,
   });
   deepEqual(
     only(result, "tests").map((item) => item.file.split("/").at(-1)),

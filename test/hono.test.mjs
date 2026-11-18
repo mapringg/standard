@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { lint, only } from "./lint.mjs";
 
 const head =
-  'import { describeRoute } from "hono-openapi";\nimport { factory } from "@/factory";\nimport { v } from "@/lib/validate";\n';
+  'import { describeRoute } from "hono-openapi";\nimport { factory } from "#/factory";\nimport { v } from "#/lib/validate";\n';
 
 test("hono checks chains, statuses, paths, docs and handler size", (t) => {
   const long = Array.from({ length: 10 }, (_, index) => `    const a${index} = ${index};`).join("\n");
@@ -54,9 +54,9 @@ ${long}
     "apps/api/src/middleware/guard.ts":
       'import { createMiddleware } from "hono/factory";\nexport const guard = createMiddleware(async (c) => c.json({}));\n',
     "apps/api/src/app.ts": `import { openAPIRouteHandler } from "hono-openapi";
-import { factory } from "@/factory";
-import { tasks } from "@/features/tasks/routes";
-import { env } from "@/lib/env";
+import { factory } from "#/factory";
+import { tasks } from "#/features/tasks/routes";
+import { env } from "#/lib/env";
 const base = factory.createApp().route("/api/tasks", tasks).route("/api/v1/users", tasks);
 export const app = env.NODE_ENV === "development" ? base.get("/api/openapi.json", openAPIRouteHandler(base)) : base;
 export const leaked = base.get("/api/docs", openAPIRouteHandler(base));
@@ -84,7 +84,7 @@ export const named = env.NODE_ENV === "development-like" && openAPIRouteHandler(
     "apps/api/src/features/users/routes.ts: Move the logic into db",
     "apps/api/src/features/users/routes.ts: Pass the status explicitly: c",
     "apps/api/src/features/users/routes.ts: Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path",
-    "apps/api/src/features/users/routes.ts: Validate with v() from @/lib/validate and read the input with c",
+    "apps/api/src/features/users/routes.ts: Validate with v() from #/lib/validate and read the input with c",
     "apps/api/src/middleware/guard.ts: Pass the status explicitly: c",
   ]);
 });

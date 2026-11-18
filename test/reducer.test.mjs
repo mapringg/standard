@@ -11,12 +11,12 @@ test("reducer allows one useReducer per component with a reducer from -state", (
       "export const formReducer = (_state: string, next: string) => next;\n",
     "apps/web/src/features/task/task-good.tsx": [
       'import { useReducer } from "react";',
-      'import { taskReducer } from "@/features/task/task-state";',
+      'import { taskReducer } from "#/features/task/task-state";',
       "export function TaskGood() { const [count] = useReducer(taskReducer, 0); return count; }",
     ].join("\n"),
     "apps/web/src/features/task/task-twice.tsx": [
       'import { useReducer } from "react";',
-      'import { taskReducer } from "@/features/task/task-state";',
+      'import { taskReducer } from "#/features/task/task-state";',
       "export function TaskTwice() { const [a] = useReducer(taskReducer, 0); const [b] = useReducer(taskReducer, 0); return a + b; }",
     ].join("\n"),
     "apps/web/src/features/task/task-inline.tsx": [
