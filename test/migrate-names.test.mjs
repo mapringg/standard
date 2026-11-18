@@ -176,3 +176,15 @@ test("migrate names rewrites the partial paths and file names docs use when they
   assert.equal(run.status, 0, run.stdout + run.stderr);
   assert.equal(readFileSync(join(cwd, "docs/map.md"), "utf8"), "Use `use-bind.effect-sync.browser.ts` from `map/use-bind.effect-sync.browser.ts`, and `features/list.data-pages.tsx`, not `list.tsx`.\n");
 });
+
+test("migrate names never renames into effect-subscribe an effect that fails effect-cleanup", (t) => {
+  const cwd = fixture(t, {
+    [`${WEB}/hooks/use-window-event.ts`]: 'import * as React from "react";\nconst { useEffect: ue } = React;\nexport function useWindowEvent(active, listen) {\n  ue(() => {\n    if (!active) return;\n    return listen();\n  }, [active]);\n}\n',
+  });
+  const run = standard(cwd, ["migrate", "names"]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(!run.stdout.includes(`rename ${WEB}/hooks/use-window-event.ts`), run.stdout);
+  assert.ok(run.stdout.includes(`pick ${WEB}/hooks/use-window-event.ts: an effect-subscribe effect returns an inline cleanup on every path, and this one does not. Rewrite the effect, or rerun with --effect ${WEB}/hooks/use-window-event.ts=<sync|route>.`), run.stdout);
+  const picked = standard(cwd, ["migrate", "names", "--effect", `${WEB}/hooks/use-window-event.ts=subscribe`]);
+  assert.ok(picked.stdout.includes(`pick ${WEB}/hooks/use-window-event.ts: an effect-subscribe effect`), picked.stdout);
+});
