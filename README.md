@@ -596,7 +596,7 @@ A file that many files share a role with names it as `<name>.<role>-<reason>.<ex
 | --- | --- |
 | `standard/action-schema` | Every export of a `"use server"` file is an inline function, and every Server Action, such an export or a function with its own `"use server"`, takes plain parameters and parses each one before any other statement. Only a throwing parse counts: `schema.parse(raw)` or `parseAsync` for zod and zod/mini, or `parse(schema, raw)` for zod/mini and valibot, where the schema is an imported binding or a module-level `const` built from the validator. `schema.parse(Object.fromEntries(formData))` parses a form. A file that imports no validator fails each action that takes an argument. |
 | `standard/cache-tag` | Every `use cache` scope, a function with the directive or an export of a file with it, is an inline function that calls `cacheTag` from `next/cache` with at least one tag as a top-level statement. A file-level `use cache` file exports only inline functions. |
-| `standard/ai-render` | Only a `"use server"` file, a `route.*` handler and `src/lib/ai.ts` with its `.server` and `.browser` variants import `src/lib/ai`. Every other file fails, so a Server Component, a `use cache` function and any wrapper they could reach never generate. |
+| `standard/ai-render` | In a package that depends on `next`, only a `"use server"` file, a `route.*` handler and `src/lib/ai.ts` with its `.server` and `.browser` variants import `src/lib/ai`. Every other file fails, so a Server Component, a `use cache` function and any wrapper they could reach never generate. Outside a Next app there is no render, so the rule skips it; `standard/ai` still keeps the SDK and `ai` behind `src/lib/ai*`. |
 
 ### Configuration in 0.16.0
 
