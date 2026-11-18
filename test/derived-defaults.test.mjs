@@ -66,3 +66,34 @@ test("flat configs retain mocking and comment bans on non-product sources", asyn
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /src\/a.test.ts vitest#vi.mock/);
 });
+
+test("each src/components folder is its own module, ui stays open, and index.server is an entry", async (t) => {
+  const repo = fixture(t, {
+    "src/components/chart/line.ts": 'import { cell } from "../table/cell"; import { Table } from "../table"; import { button } from "../ui/button"; import { axis } from "./axis"; export const line = [cell, Table, button, axis];',
+    "src/components/chart/axis.ts": "export const axis = 1;",
+    "src/components/table/cell.ts": "export const cell = 1;",
+    "src/components/table/index.ts": 'export { cell as Table } from "./cell";',
+    "src/components/ui/button.ts": "export const button = 1;",
+    "src/features/report/index.server.ts": 'export { load } from "./load.server";',
+    "src/features/report/load.server.ts": "export const load = 1;",
+    "src/app/page.ts": 'import { line } from "../components/chart/line"; import { load } from "../features/report/index.server"; export const page = [line, load];',
+  });
+  const keys = (await boundaries.run(repo, [])).map(({ key }) => key).sort();
+  assert.deepEqual(keys, ["src/app/page.ts imports ../components/chart/line", "src/components/chart/line.ts imports ../table/cell"]);
+});
+
+test("a module finding lists only the entries that apply to its importer", async (t) => {
+  const repo = fixture(t, {
+    "src/components/table/cell.ts": "export const cell = 1;",
+    "src/features/report/view.ts": "export const view = 1;",
+    "src/app/page.ts": 'import { cell } from "../components/table/cell"; import { view } from "../features/report/view"; export const page = [cell, view];',
+    "src/app/chart.tsx": '"use client";\nimport { cell } from "../components/table/cell"; import { view } from "../features/report/view"; export const chart = [cell, view];',
+  });
+  const fixes = Object.fromEntries((await boundaries.run(repo, [])).map(({ key, fix }) => [key, fix.replace(/^.*Import it through /, "").replace(/, and export.*$/, "")]));
+  assert.deepEqual(fixes, {
+    "src/app/chart.tsx imports ../components/table/cell": "src/components/table/index",
+    "src/app/chart.tsx imports ../features/report/view": "src/features/report/index or src/features/report/routes",
+    "src/app/page.ts imports ../components/table/cell": "src/components/table/index or src/components/table/index.server",
+    "src/app/page.ts imports ../features/report/view": "src/features/report/index or src/features/report/index.server or src/features/report/routes",
+  });
+});

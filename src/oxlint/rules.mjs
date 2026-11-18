@@ -16,5 +16,7 @@ import names from "./rules/names.mjs";
 import actionSchema from "./rules/action-schema.mjs";
 import cacheTag from "./rules/cache-tag.mjs";
 import aiRender from "./rules/ai-render.mjs";
+import serverEntry from "./rules/server-entry.mjs";
+import indexExports from "./rules/index-exports.mjs";
 
-export default { meta: { name: "standard", version: "0.17.0" }, rules: { zod, memo, timer, redis, ai, ui, swr, env, json, log, format, effect, "effect-cleanup": effectCleanup, "client-data": clientData, names, "action-schema": actionSchema, "cache-tag": cacheTag, "ai-render": aiRender } };
+export default { meta: { name: "standard", version: "0.17.0" }, rules: { zod, memo, timer, redis, ai, ui, swr, env, json, log, format, effect, "effect-cleanup": effectCleanup, "client-data": clientData, names, "action-schema": actionSchema, "cache-tag": cacheTag, "ai-render": aiRender, "server-entry": serverEntry, "index-exports": indexExports } };

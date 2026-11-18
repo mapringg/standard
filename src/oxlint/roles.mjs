@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, posix, relative, sep } from "node:path";
 
 import { parseConfig } from "../config.mjs";
+import { API_MODULES } from "../defaults.mjs";
 
 export const DATA = ["pages", "live", "client-state", "unreachable"];
 export const EFFECT = ["sync", "route", "subscribe"];
@@ -36,6 +37,31 @@ export function withSegment(file, segment) {
 
 /** @type {Map<string, { root: string, effects: Set<string>, data: Set<string>, apps: string[] } | null>} */
 const legacy = new Map();
+/** @type {Map<string, { root: string, globs: readonly string[] }>} */
+const apis = new Map();
+
+/** @param {string} filename @returns {{ root: string, globs: readonly string[] }} The API module globs and the folder they are relative to: a legacy config's api-modules during adoption, else the derived default. */
+export function apiModules(filename) {
+  for (let root = dirname(filename); ; root = dirname(root)) {
+    const cached = apis.get(root);
+    if (cached) return cached;
+    const path = join(root, ".standard/config.json");
+    const top = dirname(root) === root || existsSync(join(root, ".git"));
+    if (existsSync(path) || top) {
+      /** @type {readonly string[]} */
+      let globs = API_MODULES;
+      try {
+        const config = existsSync(path) ? parseConfig(readFileSync(path, "utf8")) : undefined;
+        if (config && config.allow === undefined) globs = config.apiModules;
+      } catch {
+        globs = API_MODULES;
+      }
+      const found = { root, globs };
+      apis.set(root, found);
+      return found;
+    }
+  }
+}
 
 /** @param {string} filename */
 function legacyLists(filename) {
