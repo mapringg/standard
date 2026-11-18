@@ -69,18 +69,6 @@
         "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"]
       }
     ],
-    "react/forbid-dom-props": [
-      "error",
-      {
-        "forbid": ["style"]
-      }
-    ],
-    "react/forbid-component-props": [
-      "error",
-      {
-        "forbid": ["style"]
-      }
-    ],
     "typescript/switch-exhaustiveness-check": [
       "error",
       {
@@ -153,6 +141,41 @@
       "error",
       {
         "capIsNewExceptions": ["Scalar"]
+      }
+    ],
+    "vitest/valid-title": [
+      "error",
+      {
+        "allowArguments": true
+      }
+    ],
+    "vitest/prefer-to-be-truthy": "off",
+    "vitest/prefer-to-be-falsy": "off",
+    "vitest/prefer-called-times": "off",
+    "typescript/non-nullable-type-assertion-style": "off",
+    "eslint/prefer-destructuring": [
+      "error",
+      {
+        "VariableDeclarator": {
+          "array": false,
+          "object": true
+        },
+        "AssignmentExpression": {
+          "array": false,
+          "object": false
+        }
+      }
+    ],
+    "react/forbid-dom-props": [
+      "error",
+      {
+        "forbid": ["style"]
+      }
+    ],
+    "react/forbid-component-props": [
+      "error",
+      {
+        "forbid": ["style"]
       }
     ]
   },
