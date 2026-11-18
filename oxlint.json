@@ -41,9 +41,11 @@
     "standard/no-typeof": "error",
     "standard/owners": "error",
     "standard/params": "error",
+    "standard/query-client": "error",
     "standard/reducer": "error",
     "standard/repo-shape": "error",
     "standard/server-actions": "error",
+    "standard/style-prop": "error",
     "standard/tests": "error",
     "no-restricted-imports": [
       "error",
@@ -164,18 +166,6 @@
           "array": false,
           "object": false
         }
-      }
-    ],
-    "react/forbid-dom-props": [
-      "error",
-      {
-        "forbid": ["style"]
-      }
-    ],
-    "react/forbid-component-props": [
-      "error",
-      {
-        "forbid": ["style"]
       }
     ]
   },

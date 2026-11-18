@@ -67,7 +67,7 @@ function astroText(text) {
     .replace(/^---[\s\S]*?---/, "")
     .replace(/<(script|style)\b[\s\S]*?<\/\1>/g, "")
     .replace(/<!--[\s\S]*?-->/g, "");
-  for (let previous = ""; previous !== rest; ) {
+  for (let previous = ""; previous !== rest;) {
     previous = rest;
     rest = rest.replace(/\{[^{}]*\}/g, "");
   }
@@ -140,7 +140,9 @@ function fileProblems(rel, root, localized) {
   if (parts.length > 1 && !TOP_DIRS.has(parts[0]))
     return ["Move this into apps/ or packages/; the top level holds only config."];
   if (parts[0] === "apps" && parts.length > 2 && !kind)
-    return ["Add hono, next, vite, expo or astro to the app's package.json dependencies so the standard knows its kind."];
+    return [
+      "Add hono, next, vite, expo or astro to the app's package.json dependencies so the standard knows its kind.",
+    ];
   if (parts[0] === "packages" && parts.length > 2 && !PACKAGES.has(pkg))
     return [`Move this into an app's lib/; packages/ holds only ${[...PACKAGES].join(" and ")}.`];
   if (/\.mdx?$/.test(name)) {

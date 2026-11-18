@@ -4,7 +4,8 @@ import { test } from "node:test";
 import { lint, only } from "./lint.mjs";
 
 const code = "export const a = 1;\n";
-const astro = '---\nconst { title } = Astro.props;\n---\n<section><h1>{title}</h1><script>const a = 1;</script></section>\n';
+const astro =
+  "---\nconst { title } = Astro.props;\n---\n<section><h1>{title}</h1><script>const a = 1;</script></section>\n";
 const base = {
   "apps/web/src/app/(app)/page.tsx": code,
   "apps/web/src/app/(app)/error.tsx": code,

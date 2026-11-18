@@ -1,0 +1,18 @@
+import { deepEqual } from "node:assert/strict";
+import { test } from "node:test";
+
+import { filesWith, lint } from "./lint.mjs";
+
+const client = (options) =>
+  `import { QueryClient } from "@tanstack/react-query";\nexport const client = new QueryClient(${options});\n`;
+
+test("query-client requires a retry function in lib/query.ts", (t) => {
+  const result = lint(t, {
+    "apps/web/src/lib/query.ts": client(
+      "{ defaultOptions: { queries: { retry: (count: number, error: Error) => count < 2 && error.name !== 'ApiError' } } }",
+    ),
+    "apps/liff/src/lib/query.ts": client("{ defaultOptions: { queries: { retry: 1 } } }"),
+    "apps/mobile/src/lib/query.ts": client("{}"),
+  });
+  deepEqual(filesWith(result, "query-client"), ["apps/liff/src/lib/query.ts", "apps/mobile/src/lib/query.ts"]);
+});

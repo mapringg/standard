@@ -8,9 +8,11 @@ import noReturnTypes from "./no-return-types.mjs";
 import noTypeof from "./no-typeof.mjs";
 import owners from "./owners.mjs";
 import params from "./params.mjs";
+import queryClient from "./query-client.mjs";
 import reducer from "./reducer.mjs";
 import repoShape from "./repo-shape.mjs";
 import serverActions from "./server-actions.mjs";
+import styleProp from "./style-prop.mjs";
 import tests from "./tests.mjs";
 
 export default {
@@ -26,9 +28,11 @@ export default {
     "no-typeof": noTypeof,
     owners,
     params,
+    "query-client": queryClient,
     reducer,
     "repo-shape": repoShape,
     "server-actions": serverActions,
+    "style-prop": styleProp,
     tests,
   },
 };

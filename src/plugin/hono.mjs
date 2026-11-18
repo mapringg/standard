@@ -114,7 +114,10 @@ export default {
         report(node.arguments[0], "Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path.");
       if (!node.arguments.some((arg) => calls(arg, "describeRoute")))
         report(node.callee.property, "Add describeRoute with the response schemas from schema.ts to this route.");
-      if (node.arguments.some((arg) => validates(arg, "form")) && !node.arguments.some((arg) => calls(arg, "bodyLimit")))
+      if (
+        node.arguments.some((arg) => validates(arg, "form")) &&
+        !node.arguments.some((arg) => calls(arg, "bodyLimit"))
+      )
         report(node.callee.property, 'Add bodyLimit({ maxSize }) before v("form", schema) to cap the upload size.');
       if (protocol) return;
       const handler = node.arguments.at(-1);
@@ -149,7 +152,8 @@ export default {
           report(node, 'Mount the OpenAPI spec and docs only inside env.NODE_ENV === "development".');
         if (method === "route" && app) {
           const path = stringValue(node.arguments[0]);
-          if (path === null || !MOUNT.test(path)) report(node.arguments[0] ?? node, "Mount routers at /api/<plural-kebab>.");
+          if (path === null || !MOUNT.test(path))
+            report(node.arguments[0] ?? node, "Mount routers at /api/<plural-kebab>.");
         }
         if (routes && (METHODS.has(method) || LOOSE.has(method)) && isRouter(object)) route(node, method);
       },
