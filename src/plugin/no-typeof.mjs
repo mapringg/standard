@@ -5,18 +5,21 @@ function isUndefinedProbe(node) {
   return other.type === "Literal" && other.value === "undefined";
 }
 
+import { inside, locate } from "./paths.mjs";
+
 export default {
   meta: {
     type: "problem",
-    docs: { description: "No runtime typeof narrowing; parse at the boundary instead." },
+    docs: { description: "No runtime typeof narrowing outside lib/ serializers; parse at the boundary instead." },
   },
   create(context) {
+    if (inside(locate(context.filename)?.local ?? "", "src/lib")) return {};
     return {
       UnaryExpression(node) {
         if (node.operator !== "typeof" || isUndefinedProbe(node)) return;
         context.report({
           node,
-          message: "Parse the value with a zod schema at its boundary instead of checking typeof.",
+          message: "Parse the value with a zod schema at its boundary; typeof belongs only in lib/ serializers.",
         });
       },
     };
