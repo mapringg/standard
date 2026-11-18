@@ -1,8 +1,14 @@
-import { existsSync, globSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { ResolverFactory } from "oxc-resolver";
 import { parseSync } from "oxc-parser";
 import { NOT_PRODUCT, packageOf } from "../checks/support/packages.mjs";
+
+/** @param {string} folder @param {Record<string, unknown> | undefined} manifest Whether the package is a Vite React app: react and vite without next, and index.html or a vite config beside the manifest. */
+export function viteApp(folder, manifest) {
+  const deps = { ...(/** @type {any} */ (manifest)?.dependencies), ...(/** @type {any} */ (manifest)?.devDependencies) };
+  return Boolean(deps.react && deps.vite && !deps.next) && (existsSync(join(folder, "index.html")) || readdirSync(folder).some((/** @type {string} */ name) => /^vite\.config\.[cm]?[jt]s$/.test(name)));
+}
 
 /** @type {Map<string, Set<string>>} */
 const graphs = new Map();
@@ -28,8 +34,7 @@ export function shipsToBrowser(context) {
       if (directives.includes("use server")) continue;
       const folder = packageOf(paths, path);
       const manifest = folder === null ? {} : manifests.get(join(folder, "package.json"));
-      const deps = { ...manifest?.dependencies, ...manifest?.devDependencies };
-      if (directives.includes("use client") || /\.browser\.[^/]+$/.test(path) || deps.react && deps.vite && !deps.next && relative(folder ?? ".", path).startsWith("src/")) browser.add(absolute);
+      if (directives.includes("use client") || /\.browser\.[^/]+$/.test(path) || folder !== null && relative(folder, path).startsWith("src/") && viteApp(join(root, folder), manifest)) browser.add(absolute);
       /** @type {string[]} */
       const imports = [];
       /** @param {unknown} node */

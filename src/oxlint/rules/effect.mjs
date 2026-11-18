@@ -1,11 +1,7 @@
 import { productPath } from "../fixed-path.mjs";
 import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
 import { EFFECT, rolesOf, withSegment } from "../roles.mjs";
-
-const HOOKS = ["useEffect", "useLayoutEffect", "useInsertionEffect"];
-
-/** @param {any} node @returns {string} */
-const nameOf = (node) => node?.type === "Identifier" ? node.name : node?.type === "Literal" ? String(node.value) : "";
+import { EFFECT_HOOKS as HOOKS, called, hookName, keyName as nameOf, reactNamespace } from "../hooks.mjs";
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
   meta: {
@@ -23,34 +19,29 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
     const data = { name: withSegment(path, `effect-<${EFFECT.join("|")}>`) };
     /** @param {any} node */
     const use = (node) => { if (!named) context.report({ node, messageId: "name", data }); };
-    /** @type {Set<string>} */
-    const hooks = new Set();
-    /** @type {Set<string>} */
-    const namespaces = new Set();
+    /** @param {any} node */
+    const pass = (node) => { if (!called(node) && hookName(context, node)) context.report({ node, messageId: "pass" }); };
     return {
       ImportDeclaration(node) {
         if (node.source.value !== "react" || node.importKind === "type") return;
-        for (const specifier of node.specifiers) {
-          if (specifier.type !== "ImportSpecifier") namespaces.add(specifier.local.name);
-          else if (HOOKS.includes(nameOf(specifier.imported))) { hooks.add(specifier.local.name); use(specifier); }
-        }
+        for (const specifier of node.specifiers) if (specifier.type === "ImportSpecifier" && specifier.importKind !== "type" && HOOKS.includes(nameOf(specifier.imported))) use(specifier);
       },
       ExportNamedDeclaration(node) {
-        if (node.exportKind === "type") return;
-        const fromReact = node.source?.value === "react";
-        for (const specifier of node.specifiers) if (fromReact ? HOOKS.includes(nameOf(specifier.local)) : !node.source && hooks.has(nameOf(specifier.local))) context.report({ node: specifier, messageId: "pass" });
+        if (node.exportKind !== "type" && node.source?.value === "react") for (const specifier of node.specifiers) if (HOOKS.includes(nameOf(specifier.local))) context.report({ node: specifier, messageId: "pass" });
       },
       ExportAllDeclaration(node) {
         if (node.source.value === "react" && node.exportKind !== "type") context.report({ node, messageId: "pass" });
       },
       VariableDeclarator(node) {
-        if (node.id.type !== "ObjectPattern" || node.init?.type !== "Identifier" || !namespaces.has(node.init.name)) return;
+        if (node.id.type !== "ObjectPattern" || !reactNamespace(context, node.init)) return;
         for (const property of node.id.properties) if (property.type === "Property" && HOOKS.includes(nameOf(property.key))) use(property);
       },
       MemberExpression(node) {
         const name = !node.computed && node.property.type === "Identifier" ? node.property.name : node.property.type === "Literal" ? node.property.value : undefined;
         if (typeof name === "string" && HOOKS.includes(name)) use(node);
+        pass(node);
       },
+      Identifier: pass,
     };
   },
 });

@@ -23,6 +23,7 @@ test("a consumer can extend the shared config from JSON", (t) => {
   installPackage(root);
   write(root, {
     "package.json": { type: "module", dependencies: { react: "19", vite: "8" } },
+    "index.html": "<div></div>",
     ".oxlintrc.json": { extends: ["./node_modules/@mapringg/standard/config/oxlint.json"], options: { typeAware: false, typeCheck: false } },
     "src/feature.ts": 'import { z } from "zod"; console.log(JSON.parse(z.string()));',
   });

@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 
 import { productPath } from "../fixed-path.mjs";
 import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
-import { shipsToBrowser } from "../browser.mjs";
+import { shipsToBrowser, viteApp } from "../browser.mjs";
+import { keyName } from "../hooks.mjs";
 import { DATA, rolesOf, withSegment } from "../roles.mjs";
 
 const HOOKS = new Set(["useSWR", "useSWRInfinite", "useSWRSubscription", "useServerData", "useServerSeeded"]);
@@ -12,16 +13,17 @@ const API = /(?:^|\/)lib\/api(?:\/|$)/;
 const CLIENTS = new Set(["ky", "axios"]);
 const GLOBALS = new Set(["fetch", "XMLHttpRequest", "EventSource", "WebSocket"]);
 const GLOBAL_OBJECTS = new Set(["globalThis", "window", "self"]);
+const QUERY = new Set(["useQuery", "useInfiniteQuery", "useSuspenseQuery", "useSuspenseInfiniteQuery", "useQueries", "useSuspenseQueries"]);
+
+/** @param {any} node @returns {string | undefined} The text of a string literal or a template without expressions. */
+const text = (node) => node?.type === "Literal" && typeof node.value === "string" ? node.value : node?.type === "TemplateLiteral" && node.expressions.length === 0 ? node.quasis[0].value.cooked : undefined;
 
 /** @param {string} filename Whether the file sits in the src folder of a Vite React app, which has index.html or a vite config beside its manifest. */
 function viteSource(filename) {
   for (let folder = dirname(filename); dirname(folder) !== folder; folder = dirname(folder)) {
     const path = join(folder, "package.json");
     if (!existsSync(path)) continue;
-    const manifest = JSON.parse(readFileSync(path, "utf8"));
-    const deps = { ...manifest.dependencies, ...manifest.devDependencies };
-    const app = existsSync(join(folder, "index.html")) || readdirSync(folder).some((name) => /^vite\.config\.[cm]?[jt]s$/.test(name));
-    return Boolean(deps.react && deps.vite && !deps.next) && app && relative(folder, filename).split(sep)[0] === "src";
+    return relative(folder, filename).split(sep)[0] === "src" && viteApp(folder, JSON.parse(readFileSync(path, "utf8")));
   }
   return false;
 }
@@ -39,29 +41,40 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
       browser ??= shipsToBrowser(context);
       if (browser) context.report({ node, messageId: "data", data });
     };
+    /** @param {any} node Whether an identifier is an unshadowed global. */
+    const global = (node) => {
+      const reference = context.sourceCode.getScope(node).references.find((item) => item.identifier === node);
+      return Boolean(reference && !reference.resolved?.defs.length);
+    };
+    /** @param {string | undefined} source */
+    const client = (source) => source !== undefined && (CLIENTS.has(source.split("/")[0]) || API.test(source));
     return {
       ImportDeclaration(node) {
         if (node.importKind === "type") return;
         const source = node.source.value;
-        if (TEMPLATE.test(source)) {
+        if (source === "@tanstack/react-query") {
+          for (const specifier of node.specifiers) if (specifier.type !== "ImportSpecifier" || specifier.importKind !== "type" && QUERY.has(keyName(specifier.imported))) context.report({ node: specifier, messageId: "data", data });
+        } else if (TEMPLATE.test(source)) {
           for (const specifier of node.specifiers) {
-            const name = specifier.type === "ImportSpecifier" ? specifier.imported.type === "Identifier" ? specifier.imported.name : specifier.imported.value : source.startsWith("swr") ? "useSWR" : "";
+            const name = specifier.type === "ImportSpecifier" ? keyName(specifier.imported) : source.startsWith("swr") ? "useSWR" : "";
             if (specifier.type !== "ImportSpecifier" || specifier.importKind !== "type") if (HOOKS.has(name)) context.report({ node: specifier, messageId: "data", data });
           }
-        } else if (CLIENTS.has(source.split("/")[0]) || API.test(source)) inBrowser(node);
+        } else if (client(source)) inBrowser(node);
       },
       ImportExpression(node) {
-        if (node.source.type === "Literal" && typeof node.source.value === "string" && API.test(node.source.value)) inBrowser(node);
+        if (client(text(node.source))) inBrowser(node);
       },
-      MemberExpression(node) {
-        if (node.object.type !== "Identifier" || !GLOBAL_OBJECTS.has(node.object.name) || node.computed || node.property.type !== "Identifier" || !GLOBALS.has(node.property.name)) return;
-        const reference = context.sourceCode.getScope(node).references.find((item) => item.identifier === node.object);
-        if (!reference?.resolved?.defs.length) inBrowser(node);
+      CallExpression(node) {
+        if (node.callee.type === "Identifier" && node.callee.name === "require" && client(text(node.arguments[0]))) inBrowser(node);
       },
       Identifier(node) {
-        if (!GLOBALS.has(node.name)) return;
-        const reference = context.sourceCode.getScope(node).references.find((item) => item.identifier === node);
-        if (reference && !reference.resolved?.defs.length) inBrowser(node);
+        if (GLOBALS.has(node.name)) { if (global(node)) inBrowser(node); return; }
+        if (!GLOBAL_OBJECTS.has(node.name) || !global(node)) return;
+        const parent = /** @type {any} */ (node).parent;
+        if (parent.type === "UnaryExpression" && parent.operator === "typeof") return;
+        const member = parent.type === "MemberExpression" && parent.object === node;
+        const name = member && (!parent.computed || parent.property.type === "Literal") ? keyName(parent.property) : undefined;
+        if (name === undefined || GLOBALS.has(name)) inBrowser(member ? parent : node);
       },
     };
   },

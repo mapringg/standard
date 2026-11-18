@@ -30,7 +30,7 @@ export function parseName(file) {
 export function withSegment(file, segment) {
   const folder = posix.dirname(file);
   const [stem, ...parts] = posix.basename(file).split(".");
-  const at = parts.findIndex((part, index) => VARIANTS.has(part) || index === parts.length - 1);
+  const at = parts.findIndex((/** @type {string} */ part, /** @type {number} */ index) => VARIANTS.has(part) || index === parts.length - 1);
   return posix.join(folder, [stem, ...parts.slice(0, at), segment, ...parts.slice(at)].join("."));
 }
 
