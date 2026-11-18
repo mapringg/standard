@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 const PACKAGE = join(import.meta.dirname, "..");
 const OXLINT = join(PACKAGE, "node_modules/.bin/oxlint");
 
-const FRAMEWORK = { web: "next", liff: "vite", mobile: "expo", marketing: "astro" };
+const FRAMEWORK = { api: "hono", web: "next", liff: "vite", mobile: "expo", marketing: "astro" };
 
 function scaffold(files) {
   const apps = new Set(
@@ -18,7 +18,6 @@ function scaffold(files) {
   for (const app of apps) {
     if (FRAMEWORK[app])
       extra[`apps/${app}/package.json`] = JSON.stringify({ dependencies: { [FRAMEWORK[app]]: "1.0.0" } });
-    if (app === "api") extra["apps/api/src/factory.ts"] = "export const factory = 1;\n";
   }
   return extra;
 }

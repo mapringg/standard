@@ -36,7 +36,7 @@ test("repo-shape accepts the standard layout", (t) => {
       "apps/api/src/server.ts": code,
       "apps/api/src/client.ts": code,
       "apps/api/src/features/jobs/routes.ts": code,
-      "apps/email/src/factory.ts": code,
+      "apps/email/package.json": JSON.stringify({ dependencies: { hono: "1.0.0" } }),
       "apps/email/src/app.ts": code,
       "apps/email/src/lib/log.ts": code,
       "apps/web/src/features/notes/notes.server.ts": code,
@@ -91,7 +91,7 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
     }),
     [
       "apps/admin/src/app.ts | CLAUDE.md: Fold this into README.md or AGENTS.md, or delete it.",
-      "apps/admin/src/app.ts | Make the app a Hono service (src/factory.ts), or a Next, Vite, Expo or Astro app in its package.json.",
+      "apps/admin/src/app.ts | Add hono, next, vite, expo or astro to the app's package.json dependencies so the standard knows its kind.",
       "apps/admin/src/app.ts | docs/guide.md: Move this into apps/ or packages/; the top level holds only config.",
       "apps/admin/src/app.ts | packages/i18n/src/skip.ts: Delete the disable directive and fix the code, or change the standard.",
       "apps/api/src/features/tasks/helpers.ts | Move the code into the feature's routes.ts, schema.ts, db.ts or service.ts.",

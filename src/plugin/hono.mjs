@@ -1,16 +1,22 @@
 import { locate } from "./paths.mjs";
 
 const METHODS = new Set(["get", "post", "patch", "delete"]);
-const CHAIN = new Set([...METHODS, "put", "route", "use", "on", "all", "onError", "notFound", "basePath"]);
+const LOOSE = new Set(["on", "all"]);
+const CHAIN = new Set([...METHODS, ...LOOSE, "put", "route", "use", "onError", "notFound", "basePath"]);
 const RAW = new Set(["query", "queries", "param", "json", "text", "formData", "parseBody", "arrayBuffer", "blob"]);
 const RAW_BODY = new Set(["text", "arrayBuffer", "blob"]);
+const STATUS = new Set(["json", "body"]);
 const STREAMS = new Set(["streamSSE", "streamText", "stream"]);
 const OPENAPI = new Set(["openAPIRouteHandler", "openAPISpecs", "generateSpecs", "Scalar"]);
 const FUNCTION = new Set(["FunctionExpression", "ArrowFunctionExpression"]);
+const KEBAB = "[a-z]+(?:-[a-z]+)*";
+const MOUNT = new RegExp(`^/api/${KEBAB}$`);
+const PATH = new RegExp(`^/(?:${KEBAB}|:id)?$`);
+const POST_PATH = new RegExp(`^/(?:${KEBAB}|:id(?:/${KEBAB})?)?$`);
 const MAX_LINES = 10;
 
 function property(node) {
-  return node.type === "MemberExpression" && !node.computed ? node.property.name : null;
+  return node?.type === "MemberExpression" && !node.computed ? node.property.name : null;
 }
 
 function calls(node, name) {
@@ -23,12 +29,28 @@ function stringValue(node) {
   return null;
 }
 
-function inDevelopmentBranch(node, source) {
-  for (let current = node.parent; current; current = current.parent) {
-    if (["IfStatement", "ConditionalExpression", "LogicalExpression"].includes(current.type)) {
-      const test = current.type === "LogicalExpression" ? current.left : current.test;
-      if (source.getText(test).includes("development")) return true;
+function isDevelopmentTest(test) {
+  if (test?.type !== "BinaryExpression" || !["===", "!=="].includes(test.operator)) return null;
+  const sides = [test.left, test.right];
+  const env = sides.some((side) => property(side) === "NODE_ENV");
+  const value = sides.some((side) => stringValue(side) === "development");
+  return env && value ? test.operator : null;
+}
+
+function inDevelopmentBranch(node) {
+  for (let child = node, current = node.parent; current; child = current, current = current.parent) {
+    if (current.type === "IfStatement" || current.type === "ConditionalExpression") {
+      const operator = isDevelopmentTest(current.test);
+      if (operator === "===" && child === current.consequent) return true;
+      if (operator === "!==" && child === current.alternate) return true;
     }
+    if (
+      current.type === "LogicalExpression" &&
+      current.operator === "&&" &&
+      child === current.right &&
+      isDevelopmentTest(current.left) === "==="
+    )
+      return true;
   }
   return false;
 }
@@ -50,6 +72,19 @@ function isContext(node) {
   return false;
 }
 
+function chainRoot(node) {
+  let current = node;
+  while (current?.type === "CallExpression" && current.callee.type === "MemberExpression") {
+    if (property(current.callee) === "createApp") return true;
+    current = current.callee.object;
+  }
+  return current?.type === "Identifier" ? current.name : false;
+}
+
+function validates(node, target) {
+  return calls(node, "v") && stringValue(node.arguments[0]) === target;
+}
+
 export default {
   meta: {
     type: "problem",
@@ -59,73 +94,64 @@ export default {
     const where = locate(context.filename);
     if (where?.kind !== "api") return {};
     const routes = /^src\/features\/[^/]+\/routes\.ts$/.test(where.local);
-    const source = context.sourceCode;
-    const webhook = where.local.startsWith("src/features/webhooks/");
+    const app = where.local === "src/app.ts";
+    const webhook = where.feature === "webhooks";
+    const protocol = where.feature === "oauth";
+    const report = (node, message) => context.report({ node, message });
+    const routers = new Set();
+    const isRouter = (object) => {
+      const root = chainRoot(object);
+      return root === true || routers.has(root);
+    };
+    const route = (node, method) => {
+      if (LOOSE.has(method)) {
+        report(node.callee.property, "Register each route with get, post, patch or delete.");
+        return;
+      }
+      const path = stringValue(node.arguments[0]);
+      if (path === null) report(node.arguments[0] ?? node, "Write the route path as a string literal.");
+      else if (!(method === "post" ? POST_PATH : PATH).test(path))
+        report(node.arguments[0], "Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path.");
+      if (!node.arguments.some((arg) => calls(arg, "describeRoute")))
+        report(node.callee.property, "Add describeRoute with the response schemas from schema.ts to this route.");
+      if (node.arguments.some((arg) => validates(arg, "form")) && !node.arguments.some((arg) => calls(arg, "bodyLimit")))
+        report(node.callee.property, 'Add bodyLimit({ maxSize }) before v("form", schema) to cap the upload size.');
+      if (protocol) return;
+      const handler = node.arguments.at(-1);
+      if (!FUNCTION.has(handler?.type)) report(handler ?? node, "Write the handler inline as the last argument.");
+      else if (handler.loc.end.line - handler.loc.start.line + 1 > MAX_LINES)
+        report(handler, `Move the logic into db.ts or service.ts so the handler fits in ${MAX_LINES} lines.`);
+    };
     return {
+      VariableDeclarator(node) {
+        if (node.id.type === "Identifier" && chainRoot(node.init) === true) routers.add(node.id.name);
+      },
       ExpressionStatement(node) {
         const call = node.expression;
         if (
-          call.type !== "CallExpression" ||
-          !CHAIN.has(property(call.callee)) ||
-          call.callee.object.type !== "Identifier"
+          (routes || app) &&
+          call.type === "CallExpression" &&
+          CHAIN.has(property(call.callee)) &&
+          call.callee.object.type === "Identifier" &&
+          !isContext(call.callee.object)
         )
-          return;
-        if (!routes && where.local !== "src/app.ts") return;
-        context.report({ node, message: "Build each router as one chain: factory.createApp().get(...).post(...)." });
+          report(node, "Build each router as one chain: factory.createApp().get(...).post(...).");
       },
       CallExpression(node) {
         const method = property(node.callee);
         const object = node.callee.object;
-        if (method === "json" && isContext(object) && node.arguments.length < 2 && !inStream(node)) {
-          context.report({ node, message: "Pass the status explicitly: c.json(body, 200)." });
-        }
-        if (
-          RAW.has(method) &&
-          object?.type === "MemberExpression" &&
-          property(object) === "req" &&
-          !(webhook && RAW_BODY.has(method))
-        ) {
-          context.report({
-            node,
-            message: "Validate with v() from @/lib/validate and read the input with c.req.valid().",
-          });
-        }
-        if (node.callee.type === "Identifier" && OPENAPI.has(node.callee.name) && !inDevelopmentBranch(node, source)) {
-          context.report({
-            node,
-            message: "Mount the OpenAPI spec and docs only inside a NODE_ENV development check.",
-          });
-        }
-        if (method === "route" && where.local === "src/app.ts") {
+        const onContext = isContext(object);
+        if (STATUS.has(method) && onContext && node.arguments.length < 2 && !inStream(node))
+          report(node, `Pass the status explicitly: c.${method}(body, 200).`);
+        if (RAW.has(method) && property(object) === "req" && !(webhook && RAW_BODY.has(method)))
+          report(node, "Validate with v() from @/lib/validate and read the input with c.req.valid().");
+        if (node.callee.type === "Identifier" && OPENAPI.has(node.callee.name) && !inDevelopmentBranch(node))
+          report(node, 'Mount the OpenAPI spec and docs only inside env.NODE_ENV === "development".');
+        if (method === "route" && app) {
           const path = stringValue(node.arguments[0]);
-          if (path !== null && !/^\/api\/[a-z]+(?:-[a-z]+)*$/.test(path))
-            context.report({ node: node.arguments[0], message: "Mount routers at /api/<plural-kebab>." });
+          if (path === null || !MOUNT.test(path)) report(node.arguments[0] ?? node, "Mount routers at /api/<plural-kebab>.");
         }
-        if (!routes || !METHODS.has(method) || stringValue(node.arguments[0]) === null) return;
-        const path = stringValue(node.arguments[0]);
-        const shape =
-          method === "post"
-            ? /^\/(?:[a-z]+(?:-[a-z]+)*|:id(?:\/[a-z]+(?:-[a-z]+)*)?)?$/
-            : /^\/(?:[a-z]+(?:-[a-z]+)*|:id)?$/;
-        if (!shape.test(path))
-          context.report({
-            node: node.arguments[0],
-            message: "Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path.",
-          });
-        if (!node.arguments.some((arg) => calls(arg, "describeRoute")))
-          context.report({
-            node: node.callee.property,
-            message: "Add describeRoute with the response schemas from schema.ts to this route.",
-          });
-        const handler = node.arguments.at(-1);
-        if (!FUNCTION.has(handler.type))
-          context.report({ node: handler, message: "Write the handler inline as the last argument." });
-        else if (handler.loc.end.line - handler.loc.start.line + 1 > MAX_LINES) {
-          context.report({
-            node: handler,
-            message: `Move the logic into db.ts or service.ts so the handler fits in ${MAX_LINES} lines.`,
-          });
-        }
+        if (routes && (METHODS.has(method) || LOOSE.has(method)) && isRouter(object)) route(node, method);
       },
     };
   },

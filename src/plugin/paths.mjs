@@ -29,17 +29,15 @@ export function appKind(root, base) {
   const key = `${root}\0${base}`;
   if (kinds.has(key)) return kinds.get(key);
   const dir = join(root ?? "", base);
+  const path = join(dir, "package.json");
+  const manifest = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+  const deps = { ...manifest.dependencies, ...manifest.devDependencies };
   let kind = null;
-  if (existsSync(join(dir, "src/factory.ts"))) kind = "api";
-  else {
-    const path = join(dir, "package.json");
-    const manifest = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
-    const deps = { ...manifest.dependencies, ...manifest.devDependencies };
-    if (deps.next) kind = "web";
-    else if (deps.astro) kind = "marketing";
-    else if (deps.expo) kind = "mobile";
-    else if (deps.vite) kind = "liff";
-  }
+  if (deps.next) kind = "web";
+  else if (deps.astro) kind = "marketing";
+  else if (deps.expo) kind = "mobile";
+  else if (deps.vite) kind = "liff";
+  else if (manifest.dependencies?.hono) kind = "api";
   kinds.set(key, kind);
   return kind;
 }

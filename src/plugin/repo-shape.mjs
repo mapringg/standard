@@ -126,7 +126,7 @@ function fileProblems(rel, root, localized) {
   if (parts.length > 1 && !TOP_DIRS.has(parts[0]))
     return ["Move this into apps/ or packages/; the top level holds only config."];
   if (parts[0] === "apps" && parts.length > 2 && !kind)
-    return ["Make the app a Hono service (src/factory.ts), or a Next, Vite, Expo or Astro app in its package.json."];
+    return ["Add hono, next, vite, expo or astro to the app's package.json dependencies so the standard knows its kind."];
   if (parts[0] === "packages" && parts.length > 2 && !PACKAGES.has(pkg))
     return [`Move this into an app's lib/; packages/ holds only ${[...PACKAGES].join(" and ")}.`];
   if (/\.mdx?$/.test(name)) {

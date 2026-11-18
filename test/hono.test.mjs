@@ -33,6 +33,23 @@ export const users = app;
   .createApp()
   .post("/line", describeRoute({}), async (c) => c.json({ body: await c.req.text() }, 200));
 `,
+    "apps/api/src/features/files/routes.ts": `${head}const cache = new Map();
+export const files = factory
+  .createApp()
+  .get("/:id", describeRoute({}), async (c) => c.body(cache.get("x")))
+  .post("/", describeRoute({}), v("form", {}), async (c) => c.json(c.req.valid("form"), 201))
+  .post("/upload", describeRoute({}), bodyLimit({ maxSize: 1 }), v("form", {}), async (c) => c.body(null, 204))
+  .get(\`/\${"x"}\`, describeRoute({}), async (c) => c.json({}, 200))
+  .all("/any", describeRoute({}), async (c) => c.json({}, 200));
+`,
+    "apps/api/src/features/oauth/routes.ts": `${head}export const oauth = factory
+  .createApp()
+  .onError((error, c) => c.json({ error: "server_error" }, 500))
+  .post("/token", describeRoute({}), async (c) => {
+${long}
+    return c.json({ access_token: "x" }, 200);
+  });
+`,
     "apps/api/src/app.ts": `import { openAPIRouteHandler } from "hono-openapi";
 import { factory } from "@/factory";
 import { tasks } from "@/features/tasks/routes";
@@ -40,6 +57,8 @@ import { env } from "@/lib/env";
 const base = factory.createApp().route("/api/tasks", tasks).route("/api/v1/users", tasks);
 export const app = env.NODE_ENV === "development" ? base.get("/api/openapi.json", openAPIRouteHandler(base)) : base;
 export const leaked = base.get("/api/docs", openAPIRouteHandler(base));
+export const inverted = env.NODE_ENV !== "development" ? base.get("/api/spec", openAPIRouteHandler(base)) : base;
+export const named = env.NODE_ENV === "development-like" && openAPIRouteHandler(base);
 `,
   });
   const found = only(result, "hono")
@@ -47,7 +66,13 @@ export const leaked = base.get("/api/docs", openAPIRouteHandler(base));
     .sort();
   deepEqual(found, [
     "apps/api/src/app.ts: Mount routers at /api/<plural-kebab>",
-    "apps/api/src/app.ts: Mount the OpenAPI spec and docs only inside a NODE_ENV development check",
+    "apps/api/src/app.ts: Mount the OpenAPI spec and docs only inside env",
+    "apps/api/src/app.ts: Mount the OpenAPI spec and docs only inside env",
+    "apps/api/src/app.ts: Mount the OpenAPI spec and docs only inside env",
+    'apps/api/src/features/files/routes.ts: Add bodyLimit({ maxSize }) before v("form", schema) to cap the upload size',
+    "apps/api/src/features/files/routes.ts: Pass the status explicitly: c",
+    "apps/api/src/features/files/routes.ts: Register each route with get, post, patch or delete",
+    "apps/api/src/features/files/routes.ts: Write the route path as a string literal",
     "apps/api/src/features/notes/routes.ts: Add describeRoute with the response schemas from schema",
     "apps/api/src/features/notes/routes.ts: Pass the status explicitly: c",
     "apps/api/src/features/users/routes.ts: Add describeRoute with the response schemas from schema",
