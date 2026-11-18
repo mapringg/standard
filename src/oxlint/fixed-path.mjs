@@ -46,10 +46,10 @@ function chain(node) {
 }
 
 /**
- * @param {{ owner: string, modules: string[], globals: string[], properties: string[] }} definition
+ * @param {{ owner: string, modules: string[], globals: string[], properties: string[], note?: string }} definition
  * @returns {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]}
  */
-export function fixedPathRule({ owner, modules, globals, properties }) {
+export function fixedPathRule({ owner, modules, globals, properties, note }) {
   return {
     meta: { type: "problem", docs: { description: `Only ${owner} ${modules.length ? `imports ${modules.join(", ")}` : `uses ${[...globals, ...properties].join(", ")}`}.`, fix: `Import the exports of ${owner}.` }, schema: [], messages: { owner: "{{fix}}" } },
     create(context) {
@@ -58,7 +58,7 @@ export function fixedPathRule({ owner, modules, globals, properties }) {
       const path = relative(root, filename).split(sep).join("/");
       if (NOT_PRODUCT.test(productPath(context)) || matchesGlob(path.replace(/\.(?:server|browser)\.ts$/, ".ts"), owner)) return {};
       /** @param {Node} node */
-      const report = (node) => context.report({ node, messageId: "owner", data: { fix: ownerMessage(root, owner) } });
+      const report = (node) => context.report({ node, messageId: "owner", data: { fix: note ? `${ownerMessage(root, owner)} ${note}` : ownerMessage(root, owner) } });
       /** @param {Node} node @param {unknown} value */
       const checkModule = (node, value) => {
         if (typeof value === "string" && modules.some((pattern) => matchesGlob(value, pattern))) report(node);

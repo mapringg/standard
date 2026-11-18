@@ -1,4 +1,5 @@
 import { directives, isFunction, moduleExports, statements, walk } from "../functions.mjs";
+import { projectFile } from "../browser.mjs";
 
 /** @typedef {import("../functions.mjs").Node} Node */
 
@@ -10,7 +11,7 @@ const root = (node) => node?.type === "Identifier" ? node.name : node?.type === 
 
 export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["run"]>[1]} */ ({
   meta: {
-    type: "problem", docs: { description: "Every Server Action is an inline exported function that parses each argument with an imported or module schema first.", fix: "Parse each argument with schema.parse before anything else." },
+    type: "problem", docs: { description: "Every Server Action is an inline exported function that parses each argument first with a schema from the project's own files or a module const built from the validator.", fix: "Parse each argument with schema.parse before anything else." },
     schema: [],
     messages: {
       schema: "Parse {{params}} with a schema before anything else, such as const input = schema.parse(raw), or schema.parse(Object.fromEntries(formData)) for a form, using the validator this file imports: zod, zod/mini or valibot.",
@@ -23,7 +24,7 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
     const namespaces = new Set();
     /** @type {Set<string>} */
     const functions = new Set();
-    /** @type {Set<string>} Imported bindings, and module-level consts built from a validator namespace: the only receivers a parse may use. */
+    /** @type {Set<string>} Bindings imported from the project's own files, and module-level consts built from a validator namespace: the only receivers a parse may use. */
     const schemas = new Set();
     /** @param {Node} node */
     const schema = (node) => node?.type === "Identifier" && schemas.has(node.name);
@@ -59,7 +60,7 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
         const validator = ZOD.test(source) || source === "valibot";
         zod ||= ZOD.test(source);
         for (const specifier of node.specifiers) {
-          if (!validator) { if (node.importKind !== "type") schemas.add(specifier.local.name); continue; }
+          if (!validator) { if (node.importKind !== "type" && projectFile(context.filename, source)) schemas.add(specifier.local.name); continue; }
           if (specifier.type !== "ImportSpecifier") namespaces.add(specifier.local.name);
           else {
             const name = specifier.imported.type === "Identifier" ? specifier.imported.name : specifier.imported.value;

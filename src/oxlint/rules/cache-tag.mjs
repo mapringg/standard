@@ -12,7 +12,7 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
     /** @param {Node} statement */
     const tagged = (statement) => {
       const expression = statement.type === "ExpressionStatement" ? statement.expression : undefined;
-      return expression?.type === "CallExpression" && expression.callee.type === "Identifier" && tags.has(expression.callee.name) && expression.arguments.length > 0;
+      return expression?.type === "CallExpression" && expression.callee.type === "Identifier" && tags.has(expression.callee.name) && expression.arguments.length > 0 && expression.arguments[0].type !== "SpreadElement";
     };
     return {
       ImportDeclaration(node) {

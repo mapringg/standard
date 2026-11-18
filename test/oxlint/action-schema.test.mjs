@@ -6,6 +6,7 @@ const S = "apps/web/src";
 
 test("a Server Action parses each argument with the imported validator before anything else", (t) => {
   const diagnostics = lint(t, "action-schema", {
+    [`${S}/schema.ts`]: 'import { z } from "zod"; export const input = z.string(); export const S = z.string();',
     [`${S}/zod.actions.ts`]: '"use server";\nimport { z } from "zod/mini";\nimport { input } from "./schema";\nconst local = z.object({ id: z.string() });\nexport async function rename(raw: unknown, other: unknown, form: FormData) {\n  const { id } = input.parse(raw);\n  const next = await z.parseAsync(input, other);\n  const fields = local.parse(Object.fromEntries(form));\n  return [id, next, fields];\n}\nexport const none = async () => 1;\nexport type Input = string;\n',
     [`${S}/valibot.actions.ts`]: '"use server";\nimport * as v from "valibot";\nimport { parse } from "valibot";\nimport { S } from "./schema";\nexport async function a(raw) { const x = v.parse(S, raw); return x; }\nexport async function b(raw) { parse(S, raw); return raw; }\n',
     [`${S}/late.actions.ts`]: '"use server";\nimport { z } from "zod";\nimport { S } from "./schema";\nexport async function late(raw) { const client = await connect(); return S.parse(raw); }\nexport default async function first(raw, other) { S.parse(raw); return other; }\nexport const arrow = async ({ id }) => S.parse(id);\n',

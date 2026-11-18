@@ -3,6 +3,7 @@ import { posix } from "node:path";
 import { productPath } from "../fixed-path.mjs";
 import { NOT_PRODUCT } from "../../checks/support/packages.mjs";
 import { directives } from "../functions.mjs";
+import { projectFile, staticText } from "../browser.mjs";
 
 const OWNER = /(?:^|\/)(?:src\/)?lib\/ai(?:\.server|\.browser)?(?:\.[cm]?[jt]sx?)?$/;
 const ROUTE = /(?:^|\/)route\.[cm]?[jt]sx?$/;
@@ -12,8 +13,8 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
   create(context) {
     const path = productPath(context);
     if (NOT_PRODUCT.test(path) || ROUTE.test(path) || /(?:^|\/)src\/lib\/ai(?:\.server|\.browser)?\.[cm]?[jt]sx?$/.test(path)) return {};
-    /** @param {string} specifier */
-    const owner = (specifier) => OWNER.test(specifier.startsWith(".") ? posix.join(posix.dirname(path), specifier) : specifier);
+    /** @param {string | undefined} specifier Whether a specifier names src/lib/ai, as written or as it resolves through aliases and package imports. */
+    const owner = (specifier) => specifier !== undefined && (OWNER.test(specifier.startsWith(".") ? posix.join(posix.dirname(path), specifier) : specifier) || OWNER.test(projectFile(context.filename, specifier)?.split(/[\\/]/).join("/") ?? ""));
     /** @type {{ node: any, names: string }[]} */
     const sites = [];
     return {
@@ -29,7 +30,8 @@ export default /** @type {Parameters<import("oxlint/plugins-dev").RuleTester["ru
         if (node.exportKind !== "type" && owner(node.source.value)) sites.push({ node, names: `the exports of ${node.source.value}` });
       },
       ImportExpression(node) {
-        if (node.source.type === "Literal" && typeof node.source.value === "string" && owner(node.source.value)) sites.push({ node, names: `the exports of ${node.source.value}` });
+        const specifier = staticText(node.source);
+        if (owner(specifier)) sites.push({ node, names: `the exports of ${specifier}` });
       },
       "Program:exit"(program) {
         if (directives(program).includes("use server")) return;
