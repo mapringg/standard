@@ -1,6 +1,8 @@
 import { readBudgets } from "./doc-budgets.mjs";
 import { posix } from "node:path";
 
+export const API_MODULES = ["**/src/lib/api/**"];
+
 /** @param {import("./repo.mjs").Repo} repo */
 export function defaults(repo) {
   if (repo.config.allow === undefined) return repo.config;
@@ -18,7 +20,7 @@ export function defaults(repo) {
     pr: reactApps.length ? { ...repo.config.pr, screenshots: { when: [...manifests.filter(({ value }) => value.dependencies?.react || value.devDependencies?.react || value.peerDependencies?.react).flatMap(({ path }) => ["ts", "tsx", "js", "jsx", "css"].map((ext) => posix.join(posix.dirname(path), `**/*.${ext}`))), ...["test", "spec", "stories"].map((kind) => `!**/*.${kind}.*`), ...["__tests__", "test", "tests", "__fixtures__", "fixture", "fixtures", "scripts", "evals"].map((folder) => `!**/${folder}/**`), "!**/*.config.*"], uploader: "scripts/upload-evidence.mjs" } } : repo.config.pr,
     clientData: reactApps.filter(({ path, value }) => (value.dependencies?.vite || value.devDependencies?.vite) && !value.dependencies?.next && !value.devDependencies?.next && files.some((file) => posix.dirname(file) === posix.dirname(path) && /^(?:index\.html|vite\.config\.[cm]?[jt]s)$/.test(posix.basename(file)))).map(({ path }) => ({ app: posix.dirname(path), reason: /** @type {const} */ ("unreachable") })),
     budgets: readBudgets(repo),
-    apiModules: ["**/src/lib/api/**"], cachedModules: ["**/*.cache.ts"],
+    apiModules: API_MODULES, cachedModules: ["**/*.cache.ts"],
     boundaries: {
       modules: [{ folders: ["**/src/*", "**/src/features/*", "**/src/components/*"], entries: ["index", "index.server", "routes"], open: ["**/src/lib", "**/src/components/ui"], except: [] }],
       forbid: nextApps.flatMap((app) => [

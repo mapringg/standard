@@ -604,8 +604,10 @@ Every folder under an app's `src/`, `src/features/` and `src/components/` is a m
 
 | Rule | What it requires |
 | --- | --- |
-| `standard/server-entry` | Code that ships to the browser, a `"use client"` or `.browser` file or anything one reaches, imports no `index.server` entry. |
-| `standard/index-exports` | A plain `index` imports and re-exports no `*.server.*` file and no `src/lib/api` module. Those go in `index.server`. |
+| `standard/server-entry` | Code that ships to the browser, a `"use client"` or `.browser` file or anything one reaches, imports no `*.server.*` file. Each import, re-export, `require()` and static `import()` is resolved through relative paths, tsconfig paths and package.json `imports`, so an alias or a re-export chain reaches the same verdict. |
+| `standard/index-exports` | A plain `index` imports and re-exports no `*.server.*` file and no API module, the derived `**/src/lib/api/**` or a legacy `api-modules` list. Those go in `index.server`. This is the early per-file guard; `standard/server-entry` follows chains. |
+
+The plugin builds the browser graph from the files on disk. In an editor it checks for changed files at most once a second and rebuilds then, so an unsaved edit counts only after it is saved, and a result can lag for up to a second. `standard check` and CI runs of oxlint start fresh and are authoritative.
 
 ### Configuration in 0.16.0
 

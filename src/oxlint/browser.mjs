@@ -1,4 +1,5 @@
-import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { ResolverFactory } from "oxc-resolver";
 import { parseSync } from "oxc-parser";
@@ -23,8 +24,21 @@ export function projectFile(from, specifier) {
 /** @param {any} node @returns {string | undefined} The text of a string literal or a template without expressions. */
 export const staticText = (node) => node?.type === "Literal" && typeof node.value === "string" ? node.value : node?.type === "TemplateLiteral" && node.expressions.length === 0 ? node.quasis[0].value.cooked : undefined;
 
-/** @type {Map<string, Set<string>>} */
+/** @type {Map<string, { browser: Set<string>, signature: string, checked: number }>} */
 const graphs = new Map();
+const SERVER = /\.server\.[^/\\]+$/;
+/** How long a graph serves before its files are checked for changes again, in milliseconds. */
+const RECHECK = 1000;
+
+/** @param {string} root @param {string[]} paths @returns {string} A hash of every file's path, size and modification time. */
+function signatureOf(root, paths) {
+  const hash = createHash("sha1");
+  for (const path of paths) {
+    const stat = statSync(join(root, path), { throwIfNoEntry: false });
+    hash.update(`${path}\0${stat?.size}\0${stat?.mtimeMs}\n`);
+  }
+  return hash.digest("hex");
+}
 
 /** @param {{ filename: string, cwd: string }} context */
 export function shipsToBrowser(context) {
@@ -33,8 +47,15 @@ export function shipsToBrowser(context) {
     if (existsSync(join(folder, ".git"))) { root = folder; break; }
     if (dirname(folder) === folder) break;
   }
-  if (!graphs.has(root)) {
-    const options = { cwd: root, exclude: ["**/node_modules/**", "**/.git/**", "**/.next/**", "**/dist/**"] };
+  const options = { cwd: root, exclude: ["**/node_modules/**", "**/.git/**", "**/.next/**", "**/dist/**"] };
+  const cached = graphs.get(root);
+  const now = Date.now();
+  if (cached && now - cached.checked < RECHECK) return cached.browser.has(context.filename);
+  const files = globSync(["**/package.json", "**/tsconfig*.json", "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"], options).sort();
+  const signature = signatureOf(root, files);
+  if (cached?.signature === signature) { cached.checked = now; return cached.browser.has(context.filename); }
+  shared?.clearCache();
+  {
     const manifests = new Map(globSync("**/package.json", options).map((path) => [path, JSON.parse(readFileSync(join(root, path), "utf8"))]));
     const paths = new Set(manifests.keys());
     const resolver = new ResolverFactory({ tsconfig: "auto", conditionNames: ["browser", "import", "default"], mainFields: ["browser", "module", "main"], extensions: [".ts", ".tsx", ".mts", ".js", ".jsx", ".mjs"], extensionAlias: { ".js": [".ts", ".tsx", ".js"], ".mjs": [".mts", ".mjs"] } });
@@ -55,15 +76,15 @@ export function shipsToBrowser(context) {
         if (!node || typeof node !== "object") return;
         const { type, source, importKind, exportKind, callee, arguments: args } = /** @type {{ type?: string, source?: { value?: unknown }, importKind?: string, exportKind?: string, callee?: { name?: string }, arguments?: { value?: unknown }[] }} */ (node);
         if (importKind === "type" || exportKind === "type") return;
-        const value = source?.value ?? (type === "CallExpression" && callee?.name === "require" ? args?.[0]?.value : undefined);
+        const value = staticText(source) ?? (type === "CallExpression" && callee?.name === "require" ? staticText(args?.[0]) : undefined);
         if (typeof value === "string") imports.push(value);
         Object.values(node).forEach(visit);
       }
       visit(program);
       edges.set(absolute, imports.flatMap((specifier) => { const path = resolver.resolveFileSync(absolute, specifier).path; return path && !path.includes("/node_modules/") ? [path] : []; }));
     }
-    for (const file of browser) for (const target of edges.get(file) ?? []) if (edges.has(target)) browser.add(target);
-    graphs.set(root, browser);
+    for (const file of browser) for (const target of edges.get(file) ?? []) if (edges.has(target) && !SERVER.test(target)) browser.add(target);
+    graphs.set(root, { browser, signature, checked: now });
+    return browser.has(context.filename);
   }
-  return graphs.get(root)?.has(context.filename) ?? false;
 }

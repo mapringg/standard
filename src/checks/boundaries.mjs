@@ -27,6 +27,7 @@ import { parseSource, sourceFiles } from "./support/sources.mjs";
  * @property {string} specifier
  * @property {string} target
  * @property {() => string | null} unaliased The repo file the specifier resolves to without tsconfig paths, as a package name resolves outside the project.
+ * @property {boolean} [client] Whether the importer ships to the browser by its own mark: a "use client" directive or a .browser. name.
  *
  * @typedef {{ file: string, specifier: string, rule: string, fix: string }} Problem
  * @typedef {{ workspaces: readonly Workspace[], boundaries: Boundaries }} Context
@@ -142,14 +143,15 @@ const RULES = [
   },
   {
     name: "modules",
-    check({ file, target }, { workspaces, boundaries }) {
+    check({ file, target, client }, { workspaces, boundaries }) {
       if (workspaceOf(workspaces, target) !== workspaceOf(workspaces, file)) return null;
       const owner = moduleOf(boundaries.modules, target);
       if (owner === null || owner.open || matches(file, owner.rule.except)) return null;
       if (moduleOf(boundaries.modules, file)?.dir === owner.dir) return null;
       const name = posix.basename(target, posix.extname(target));
       if (posix.dirname(target) === owner.dir && owner.rule.entries.includes(name)) return null;
-      const entries = owner.rule.entries.map((entry) => `${owner.dir}/${entry}`).join(" or ");
+      const feature = posix.basename(posix.dirname(owner.dir)) === "features";
+      const entries = owner.rule.entries.filter((entry) => !(entry === "routes" && !feature || entry === "index.server" && client)).map((entry) => `${owner.dir}/${entry}`).join(" or ");
       return `${target} is inside the module ${owner.dir}. Import it through ${entries}, and export what you need there.`;
     },
   },
@@ -404,7 +406,7 @@ function requestsOf(program, file) {
  * @param {string} file
  * @param {string} text
  * @param {string} absolute
- * @returns {{ requests: Request[] } | { error: string }} Every import with a fixed specifier. An import() or require() of a computed value has none, as for TypeScript, and neither has a require that createRequire makes from a computed path.
+ * @returns {{ requests: Request[], client: boolean } | { error: string }} Every import with a fixed specifier, and whether the file marks itself as browser code. An import() or require() of a computed value has none, as for TypeScript, and neither has a require that createRequire makes from a computed path.
  */
 function importsOf(file, text, absolute) {
   const { errors, program } = parseSource(file, text);
@@ -412,7 +414,8 @@ function importsOf(file, text, absolute) {
   /** @type {Map<string, Request>} */
   const requests = new Map();
   for (const request of requestsOf(program, absolute)) requests.set(`${request.kind} ${request.base ?? ""} ${request.specifier}`, request);
-  return { requests: [...requests.values()] };
+  const directives = program.body.flatMap((/** @type {any} */ node) => node.type === "ExpressionStatement" && node.directive ? [node.directive] : []);
+  return { requests: [...requests.values()], client: directives.includes("use client") || /\.browser\.[^/]+$/.test(file) };
 }
 
 /**
@@ -490,7 +493,7 @@ export async function scan(repo) {
           return path === "builtin" ? null : inRepo(path);
         };
         for (const rule of RULES) {
-          const fix = rule.check({ file, specifier, target, unaliased }, context);
+          const fix = rule.check({ file, specifier, target, unaliased, client: found.client }, context);
           if (fix) problems.push({ file, specifier, rule: rule.name, fix });
         }
         continue;
