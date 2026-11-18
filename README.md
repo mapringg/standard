@@ -9,7 +9,7 @@ Add the package at a tag and install its hooks when the repository installs:
 ```json
 {
   "scripts": { "prepare": "standard install" },
-  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.15" }
+  "devDependencies": { "@mapringg/standard": "github:mapringg/standard#v0.14.16" }
 }
 ```
 
@@ -51,6 +51,7 @@ Add the package at a tag and install its hooks when the repository installs:
 | `client-data` | Only a file that `client-data` lists, with its reason, calls `useSWR`, from the app's `src/lib/swr.ts` under any of its names or from swr itself. A `"use client"` file that it does not list reads no `fetch` or `XMLHttpRequest`, imports no `ky` or `axios`, and imports no module that `api-modules` matches, directly or through modules without a directive. Tests, stories and fixtures are exempt. | Read data in a Server Component and pass it as props, and write through a Server Action, or list the file in `client-data` with why the browser must load it. | `client-data`, `api-modules` | 0.14.13 | no |
 | `route-await` | The default export of a Next `app/**/page.*` or `app/**/layout.*` awaits nothing but its `params` and `searchParams` props, through any local or destructuring that holds them. Awaits inside nested functions, other exports such as `generateMetadata`, and tests are not counted. | Move the read into a small async component that awaits it inside `<Suspense>`, or start the request without `await` and pass the promise down. | none | 0.14.14 | no |
 | `use-promise` | In a `"use client"` file, React's `use` reads a prop of an exported component or hook, an element of a list one of these holds, a parameter whose callers in the file pass one of these, the result of a function from a module that `cached-modules` lists, or a value made once at module level, such as a context. It never reads a call or `new` that the render makes, through any local. A value whose origin the check cannot trace fails. | Take the promise as a prop from a Server Component, or call a function from a module that `cached-modules` lists. | `cached-modules` | 0.14.15 | no |
+| `suspense-errors` | A `<Suspense>` in a file under a Next app's `app` folder, and each `loading.*` there, sits under an error boundary: an `error.*` in its route segment or a parent, a `global-error.*` at the app root, or a component around it in the same file that `error-boundaries` lists or `catchError` makes. A layout's or template's own segment's `error.*` does not count. | Add an `error.tsx` to the segment or a parent, or a `global-error.tsx` for the root layout, or wrap the `<Suspense>` in a listed or `catchError` error boundary. | `error-boundaries` | 0.14.16 | no |
 | `no-comments` | Source holds no comments except reasoned directives, `SAFETY:` above a type assertion, `See:` pointers to a doc or one of its headings, and a leading `SPDX-License-Identifier` or `@license` tag that names a license expression alone. An `.astro` component's markup holds no HTML comment, and its expressions follow the same rules. `next-env.d.ts` and files that `.gitattributes` marks `linguist-generated` or `linguist-vendored` are skipped. | Move the why into a name, test or type, or into a doc that a `See:` comment points at. For a generated file, mark its path `linguist-generated` in `.gitattributes`; for third-party code with a license notice, mark it `linguist-vendored`. | none | 0.13.0 | yes |
 <!-- explain:end -->
 
@@ -365,6 +366,20 @@ Known limits:
 
 `use-promise` keeps a baseline. Add it to `pending` in the pin bump to 0.14.15, then start the baseline with `standard check use-promise --init` in the pull request that removes it.
 
+`suspense-errors` enforces the fourth step. A `<Suspense>` in a file under a Next app's `app` or `src/app` folder needs an error boundary above it. So does a `loading.*` file there, since Next wraps its segment in a `<Suspense>` with it as the fallback. Any of these counts:
+
+- an `error.*` file in the file's folder or a parent folder, up to the `app` folder
+- a `global-error.*` file in the `app` folder
+- a component around the `<Suspense>` in the same file that `error-boundaries` lists, or that `catchError` from `next/error` makes in that file, such as `const Catch = catchError(Fallback)`
+
+A segment's `error.*` does not catch errors in that segment's own layout or template. For a `<Suspense>` in a `layout.*` or `template.*`, the check therefore starts at the parent folder, and for the root layout only `global-error.*` or a boundary in the file counts. A segment's `error.*` does catch its own `loading.*`. The check finds `Suspense` through a named, aliased, namespace or default import of `react`. Each `<Suspense>` is one finding, and the fix lists every line, with the column where a line holds more than one. A `catchError` boundary made in another file counts once `error-boundaries` lists its export. A boundary that a parent layout renders around `{children}` does not count, so add an `error.tsx` to that segment instead.
+
+```json
+{ "error-boundaries": ["react-error-boundary#ErrorBoundary", "apps/web/src/components/error-boundary.tsx#ErrorBoundary"] }
+```
+
+An entry is a package or a repository file, then `#` and the export. The check resolves a repository file through the import, tsconfig `paths` included. The check reads only files under the `app` folder, because a file's folder there is its route segment. A shared component outside the `app` folder can render in any segment, so review checks its `<Suspense>`. `suspense-errors` keeps a baseline. Add it to `pending` in the pin bump to 0.14.16, then start the baseline with `standard check suspense-errors --init` in the pull request that removes it.
+
 `no-comments` fails a comment in source. A name, a test name or a type carries the why. A decision that an agent would otherwise undo goes under a heading in a doc, and a comment points at the doc. The check reads every `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs` and `.astro` file that git tracks outside `node_modules`, `.d.ts` files included. It reads an `.astro` component's frontmatter and scripts as `banned` does, and the code in its markup expressions and attribute expressions through the Astro compiler, so a comment in any of them is judged like a comment in a `.ts` file. An HTML comment in the markup always fails, since it ships to every visitor; that includes conditional and bogus comments such as `<?x?>`. Markup text, `is:raw` content and a decoded quoted `set:html` value reach the browser as written, so the check parses each with the parse5 HTML parser inside the elements around it, as a browser without JavaScript does, and fails each comment the parser finds. So `<![CDATA[ ]]>` in SVG or MathML is text and passes, a comment in an SVG `<title>` or `<style>` fails, and `<!--` in an HTML `<title>`, `<textarea>` or `<style>` is text and passes. Text in a script a browser does not run, such as `application/ld+json`, and in an attribute string is not markup, so a comment-like run of characters there passes. It has no settings. These comments pass:
 
 | Comment | Passes when |
@@ -525,4 +540,4 @@ mkdir -p .standard && git mv standard.json .standard/config.json
 }
 ```
 
-`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticket-prefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one. `boundaries` holds the `modules` and `forbid` rules of the `boundaries` check. `client-data` and `api-modules` configure the `client-data` check, and `cached-modules` configures `use-promise`.
+`hooks` lists shell lines that run from the repository root, in order, and stop at the first failure. `pending` lists checks the repository has not adopted yet. A pending check does not run, and the list only shrinks. `pr.ticket-prefix` is the tracker key for the `Ticket:` line; leave it out when the repository has no tickets. `pr.screenshots` turns on `pr-screenshot`: `when` lists the globs of files that need a screenshot, and `uploader` is the repository path of the script that uploads one. `boundaries` holds the `modules` and `forbid` rules of the `boundaries` check. `client-data` and `api-modules` configure the `client-data` check, `cached-modules` configures `use-promise`, and `error-boundaries` configures `suspense-errors`.
