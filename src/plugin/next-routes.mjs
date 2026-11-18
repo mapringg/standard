@@ -35,7 +35,11 @@ export default {
     const label = `${file}.tsx`;
     return {
       AwaitExpression(node) {
-        if (!insideFunction(node)) context.report({ node, message: `No top-level await in ${label}.` });
+        if (!insideFunction(node))
+          context.report({
+            node,
+            message: `Move the top-level await out of ${label} into a feature component inside <Section>.`,
+          });
       },
       Program(program) {
         const component = defaultFunction(program);
@@ -43,7 +47,7 @@ export default {
         if (component.async)
           context.report({
             node: component,
-            message: `${label} is synchronous. Move async work into a feature server component inside <Section>.`,
+            message: `Make ${label} synchronous and move async work into a feature component inside <Section>.`,
           });
         const props = component.params?.[0];
         if (

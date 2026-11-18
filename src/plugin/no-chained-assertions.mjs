@@ -14,7 +14,7 @@ export default {
       if (!ASSERTIONS.has(node.expression.type) || isConst(node) || isConst(node.expression)) return;
       context.report({
         node,
-        message: "No chained type assertions. Parse the value with a zod schema at its boundary.",
+        message: "Parse the value with a zod schema at its boundary instead of chaining type assertions.",
       });
     };
     return { TSAsExpression: check, TSTypeAssertion: check };

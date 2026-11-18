@@ -53,7 +53,7 @@ export default {
         const value = node.value.type === "MemberExpression" ? node.value.object : node.value;
         const source = value.type === "Identifier" ? imports.get(value.name) : null;
         if (!source || !source.endsWith("-params"))
-          context.report({ node, message: "validateSearch is the feature params schema from <feature>-params.ts." });
+          context.report({ node, message: "Set validateSearch to the params schema from <feature>-params.ts." });
       },
     };
     if (stem(context.filename).endsWith("-params")) {
@@ -64,7 +64,7 @@ export default {
           if (key && !allowed(key)) {
             context.report({
               node: property,
-              message: `Use the standard param names: q, sort, cursor, from/to, range, <field>From/<field>To and camelCase field names. Not ${key}.`,
+              message: `Rename ${key} to a standard param name: q, sort, cursor, from, to, range, <field>From, <field>To or a camelCase field name.`,
             });
           }
         }

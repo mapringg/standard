@@ -19,14 +19,14 @@ export default {
         if (!other) return;
         context.report({
           node,
-          message: `A feature may import another feature's db.ts and schema.ts only. Move the shared query into the feature that owns the data.`,
+          message: `Import only db.ts or schema.ts from another feature, and move shared queries into the feature that owns the data.`,
         });
         return;
       }
       if (UI_APPS.has(where.kind) && !SHARED.test(source)) {
         context.report({
           node,
-          message: `A feature imports only itself, @/lib and @/components. Compose ${source} with this feature in a route.`,
+          message: `Compose ${source} with this feature in a route; a feature imports only itself, @/lib and @/components.`,
         });
       }
     });

@@ -14,7 +14,7 @@ export default {
           context.report({
             loc: comment.loc,
             message:
-              "Remove the comment. Name things so the code explains itself; put lasting context in README.md or AGENTS.md.",
+              "Delete the comment and name things so the code explains itself, with lasting context in README.md or AGENTS.md.",
           });
         }
       },

@@ -35,7 +35,10 @@ export default {
     const stateImports = new Set();
     const setterCheck = (node) => {
       if (returnsSecondParam(node))
-        context.report({ node, message: "A reducer that returns its action is useState. Model named actions." });
+        context.report({
+          node,
+          message: "Model named actions in the reducer instead of returning the action as the new state.",
+        });
     };
     return {
       ImportDeclaration(node) {
@@ -50,7 +53,7 @@ export default {
         if (count === 2)
           context.report({
             node,
-            message: "At most one useReducer per component. Merge the state into one union in <feature>-state.ts.",
+            message: "Merge the state into one useReducer with one union in <feature>-state.ts.",
           });
         const reducer = node.arguments[0];
         const fromState =
@@ -62,8 +65,7 @@ export default {
         if (!fromState)
           context.report({
             node: reducer ?? node,
-            message:
-              "Import the reducer from <feature>-state.ts, next to its state and action unions and initial value.",
+            message: "Import the reducer from <feature>-state.ts, next to its state and action unions.",
           });
       },
       ...(stem(context.filename).endsWith("-state")

@@ -16,7 +16,7 @@ export default {
         if (node.operator !== "typeof" || isUndefinedProbe(node)) return;
         context.report({
           node,
-          message: "No runtime typeof checks. Parse the value with a zod schema at its boundary.",
+          message: "Parse the value with a zod schema at its boundary instead of checking typeof.",
         });
       },
     };

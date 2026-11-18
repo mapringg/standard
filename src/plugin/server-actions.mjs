@@ -27,16 +27,19 @@ export default {
       if (found)
         context.report({
           node: found,
-          message: "No inline Server Actions. Export the action from <feature>-actions.ts.",
+          message: "Export the action from <feature>-actions.ts instead of defining it inline.",
         });
     };
     return {
       Program(program) {
         const top = directives(program.body).find((item) => item.directive === "use server");
         if (top && !actions)
-          context.report({ node: top, message: "'use server' belongs only in <feature>-actions.ts." });
+          context.report({
+            node: top,
+            message: "Move the action into <feature>-actions.ts, the only file with 'use server'.",
+          });
         if (actions && !top)
-          context.report({ node: program, message: "<feature>-actions.ts starts with 'use server'." });
+          context.report({ node: program, message: "Start <feature>-actions.ts with 'use server'." });
       },
       FunctionDeclaration: inline,
       FunctionExpression: inline,
@@ -45,12 +48,11 @@ export default {
         if (!actions || node.exportKind === "type" || node.declaration?.type?.startsWith("TS")) return;
         for (const id of exportedNames(node)) {
           const name = id.name ?? id.value;
-          if (!name.endsWith("Action"))
-            context.report({ node: id, message: `Server Action names end in Action: ${name}Action.` });
+          if (!name.endsWith("Action")) context.report({ node: id, message: `Rename the action to ${name}Action.` });
         }
       },
       ExportDefaultDeclaration(node) {
-        if (actions) context.report({ node, message: "Server Actions are named exports ending in Action." });
+        if (actions) context.report({ node, message: "Export the action by name, ending in Action." });
       },
     };
   },

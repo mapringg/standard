@@ -53,7 +53,7 @@ export default {
         context.report({
           node,
           message:
-            "Never export a cached function that takes a user id. Resolve the user inside with 'use cache: private'.",
+            "Resolve the user inside the function with 'use cache: private' instead of exporting a cached function that takes a user id.",
         });
       }
     };
@@ -86,7 +86,7 @@ export default {
           if (named || (object.type === "CallExpression" && calleeName(object) === "useRouter")) {
             context.report({
               node,
-              message: "Never router.refresh(). Update the cache in the Server Action with updateTag or refresh().",
+              message: "Update the cache in the Server Action with updateTag or refresh() instead of router.refresh().",
             });
           }
         }
@@ -94,13 +94,13 @@ export default {
         if (owner && (called === "cacheTag" || called === "cacheLife")) cached.get(owner).add(called);
         const tag = node.arguments[0]?.type;
         if (TAGS.has(called) && !cacheFile && (tag === "Literal" || tag === "TemplateLiteral")) {
-          context.report({ node, message: "Cache tags live in <feature>-cache.ts. Import the tag from there." });
+          context.report({ node, message: "Import the cache tag from <feature>-cache.ts." });
         }
       },
       "Program:exit"(program) {
         for (const [node, calls] of cached) {
           if (!calls.has("cacheTag") || !calls.has("cacheLife"))
-            context.report({ node, message: "Every 'use cache' function calls cacheTag and cacheLife." });
+            context.report({ node, message: "Call cacheTag and cacheLife inside this 'use cache' function." });
         }
         if (name.endsWith(".server") && !serverOnly)
           context.report({ node: program, message: '*.server.ts files import "server-only" first.' });
