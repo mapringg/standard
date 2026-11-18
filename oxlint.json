@@ -185,6 +185,34 @@
       }
     },
     {
+      "files": ["**/src/app/**/page.tsx", "**/src/app/**/layout.tsx"],
+      "rules": {
+        "react/only-export-components": [
+          "error",
+          {
+            "allowExportNames": [
+              "dynamic",
+              "dynamicParams",
+              "revalidate",
+              "fetchCache",
+              "runtime",
+              "preferredRegion",
+              "maxDuration",
+              "experimental_ppr",
+              "instant",
+              "prefetch",
+              "ensureStatic",
+              "metadata",
+              "generateMetadata",
+              "viewport",
+              "generateViewport",
+              "generateStaticParams"
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["**/*.config.js", "**/*.config.cjs", "**/*.config.mjs"],
       "rules": {
         "import/no-commonjs": "off",
