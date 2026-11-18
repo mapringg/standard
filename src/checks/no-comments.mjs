@@ -193,6 +193,16 @@ function generatedPaths(repo, paths) {
 
 /**
  * @param {import("../repo.mjs").Repo} repo
+ * @returns {string[]} The source files whose comments are the repo's own: not `next-env.d.ts`, generated or vendored.
+ */
+export function commentedSources(repo) {
+  const paths = sourceFiles(repo).filter((path) => !GENERATED_NAMES.has(posix.basename(path)));
+  const generated = generatedPaths(repo, paths);
+  return paths.filter((path) => !generated.has(path));
+}
+
+/**
+ * @param {import("../repo.mjs").Repo} repo
  * @returns {Map<string, () => ReadonlySet<string>>} Each tracked doc a pointer may name, with its heading anchors read on first use.
  */
 function trackedDocs(repo) {
@@ -261,8 +271,6 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const docs = trackedDocs(repo);
-    const paths = sourceFiles(repo).filter((path) => !GENERATED_NAMES.has(posix.basename(path)));
-    const generated = generatedPaths(repo, paths);
-    return paths.filter((path) => !generated.has(path)).flatMap((path) => findings(path, repo.read(path), docs));
+    return commentedSources(repo).flatMap((path) => findings(path, repo.read(path), docs));
   },
 };
