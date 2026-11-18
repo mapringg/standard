@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 
-import { matches } from "../doc-kinds.mjs";
+import { FILE } from "../config.mjs";
+import { KINDS, matches } from "../doc-kinds.mjs";
 import { referenceFindings } from "./support/doc-references.mjs";
 import { loadCorpus } from "./support/docs.mjs";
 
@@ -58,14 +59,31 @@ function orphanFindings(corpus) {
     .map(({ path }) => ({ key: `${path} orphan`, fix: `No link reaches ${path} from ${ROOTS}. Link it from ${nearestRoot(corpus, path)}.` }));
 }
 
+/** @type {(corpus: Corpus, budgets: import("../config.mjs").Budgets) => Finding[]} Each kind with docs has a budget and fits it. */
+function budgetFindings(corpus, budgets) {
+  return KINDS.flatMap(({ name }) => {
+    const docs = [...corpus.docs.values()].filter((doc) => doc.kind.name === name).sort((a, b) => b.lines - a.lines);
+    const total = docs.reduce((sum, doc) => sum + doc.lines, 0);
+    const budget = budgets[name];
+    if (docs.length === 0 || (budget !== undefined && total <= budget)) return [];
+    const largest = docs.slice(0, 3).map((doc) => `${doc.path} ${doc.lines}`).join(", ");
+    return [{
+      key: `budget ${name}`,
+      fix: budget === undefined
+        ? `budgets in ${FILE} has no "${name}", and ${name} docs total ${total} lines. Add "${name}": ${total}, then lower it as they shrink.`
+        : `${name} docs total ${total} lines, over budgets.${name} ${budget} in ${FILE}. Cut ${total - budget} lines. Largest: ${largest}.`,
+    }];
+  });
+}
+
 /** @type {import("../registry.mjs").Check} */
 export default {
   name: "docs",
   since: "0.15.0",
   doc: {
-    enforces: "Every tracked Markdown file is a kind of doc the standard names by path, carries no `check-docs: external` marker, and is reached by links from an AGENTS.md, a CLAUDE.md, `.gemini/styleguide.md` or a SKILL.md unless it is a README or a pull request template. A file named like a log or plan fails in any folder. The paths, links, heading anchors, `pnpm` scripts and code symbols a doc names exist; an external doc's are checked only for links and paths under a tracked top-level entry.",
-    fix: "Move, delete, link or correct the doc as the finding says.",
-    config: [],
+    enforces: "Every tracked Markdown file is a kind of doc the standard names by path, carries no `check-docs: external` marker, and is reached by links from an AGENTS.md, a CLAUDE.md, `.gemini/styleguide.md` or a SKILL.md unless it is a README or a pull request template. A file named like a log or plan fails in any folder. The paths, links, heading anchors, `pnpm` scripts and code symbols a doc names exist; an external doc's are checked only for links and paths under a tracked top-level entry. Each kind with docs has a line budget in `budgets` and fits it.",
+    fix: "Move, delete, link, correct or cut the doc as the finding says.",
+    config: ["budgets"],
   },
   subject: "tree",
   baseline: false,
@@ -73,6 +91,6 @@ export default {
   applies: () => ({ on: true }),
   run(repo) {
     const corpus = loadCorpus(repo);
-    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus)];
+    return [...kindFindings(corpus), ...orphanFindings(corpus), ...referenceFindings(repo, corpus), ...budgetFindings(corpus, repo.config.budgets)];
   },
 };

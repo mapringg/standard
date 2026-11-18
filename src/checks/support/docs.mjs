@@ -16,7 +16,8 @@ import { isDoc, place } from "../../doc-kinds.mjs";
  * @typedef {{ line: number, text: string, path: string, anchor: string | null }} Link
  * Code a doc names things in: each code span, and each code block from its first line, with `span` false and its fence's language.
  * @typedef {{ line: number, text: string, span: boolean, lang: string | null }} Code
- * @typedef {{ path: string, kind: Kind, links: Link[], code: Code[], anchors: ReadonlySet<string>, marker: boolean }} Doc
+ * `lines` counts newlines, as `wc -l` does.
+ * @typedef {{ path: string, kind: Kind, lines: number, links: Link[], code: Code[], anchors: ReadonlySet<string>, marker: boolean }} Doc
  * @typedef {{ docs: ReadonlyMap<string, Doc>, misplaced: { path: string, refused: boolean }[] }} Corpus
  */
 
@@ -122,7 +123,7 @@ export function parseDoc(path, kind, text) {
     }
   });
   for (const definition of definitions) if (used.has(definition.identifier)) link(definition, definition.url);
-  return { path, kind, links, code, anchors: headingAnchors(tree), marker };
+  return { path, kind, lines: source.length - 1, links, code, anchors: headingAnchors(tree), marker };
 }
 
 /** @type {(repo: import("../../repo.mjs").Repo) => Corpus} Every governed doc parsed once. */
