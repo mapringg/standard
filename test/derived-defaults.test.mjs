@@ -48,6 +48,15 @@ test("derived screenshots cover React apps and exclude non-product changes", asy
   }
 });
 
+test("derived screenshots cover each React app's public folder, images and fonts", async (t) => {
+  const cases = [["apps/web/public/robots.txt", true], ["apps/web/src/app/icon.svg", true], ["apps/web/src/app/opengraph-image.png", true], ["apps/web/src/assets/hero.webp", true], ["apps/web/src/fonts/inter.woff2", true], ["apps/web/README.md", false], ["apps/api/public/robots.txt", false], ["apps/api/src/logo.svg", false]];
+  for (const [file, needed] of cases) {
+    const pr = pullRequestRepo(t, { base: { ".standard/config.json": {}, "package.json": {}, "apps/web/package.json": { dependencies: { react: "19", next: "16" } }, "apps/api/package.json": { dependencies: { hono: "4" } } }, head: { [file]: "x" } });
+    const findings = await screenshot.run({ baseSha: pr.base, headSha: pr.head, body: "", number: 1 }, loadRepo(pr.cwd));
+    assert.equal(findings.length, needed ? 1 : 0, file);
+  }
+});
+
 test("derived hooks run lint-staged, typecheck, test and the fixed extra script", (t) => {
   const repo = fixture(t, { "scripts/pre-push.sh": "true\n" });
   assert.deepEqual(repo.config.hooks, { "pre-commit": ["pnpm exec lint-staged"], "pre-push": ["pnpm typecheck", "pnpm test", "sh scripts/pre-push.sh"] });
