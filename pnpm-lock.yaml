@@ -165,11 +165,10 @@ settings:
 importers:
 
   .:
-    dependencies:
+    devDependencies:
       knip:
         specifier: 6.45.1
         version: 6.45.1
-    devDependencies:
       oxfmt:
         specifier: 0.79.0
         version: 0.79.0

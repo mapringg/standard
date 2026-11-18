@@ -4,7 +4,7 @@ import { dirname, join, relative, sep } from "node:path";
 const roots = new Map();
 const kinds = new Map();
 
-export function repoRoot(filename) {
+function repoRoot(filename) {
   const start = dirname(filename);
   if (roots.has(start)) return roots.get(start);
   let root = null;
@@ -25,7 +25,7 @@ export function locate(filename) {
   return describe(relative(root, filename).split(sep).join("/"), root);
 }
 
-export function appKind(root, base) {
+function appKind(root, base) {
   const key = `${root}\0${base}`;
   if (kinds.has(key)) return kinds.get(key);
   const dir = join(root ?? "", base);
@@ -83,7 +83,7 @@ export function isGenerated(name) {
   return /\.d\.[cm]?ts$/.test(name) || /\.gen\.[cm]?[jt]sx?$/.test(name);
 }
 
-export function moduleName(node) {
+function moduleName(node) {
   return node?.type === "Literal" && typeof node.value === "string" ? node.value : null;
 }
 
