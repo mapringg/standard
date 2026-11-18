@@ -560,7 +560,7 @@ Oxlint 1.93.0 loads `@mapringg/standard/oxlint` through `jsPlugins`. The JSON co
   "jsPlugins": ["@mapringg/standard/oxlint"],
   "rules": {
     "standard/redis": "error", "standard/ai": "error",
-    "standard/ui": "error", "standard/swr": "error",
+    "standard/ui": "error", "standard/timer": "error", "standard/swr": "error",
     "standard/env": "error", "standard/json": "error",
     "standard/log": "error", "standard/format": "error"
   }
@@ -585,3 +585,5 @@ An empty `.standard/config.json` enables every check. The schema has four keys: 
 Every allow glob must change a finding; unmatched, redundant and skipped-rule exceptions fail. Keep plugin rules at error in oxlint; the config guard rejects disabled or warning-level standard rules there. The guard skips commit-message runs. Checks keep their built-in advisory behavior. Malformed ticket lines warn during checks and block merge.
 
 Earlier repository-specific keys, including `pr.ticket-prefix` and `pending`, still parse with a deprecation notice during adoption. Mixing formats fails. Fixed paths, module entries, Next layering, API paths, cached-module names, hook commands and screenshot requirements are derived. Initialize doc line budgets with `standard check docs --init`, and lower them with `standard check docs --write`.
+
+Zod Mini is required in browser code: Vite React sources and the value-import graph from `use client` or `.browser.*` modules, including shared code. Server-only code is exempt. Tests, fixtures, stories, scripts, evals and config sources skip the derived source checks. Fixed `src/lib/*` owners remain directly importable.

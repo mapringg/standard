@@ -1,8 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, globSync } from "node:fs";
 import { dirname, join, matchesGlob, relative, sep } from "node:path";
 import { parseSync } from "oxc-parser";
 
-export const NON_PRODUCT = /\.(?:test|spec|stories)\.[^/]+$|(?:^|\/)(?:__tests__|tests?|__fixtures__|fixtures?|scripts|evals)\/|(?:^|\/)[^/]+\.config\.[^/]+$/;
+import { NOT_PRODUCT } from "../checks/support/packages.mjs";
+
+/** @param {{ filename: string, cwd: string }} context */
+export const productPath = (context) => relative(context.cwd, context.filename).split(sep).join("/");
 
 /** @param {string} filename @param {string} cwd */
 function packageRoot(filename, cwd) {
@@ -14,7 +17,7 @@ function packageRoot(filename, cwd) {
 /** @param {string} root @param {string} owner */
 function ownerMessage(root, owner) {
   const variants = [owner, owner.replace(/\.ts$/, ".server.ts"), owner.replace(/\.ts$/, ".browser.ts")];
-  const files = variants.filter((path) => existsSync(join(root, path)));
+  const files = owner.includes("*") ? globSync(owner, { cwd: root }).filter((path) => /\.[cm]?[jt]sx?$/.test(path)) : variants.filter((path) => existsSync(join(root, path)));
   const exports = files.flatMap((path) => {
     const { program } = parseSync(path, readFileSync(join(root, path), "utf8"));
     return program.body.flatMap((node) => {
@@ -53,7 +56,7 @@ export function fixedPathRule({ owner, modules, globals, properties }) {
       const filename = context.filename;
       const root = packageRoot(filename, context.cwd);
       const path = relative(root, filename).split(sep).join("/");
-      if (NON_PRODUCT.test(path) || matchesGlob(path.replace(/\.(?:server|browser)\.ts$/, ".ts"), owner)) return {};
+      if (NOT_PRODUCT.test(productPath(context)) || matchesGlob(path.replace(/\.(?:server|browser)\.ts$/, ".ts"), owner)) return {};
       /** @param {Node} node */
       const report = (node) => context.report({ node, messageId: "owner", data: { fix: ownerMessage(root, owner) } });
       /** @param {Node} node @param {unknown} value */

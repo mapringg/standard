@@ -2,6 +2,7 @@ import { parse as parseAstro } from "@astrojs/compiler/sync";
 import { DecodingMode, HtmlEntityDecoder, decodeHTMLAttribute } from "entities/decode";
 import { parse as parseHtml } from "parse5";
 import { parseSync } from "oxc-parser";
+import { NOT_PRODUCT } from "./packages.mjs";
 
 /** Every tracked file the source checks read. An Astro component counts through its frontmatter and scripts. */
 const SOURCE = /\.(?:[cm]?[jt]sx?|astro)$/;
@@ -34,9 +35,9 @@ const TOP_LEVEL_RETURN = "A 'return' statement can only be used within a functio
  * @typedef {{ type: "Html", value: string, start: number, end: number }} HtmlComment
  */
 
-/** @param {Pick<import("../../repo.mjs").Repo, "files">} repo */
+/** @param {Pick<import("../../repo.mjs").Repo, "files"> & Partial<Pick<import("../../repo.mjs").Repo, "config">>} repo */
 export function sourceFiles(repo) {
-  return repo.files().filter((path) => SOURCE.test(path) && !path.split("/").includes("node_modules"));
+  return repo.files().filter((path) => !(repo.config?.allow !== undefined && NOT_PRODUCT.test(path)) && SOURCE.test(path) && !path.split("/").includes("node_modules"));
 }
 
 /**
