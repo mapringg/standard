@@ -75,6 +75,12 @@ export function isTest(name) {
   return /\.test\.[cm]?[jt]sx?$/.test(name);
 }
 
+export const DATABASE_SUITE = /\.(mongo|redis)\.test\.[cm]?[jt]sx?$/;
+
+export function testedStem(name) {
+  return /^(.+?)(?:\.(?:browser|mongo|redis))?\.test\.[cm]?[jt]sx?$/.exec(name)?.[1] ?? null;
+}
+
 export function isTestSupport(name) {
   return isTest(name) || /\.(?:fixture|test-utils)\.[cm]?[jt]sx?$/.test(name);
 }

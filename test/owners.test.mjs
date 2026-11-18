@@ -110,3 +110,17 @@ test("owners lets an owner file's own test use what the owner owns", (t) => {
   });
   deepEqual(filesWith(result, "owners"), ["apps/web/src/features/task/log.test.ts", "apps/web/src/lib/clock.test.ts"]);
 });
+
+test("owners lets a database suite inherit its owner's permissions", (t) => {
+  const mongoose = 'import mongoose from "mongoose";\nexport const db = mongoose;\n';
+  const result = lint(t, {
+    "apps/api/src/features/x/db.ts": mongoose,
+    "apps/api/src/features/x/db.mongo.test.ts": mongoose,
+    "apps/api/src/features/x/db.redis.test.ts": mongoose,
+    "apps/api/src/features/x/service.ts": "export const run = 1;\n",
+    "apps/api/src/features/x/service.mongo.test.ts": mongoose,
+    "apps/web/src/lib/log.ts": "export const log = (message: string) => console.log(message);\n",
+    "apps/web/src/lib/log.browser.test.ts": "export const spy = () => console.log;\n",
+  });
+  deepEqual(filesWith(result, "owners"), ["apps/api/src/features/x/service.mongo.test.ts"]);
+});

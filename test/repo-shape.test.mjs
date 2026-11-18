@@ -147,3 +147,28 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
     ].sort(),
   );
 });
+
+test("repo-shape allows one plain suite plus one suite per database", (t) => {
+  deepEqual(
+    findings(t, {
+      "apps/api/src/features/clusters/db.ts": code,
+      "apps/api/src/features/clusters/db.test.ts": code,
+      "apps/api/src/features/clusters/db.mongo.test.ts": code,
+      "apps/api/src/features/clusters/db.redis.test.ts": code,
+      "apps/api/src/lib/oauth-store.ts": code,
+      "apps/api/src/lib/oauth-store.test.ts": code,
+      "apps/api/src/lib/oauth-store.redis.test.ts": code,
+      "apps/api/src/lib/cache.ts": code,
+      "apps/api/src/lib/cache.test.ts": code,
+      "apps/api/src/lib/cache.test.tsx": code,
+      "apps/api/src/lib/cache.redis.test.ts": code,
+      "apps/api/src/lib/cache.redis.test.tsx": code,
+      "apps/api/src/lib/cache.spec.ts": code,
+    }),
+    [
+      "apps/api/src/lib/cache.redis.test.tsx | Merge this test into apps/api/src/lib/cache.redis.test.ts, the one test file for its source.",
+      "apps/api/src/lib/cache.spec.ts | Rename the test to *.test.ts or *.test.tsx.",
+      "apps/api/src/lib/cache.test.tsx | Merge this test into apps/api/src/lib/cache.test.ts, the one test file for its source.",
+    ],
+  );
+});

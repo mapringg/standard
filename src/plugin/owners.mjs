@@ -1,6 +1,6 @@
 import { matchesGlob } from "node:path";
 
-import { exportedIds, importedName, locate, moduleVisitors } from "./paths.mjs";
+import { exportedIds, importedName, locate, moduleVisitors, testedStem } from "./paths.mjs";
 
 const UI = ["web", "liff", "mobile", "marketing"];
 const API = ["api"];
@@ -261,8 +261,8 @@ const matches = (local, globs) => globs.some((glob) => matchesGlob(local, glob))
 const list = (value) => (Array.isArray(value) ? value : [value]);
 
 function subjects(local) {
-  const tested = /^(.+)\.test\.tsx?$/.exec(local);
-  return tested ? [local, `${tested[1]}.ts`, `${tested[1]}.tsx`] : [local];
+  const tested = testedStem(local);
+  return tested ? [local, `${tested}.ts`, `${tested}.tsx`] : [local];
 }
 
 function applies(entry, where) {
