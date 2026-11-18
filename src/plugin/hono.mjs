@@ -14,6 +14,8 @@ const KEBAB = "[a-z]+(?:-[a-z]+)*";
 const MOUNT = new RegExp(`^/api/${KEBAB}$`);
 const PATH = new RegExp(`^/(?:${KEBAB}|:id)?$`);
 const POST_PATH = new RegExp(`^/(?:${KEBAB}|:id(?:/${KEBAB})?)?$`);
+const OAUTH_PATH = new RegExp(`^/(?:\\.well-known(?:/${KEBAB})+|mcp-oauth/${KEBAB}|authorize|token|register|revoke)$`);
+const OAUTH_MOUNT = /^\/(?:\.well-known|mcp-oauth)?$/;
 const MAX_LINES = 10;
 
 function property(node) {
@@ -91,6 +93,11 @@ function chainRoot(node) {
   return current?.type === "Identifier" ? current.name : false;
 }
 
+function isApp(node) {
+  if (node?.type === "NewExpression") return node.callee.type === "Identifier" && node.callee.name === "Hono";
+  return chainRoot(node) === true;
+}
+
 function validates(node, target) {
   return calls(node, "v") && stringValue(node.arguments[0]) === target;
 }
@@ -109,6 +116,7 @@ export default {
     const protocol = where.feature === "oauth";
     const report = (node, message) => context.report({ node, message });
     const routers = new Set();
+    const oauthRouters = new Set();
     const isRouter = (object) => {
       const root = chainRoot(object);
       return root === true || routers.has(root);
@@ -120,7 +128,7 @@ export default {
       }
       const path = stringValue(node.arguments[0]);
       if (path === null) report(node.arguments[0] ?? node, "Write the route path as a string literal.");
-      else if (!(method === "post" ? POST_PATH : PATH).test(path))
+      else if (!(method === "post" ? POST_PATH : PATH).test(path) && !(protocol && OAUTH_PATH.test(path)))
         report(node.arguments[0], "Use /, /:id, /<kebab-name> or POST /:id/<kebab-verb> as the path.");
       if (!node.arguments.some((arg) => calls(arg, "describeRoute")))
         report(node.callee.property, "Add describeRoute with the response schemas from schema.ts to this route.");
@@ -136,8 +144,12 @@ export default {
         report(handler, `Move the logic into db.ts or service.ts so the handler fits in ${MAX_LINES} lines.`);
     };
     return {
+      ImportDeclaration(node) {
+        if (node.source.value.startsWith("#/features/oauth/"))
+          for (const specifier of node.specifiers) oauthRouters.add(specifier.local.name);
+      },
       VariableDeclarator(node) {
-        if (node.id.type === "Identifier" && chainRoot(node.init) === true) routers.add(node.id.name);
+        if (node.id.type === "Identifier" && isApp(node.init)) routers.add(node.id.name);
       },
       ExpressionStatement(node) {
         const call = node.expression;
@@ -146,7 +158,7 @@ export default {
           call.type === "CallExpression" &&
           CHAIN.has(property(call.callee)) &&
           call.callee.object.type === "Identifier" &&
-          !isContext(call.callee.object)
+          routers.has(call.callee.object.name)
         )
           report(node, "Build each router as one chain: factory.createApp().get(...).post(...).");
       },
@@ -162,7 +174,9 @@ export default {
           report(node, 'Mount the OpenAPI spec and docs only inside env.NODE_ENV === "development".');
         if (method === "route" && app) {
           const path = stringValue(node.arguments[0]);
-          if (path === null || !MOUNT.test(path))
+          const router = node.arguments[1];
+          const oauth = router?.type === "Identifier" && oauthRouters.has(router.name);
+          if (path === null || !(MOUNT.test(path) || (oauth && OAUTH_MOUNT.test(path))))
             report(node.arguments[0] ?? node, "Mount routers at /api/<plural-kebab>.");
         }
         if (routes && (METHODS.has(method) || LOOSE.has(method)) && isRouter(object)) route(node, method);

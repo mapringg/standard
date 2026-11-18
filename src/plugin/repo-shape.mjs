@@ -32,6 +32,7 @@ const API_FEATURE_FILES = new Set(["routes", "schema", "db", "service"]);
 const API_ROOT_FILES = new Set(["app.ts", "factory.ts", "env.ts", "server.ts", "client.ts"]);
 const API_DIRS = new Set(["middleware", "infra", "upstreams"]);
 const WEB_ROOT_FILES = new Set(["proxy", "instrumentation", "instrumentation-client"]);
+const SSE = /text\/event-stream|\.to\w*StreamResponse\(/;
 const CACHE_MS = 2000;
 const SKIP = new Set([".git", "node_modules"]);
 const scans = new Map();
@@ -40,7 +41,11 @@ function routesDir(kind) {
   return kind === "marketing" ? "pages" : "app";
 }
 
-function webRoute(rest, name) {
+function streams(where, segments) {
+  return segments[0] === "api" && SSE.test(readFileSync(join(where.root, where.rel), "utf8"));
+}
+
+function webRoute(rest, name, where) {
   const segments = rest.split("/").slice(1, -1);
   const found = [];
   for (const segment of segments) {
@@ -56,9 +61,14 @@ function webRoute(rest, name) {
   else if (file === "default") found.push("Delete default.tsx and compose the sections inside one page.");
   else if (!NEXT_FILES.has(file))
     found.push("Move this code into a feature or components/; app/ holds only Next route files.");
-  if (file === "route" && !segments.includes("webhooks") && !segments.at(-1)?.includes(".")) {
+  if (
+    file === "route" &&
+    !segments.includes("webhooks") &&
+    !segments.at(-1)?.includes(".") &&
+    !streams(where, segments)
+  ) {
     found.push(
-      "Move the handler into a webhooks/ folder or a metadata route like sitemap.xml/route.ts, or into a Server Action.",
+      "Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; only a text/event-stream handler may stay under src/app/api/.",
     );
   }
   return found;
@@ -129,7 +139,7 @@ function codeProblems(where) {
   if (parts[0] === "components") {
     return parts.length === 3 ? found : [...found, "Move the component to components/<group>/<file>, one level deep."];
   }
-  if (parts[0] === routesDir(kind)) return kind === "web" ? [...found, ...webRoute(rest, name)] : found;
+  if (parts[0] === routesDir(kind)) return kind === "web" ? [...found, ...webRoute(rest, name, where)] : found;
   if (parts.length === 1) {
     if (kind === "web" && WEB_ROOT_FILES.has(stem(name))) return found;
     if (kind === "liff" && name === "main.tsx") return found;

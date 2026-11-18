@@ -127,3 +127,28 @@ test("tests rule lets fixtures polyfill browser globals and stub env vars", (t) 
     ],
   );
 });
+
+test("tests rule checks only the MSW server's listen", (t) => {
+  const result = lint(t, {
+    "packages/i18n/src/add.ts": source,
+    "packages/i18n/src/add.test.ts": [
+      'import express from "express";',
+      'import { http, HttpResponse } from "msw";',
+      'import { createServer } from "node:http";',
+      'import { setupServer } from "msw/node";',
+      "",
+      'export const handlers = [http.get("/x", () => HttpResponse.json({}))];',
+      "export const app = express();",
+      "export const direct = express().listen(0);",
+      "export const listening = app.listen(0);",
+      "export const raw = createServer().listen(0);",
+      "export const server = setupServer();",
+      "server.listen();",
+      "",
+    ].join("\n"),
+  });
+  deepEqual(
+    only(result, "tests").map((item) => item.message.split(" (")[0]),
+    ['Start the MSW server with listen({ onUnhandledRequest: "error" })'],
+  );
+});

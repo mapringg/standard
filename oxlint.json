@@ -79,7 +79,8 @@
     "typescript/switch-exhaustiveness-check": [
       "error",
       {
-        "considerDefaultExhaustiveForUnions": false
+        "considerDefaultExhaustiveForUnions": false,
+        "requireDefaultForNonUnion": true
       }
     ],
     "import/no-named-export": "off",
@@ -187,7 +188,18 @@
     "typescript/no-unnecessary-type-parameters": "off",
     "node/no-sync": ["error", { "ignores": ["flushSync"] }],
     "react/no-unstable-nested-components": ["error", { "allowAsProps": true }],
-    "react/incompatible-library": "off"
+    "react/incompatible-library": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    "typescript/method-signature-style": "off",
+    "oxc/no-map-spread": "off",
+    "eslint/default-case": "off",
+    "typescript/consistent-return": "off",
+    "unicorn/number-literal-case": "off",
+    "unicorn/no-array-method-this-argument": "off",
+    "unicorn/no-array-fill-with-reference-type": "off",
+    "eslint/no-bitwise": "off",
+    "unicorn/prefer-math-trunc": "off",
+    "unicorn/prefer-code-point": "off"
   },
   "overrides": [
     {
@@ -260,6 +272,40 @@
       }
     },
     {
+      "files": ["**/*.ts", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs"],
+      "rules": {
+        "react/function-component-definition": "off",
+        "react/no-multi-comp": "off",
+        "react/display-name": "off"
+      }
+    },
+    {
+      "files": [
+        "**/apps/api/**",
+        "**/src/features/*/routes.ts",
+        "**/src/features/*/schema.ts",
+        "**/src/features/*/db.ts",
+        "**/src/features/*/service.ts",
+        "**/src/middleware/**",
+        "**/src/infra/**",
+        "**/src/upstreams/**",
+        "**/src/app.ts",
+        "**/src/factory.ts",
+        "**/src/server.ts"
+      ],
+      "rules": {
+        "react/rules-of-hooks": "off",
+        "react/exhaustive-deps": "off"
+      }
+    },
+    {
+      "files": ["**/src/app.ts"],
+      "rules": {
+        "import/max-dependencies": "off",
+        "eslint/max-lines-per-function": "off"
+      }
+    },
+    {
       "files": ["**/*.config.js", "**/*.config.cjs", "**/*.config.mjs"],
       "rules": {
         "import/no-commonjs": "off",
@@ -301,7 +347,8 @@
             "waitUntil": "Await the real event.",
             "setConfig": "Make the test fast instead of raising its timeout."
           }
-        ]
+        ],
+        "eslint/no-script-url": "off"
       }
     },
     {

@@ -168,3 +168,41 @@ test("owners lets only the cookie helper touch document.cookie", (t) => {
     ],
   );
 });
+
+test("owners lets API tests reach an Express server and paths outside the typed client", (t) => {
+  const result = lint(t, {
+    "apps/api/src/lib/mcp/broker.ts": "export const broker = 1;\n",
+    "apps/api/src/lib/mcp/broker.test.ts": [
+      'import express from "express";',
+      "",
+      "const server = express().listen(0);",
+      "export const token = () => fetch(`http://127.0.0.1:${String(server.address())}/token`);",
+      "",
+    ].join("\n"),
+    "apps/api/src/app.ts": "export const app = { request: (path: string) => path };\n",
+    "apps/api/src/app.test.ts": [
+      'import { app } from "#/app";',
+      "",
+      'export const missing = () => app.request("/mcp");',
+      'export const known = () => app.request("/.well-known/oauth-authorization-server");',
+      "",
+    ].join("\n"),
+    "apps/api/src/features/tasks/routes.ts": "export const routes = 1;\n",
+    "apps/api/src/features/tasks/routes.test.ts": [
+      'import { app } from "#/app";',
+      "",
+      'export const list = () => app.request("/api/tasks");',
+      'export const load = () => fetch("http://127.0.0.1/api/tasks");',
+      "",
+    ].join("\n"),
+  });
+  deepEqual(
+    only(result, "owners")
+      .map((item) => `${item.file} ${item.message}`)
+      .sort(),
+    [
+      "apps/api/src/features/tasks/routes.test.ts Call outside services through src/upstreams/<vendor>.ts with a timeout.",
+      "apps/api/src/features/tasks/routes.test.ts Call routes through testClient().",
+    ],
+  );
+});

@@ -127,7 +127,7 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
       "apps/web/src/app/(app)/@modal/page.tsx | Compose the sections inside one page instead of a parallel route.",
       "apps/web/src/app/(app)/@modal/page.tsx | apps/web/src/app/(app)/x.module.css: Replace the CSS module with Tailwind classes.",
       "apps/web/src/app/(app)/_parts/page.tsx | Move the code from the _private folder into a feature or components/.",
-      "apps/web/src/app/(app)/hook/route.ts | Move the handler into a webhooks/ folder or a metadata route like sitemap.xml/route.ts, or into a Server Action.",
+      "apps/web/src/app/(app)/hook/route.ts | Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; only a text/event-stream handler may stay under src/app/api/.",
       "apps/web/src/app/(app)/loading.tsx | Delete loading.tsx and wrap the slow section in <Section fallback> from #/components/boundary/section.",
       "apps/web/src/app/(app)/page.test.tsx | Move the test to the feature code it covers; route files never have tests.",
       "apps/web/src/app/(app)/page.test.tsx | Move this code into a feature or components/; app/ holds only Next route files.",
@@ -186,6 +186,37 @@ test("repo-shape flags test setup files but not product files named setup", (t) 
       `apps/web/src/setup.ts | ${rename}`,
       `apps/web/src/test-setup.ts | ${rename}`,
       `apps/web/src/vitest.setup.ts | ${rename}`,
+    ],
+  );
+});
+
+test("repo-shape lets a UI app stream server-sent events from src/app/api", (t) => {
+  const stream = [
+    'import { chat } from "#/features/chat/chat-stream.server";',
+    "",
+    "export const POST = async (request: Request) =>",
+    '  new Response(await chat(request), { headers: { "content-type": "text/event-stream" } });',
+    "",
+  ].join("\n");
+  const result = lint(t, {
+    ...base,
+    "apps/web/src/features/chat/chat-stream.server.ts":
+      "export const chat = async (request: Request) => request.body;\n",
+    "apps/web/src/app/api/chat/route.ts": stream,
+    "apps/web/src/app/api/models/route.ts": "export const GET = () => Response.json([]);\n",
+    "apps/web/src/app/(app)/chat/route.ts": stream,
+    "apps/web/src/app/(app)/chat/page.tsx":
+      'import { chat } from "#/features/chat/chat-stream.server";\nexport default function Page() { return chat; }\n',
+  });
+  deepEqual(
+    result
+      .filter((item) => ["standard(repo-shape)", "standard(owners)"].includes(item.rule))
+      .map((item) => `${item.file} | ${item.rule} ${item.message.split(";")[0]}`)
+      .sort(),
+    [
+      "apps/web/src/app/(app)/chat/page.tsx | standard(owners) Import a feature component that loads its own data.",
+      "apps/web/src/app/(app)/chat/route.ts | standard(repo-shape) Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action",
+      "apps/web/src/app/api/models/route.ts | standard(repo-shape) Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action",
     ],
   );
 });
