@@ -8,6 +8,7 @@ import { explainAll, explainMarkdown, explainOne } from "../src/explain.mjs";
 import { HOOKS } from "../src/hook.mjs";
 import { install } from "../src/install.mjs";
 import { merge } from "../src/merge.mjs";
+import { migrateNames } from "../src/migrate-names.mjs";
 import { registry } from "../src/registry.mjs";
 import { loadRepo } from "../src/repo.mjs";
 import { failed, report, run } from "../src/run.mjs";
@@ -20,6 +21,7 @@ const USAGE = `Usage:
   standard hook <${Object.keys(HOOKS).join(" | ")}> [<git args>...]
   standard install
   standard merge <number> [--admin]
+  standard migrate names [--write] [--effect <file>=<sync|route|subscribe>...]
   standard score [<path>...] [--remote] [--json]`;
 
 const MODES = ["--init", "--write", "--prune"];
@@ -82,6 +84,21 @@ const COMMANDS = {
       throw new Error(`merge needs a pull request number and takes only --admin.\n${USAGE}`);
     }
     return merge(process.cwd(), Number(number), flags.includes("--admin"), registry);
+  },
+  migrate([what, ...argv]) {
+    if (what !== "names") throw new Error(`migrate takes names.\n${USAGE}`);
+    const picks = new Map();
+    let write = false;
+    for (let index = 0; index < argv.length; index++) {
+      if (argv[index] === "--write") write = true;
+      else if (argv[index] === "--effect") {
+        const [file, reason] = (argv[++index] ?? "").split("=");
+        if (!file || !["sync", "route", "subscribe"].includes(reason)) throw new Error("--effect needs <file>=<sync|route|subscribe>.");
+        picks.set(file, reason);
+      } else throw new Error(`Unexpected argument ${argv[index]}.\n${USAGE}`);
+    }
+    for (const line of migrateNames(loadRepo(process.cwd()).root, { write, picks })) console.log(line);
+    return 0;
   },
   score(argv) {
     const { values, positionals } = parseArgs({
