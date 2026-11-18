@@ -260,10 +260,15 @@ const TABLE = [
 const matches = (local, globs) => globs.some((glob) => matchesGlob(local, glob));
 const list = (value) => (Array.isArray(value) ? value : [value]);
 
+function subjects(local) {
+  const tested = /^(.+)\.test\.tsx?$/.exec(local);
+  return tested ? [local, `${tested[1]}.ts`, `${tested[1]}.tsx`] : [local];
+}
+
 function applies(entry, where) {
   if (entry.kinds && !entry.kinds.includes(where.kind)) return false;
   if (entry.in && !matches(where.local, entry.in)) return false;
-  return !matches(where.local, entry.owner ?? []);
+  return !subjects(where.local).some((local) => matches(local, entry.owner ?? []));
 }
 
 function importBinding(scope, name) {
