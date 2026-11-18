@@ -62,7 +62,7 @@ test("tests rule bans nondeterminism, weak assertions and test doubles", (t) => 
     "cdp.fixture.ts: Fake HTTP with MSW handlers instead of a fetch fake",
     "clock.test.ts: Call vi.useFakeTimers() and vi.setSystemTime() instead of reading the real clock",
     "loop.test.ts: Write one test.each with a table instead of a loop",
-    'loose.test-utils.ts: Start the MSW server with listen({ onUnhandledRequest: "error" })',
+    'loose.test-utils.ts: Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3)',
     `mocked.test.ts: ${double}`,
     `mocked.test.ts: ${double}`,
     `mocked.test.ts: ${double}`,
