@@ -152,3 +152,25 @@ test("tests rule checks only the MSW server's listen", (t) => {
     ['Start the MSW server with listen({ onUnhandledRequest: "error" })'],
   );
 });
+
+test("tests rule distinguishes a local factory's numeric port from MSW options", (t) => {
+  const result = lint(t, {
+    "apps/api/src/features/oauth/routes.test-utils.ts": [
+      'import { setupServer } from "msw/node";',
+      'import { createMcpBrokerApp } from "#/lib/broker";',
+      "export const ephemeral = createMcpBrokerApp().listen(0);",
+      "export const fixed = createMcpBrokerApp().listen(3001);",
+      "export const msw = setupServer();",
+      "msw.listen();",
+      "msw.listen({});",
+      'msw.listen({ onUnhandledRequest: "error" });',
+    ].join("\n"),
+  });
+  deepEqual(
+    only(result, "tests").map((item) => item.message),
+    [
+      'Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3).',
+      'Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3).',
+    ],
+  );
+});

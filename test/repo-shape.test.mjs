@@ -127,7 +127,7 @@ test("repo-shape flags stray files, docs, styles and folders", (t) => {
       "apps/web/src/app/(app)/@modal/page.tsx | Compose the sections inside one page instead of a parallel route.",
       "apps/web/src/app/(app)/@modal/page.tsx | apps/web/src/app/(app)/x.module.css: Replace the CSS module with Tailwind classes.",
       "apps/web/src/app/(app)/_parts/page.tsx | Move the code from the _private folder into a feature or components/.",
-      "apps/web/src/app/(app)/hook/route.ts | Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; only a text/event-stream handler may stay under src/app/api/.",
+      "apps/web/src/app/(app)/hook/route.ts | Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; keep only GET at src/app/health/route.ts, MCP at src/app/mcp/route.ts, or streaming handlers under src/app/api/ with text/event-stream or a value import from <feature>-stream.server.ts.",
       "apps/web/src/app/(app)/loading.tsx | Delete loading.tsx and wrap the slow section in <Section fallback> from #/components/boundary/section.",
       "apps/web/src/app/(app)/page.test.tsx | Move the test to the feature code it covers; route files never have tests.",
       "apps/web/src/app/(app)/page.test.tsx | Move this code into a feature or components/; app/ holds only Next route files.",
@@ -219,4 +219,57 @@ test("repo-shape lets a UI app stream server-sent events from src/app/api", (t) 
       "apps/web/src/app/api/models/route.ts | standard(repo-shape) Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action",
     ],
   );
+});
+
+test("repo-shape allows delegated streams and exact health and MCP endpoints", (t) => {
+  const stream =
+    'import { forwardChatMessages } from "#/features/chat/chat-stream.server.ts"; export async function POST(req: Request, { params }) { return forwardChatMessages(req, (await params).chatId); }';
+  const result = lint(t, {
+    ...base,
+    "apps/web/src/app/api/chat/[id]/route.ts": stream,
+    "apps/web/src/app/api/plain/route.ts":
+      'import { forward } from "#/features/chat/chat.server.ts"; export const POST = forward;',
+    "apps/web/src/app/api/types/route.ts":
+      'import type { Stream } from "#/features/chat/chat-stream.server.ts"; export const POST = () => Response.json({});',
+    "apps/web/src/app/api/cancel/[id]/route.ts":
+      "export const POST = (req: Request) => Response.json({ aborted: req.signal.aborted });",
+    "apps/web/src/app/health/route.ts": "export const GET = () => Response.json({ ok: true });",
+    "apps/web/src/app/mcp/route.ts":
+      "export const POST = handle; export const GET = handle; export const DELETE = handle;",
+    "apps/web/src/app/other/health/route.ts": "export const GET = () => Response.json({ ok: true });",
+    "apps/web/src/app/other/mcp/route.ts": "export const POST = handle;",
+    "apps/web/src/app/chat/route.ts": stream,
+    "apps/web/src/app/route.ts": "export const POST = () => Response.json({});",
+    "apps/web/src/app/api/inline-types/route.ts":
+      'import { type Stream } from "#/features/chat/chat-stream.server.ts"; export const POST = () => Response.json({});',
+  });
+  deepEqual(
+    only(result, "repo-shape")
+      .map((item) => item.file)
+      .sort(),
+    [
+      "apps/web/src/app/api/cancel/[id]/route.ts",
+      "apps/web/src/app/api/inline-types/route.ts",
+      "apps/web/src/app/api/plain/route.ts",
+      "apps/web/src/app/api/types/route.ts",
+      "apps/web/src/app/chat/route.ts",
+      "apps/web/src/app/other/health/route.ts",
+      "apps/web/src/app/other/mcp/route.ts",
+      "apps/web/src/app/route.ts",
+    ],
+  );
+  for (const source of [
+    "export const GET = handle; export const POST = handle;",
+    'export { handler as POST } from "#/lib/health";',
+    'export * from "#/lib/health";',
+    "export default function GET() {}",
+    "const GET = () => Response.json({});",
+    "export type GET = () => Response;",
+    'export { type GET } from "#/lib/health";',
+  ]) {
+    deepEqual(
+      only(lint(t, { ...base, "apps/web/src/app/health/route.ts": source }), "repo-shape").map((item) => item.file),
+      ["apps/web/src/app/health/route.ts"],
+    );
+  }
 });

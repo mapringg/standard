@@ -1,7 +1,17 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, matchesGlob } from "node:path";
 
-import { DATABASE_SUITE, UI_APPS, describe, isGenerated, isTest, isTestSupport, locate, stem } from "./paths.mjs";
+import {
+  DATABASE_SUITE,
+  UI_APPS,
+  describe,
+  exportedIds,
+  isGenerated,
+  isTest,
+  isTestSupport,
+  locate,
+  stem,
+} from "./paths.mjs";
 
 const PACKAGES = new Set(["tokens", "i18n"]);
 const TOP_DIRS = new Set(["apps", "packages", "infra", "scripts", ".github", ".githooks", ".claude", ".vscode"]);
@@ -41,11 +51,42 @@ function routesDir(kind) {
   return kind === "marketing" ? "pages" : "app";
 }
 
-function streams(where, segments) {
-  return segments[0] === "api" && SSE.test(readFileSync(join(where.root, where.rel), "utf8"));
+const HANDLER_MESSAGE =
+  "Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; keep only GET at src/app/health/route.ts, MCP at src/app/mcp/route.ts, or streaming handlers under src/app/api/ with text/event-stream or a value import from <feature>-stream.server.ts.";
+
+function handlerAllowed(where, program, text) {
+  const segments = where.local.split("/").slice(2, -1);
+  if (segments.includes("webhooks") || segments.at(-1)?.includes(".")) return true;
+  if (where.local === "src/app/mcp/route.ts") return true;
+  if (where.local === "src/app/health/route.ts") {
+    const exports = program.body.filter((node) => node.type.startsWith("Export"));
+    return (
+      exports.length > 0 &&
+      exports.every(
+        (node) =>
+          node.type === "ExportNamedDeclaration" &&
+          node.exportKind !== "type" &&
+          !node.declaration?.type.startsWith("TS") &&
+          node.specifiers.every((specifier) => specifier.exportKind !== "type") &&
+          exportedIds(node).length > 0 &&
+          exportedIds(node).every((id) => (id.name ?? id.value) === "GET"),
+      )
+    );
+  }
+  return (
+    segments[0] === "api" &&
+    (SSE.test(text) ||
+      program.body.some(
+        (node) =>
+          node.type === "ImportDeclaration" &&
+          node.importKind !== "type" &&
+          node.specifiers.some((specifier) => specifier.importKind !== "type") &&
+          /(?:^|\/)[^/]+-stream\.server(?:\.ts)?$/.test(node.source.value),
+      ))
+  );
 }
 
-function webRoute(rest, name, where) {
+function webRoute(rest, name) {
   const segments = rest.split("/").slice(1, -1);
   const found = [];
   for (const segment of segments) {
@@ -61,16 +102,6 @@ function webRoute(rest, name, where) {
   else if (file === "default") found.push("Delete default.tsx and compose the sections inside one page.");
   else if (!NEXT_FILES.has(file))
     found.push("Move this code into a feature or components/; app/ holds only Next route files.");
-  if (
-    file === "route" &&
-    !segments.includes("webhooks") &&
-    !segments.at(-1)?.includes(".") &&
-    !streams(where, segments)
-  ) {
-    found.push(
-      "Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; only a text/event-stream handler may stay under src/app/api/.",
-    );
-  }
   return found;
 }
 
@@ -139,7 +170,7 @@ function codeProblems(where) {
   if (parts[0] === "components") {
     return parts.length === 3 ? found : [...found, "Move the component to components/<group>/<file>, one level deep."];
   }
-  if (parts[0] === routesDir(kind)) return kind === "web" ? [...found, ...webRoute(rest, name, where)] : found;
+  if (parts[0] === routesDir(kind)) return kind === "web" ? [...found, ...webRoute(rest, name)] : found;
   if (parts.length === 1) {
     if (kind === "web" && WEB_ROOT_FILES.has(stem(name))) return found;
     if (kind === "liff" && name === "main.tsx") return found;
@@ -360,6 +391,12 @@ export default {
     if (!where) return {};
     return {
       Program(node) {
+        if (
+          where.kind === "web" &&
+          /^src\/app\/(?:.*\/)?route\.[cm]?[jt]sx?$/.test(where.local) &&
+          !handlerAllowed(where, node, context.sourceCode.getText())
+        )
+          context.report({ node, message: HANDLER_MESSAGE });
         for (const message of findingsFor(where.root).get(where.rel) ?? []) context.report({ node, message });
       },
     };
