@@ -313,3 +313,21 @@ test("owners accepts shared URL params modules and keeps UI parsers centralized"
     "apps/web/src/lib/compare-url.ts",
   ]);
 });
+
+test("owners allows the Next.js query hook only in the shared route params module", (t) => {
+  const hook = 'import { useSearchParams } from "next/navigation";\nexport const useQuery = () => useSearchParams();\n';
+  const result = lint(t, {
+    "apps/web/src/lib/next-route-params.ts": hook,
+    "apps/web/src/lib/search-params.ts": hook,
+    "apps/web/src/features/search/search-params.ts": hook,
+    "apps/web/src/components/search/search-view.tsx":
+      'import { useSearchParams as useQuery } from "next/navigation";\nexport const useParams = () => useQuery();\n',
+    "apps/web/src/components/search/search-panel.tsx":
+      'import { useQuery } from "#/lib/next-route-params.ts";\nexport const useParams = () => useQuery();\n',
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/web/src/components/search/search-view.tsx",
+    "apps/web/src/features/search/search-params.ts",
+    "apps/web/src/lib/search-params.ts",
+  ]);
+});
