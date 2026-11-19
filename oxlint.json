@@ -416,6 +416,7 @@
         "typescript/unbound-method": "off",
         "typescript/use-unknown-in-catch-callback-variable": "off",
         "node/no-sync": "off",
+        "eslint/no-await-in-loop": "off",
         "standard/no-typeof": "off"
       }
     }
