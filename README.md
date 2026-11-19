@@ -82,8 +82,8 @@ API tests, test utilities and fixtures may use `fetch` when the same file starts
 An `AGENTS.md` holds only what the code, the config and lint messages can't tell an agent. `pnpm lint` checks its shape:
 
 - One `#` title, then `##` sections chosen from Rules, Words, Copy, Decisions, Traps, Operations and Sources, in that order.
-- At most 50 lines. A block a tool writes between `<!-- BEGIN:<name> -->` and `<!-- END:<name> -->` doesn't count.
-- No file paths and no version numbers. Name the thing instead; paths and versions go stale.
+- At most 50 lines. Fenced code and a block a tool writes between `<!-- BEGIN:<name> -->` and `<!-- END:<name> -->` don't count.
+- No repository paths, such as `src/lib/env.ts` or `.github/workflows/`, and no version numbers. Name the thing instead; paths and versions go stale. URL paths like `/api/auth/callback`, bare file names like `package.json`, links to other Markdown files and `owner/repo` names are fine.
 - Relative links in every Markdown file resolve, including `#heading` anchors.
 
 Review every change to an `AGENTS.md` for what lint can't check:

@@ -101,3 +101,41 @@ test("agent-docs checks relative Markdown links in every Markdown file", (t) => 
     ],
   );
 });
+
+test("agent-docs leaves fenced and generated blocks out of the length, paths and versions", (t) => {
+  const fenced = `# A\n\n## Rules\n\n~~~~\n${"v1.2.3 [x](missing.md)\n".repeat(60)}~~~\n~~~~\n\n\`\`\`\n${"- x\n".repeat(60)}\`\`\`\n\n<!-- BEGIN:tool -->\n${"- y\n".repeat(60)}<!-- END:tool -->\n\n- Last line.\n`;
+  deepEqual(findings(t, { "AGENTS.md": fenced }), []);
+});
+
+test("agent-docs reads link destinations the way Markdown does", (t) => {
+  deepEqual(
+    findings(t, {
+      "AGENTS.md": GOOD,
+      "apps/web/AGENTS.md": WEB,
+      "some file.md": "# Hello ###\n\n## Hello\n\n# Use [foo](https://example.com)\n",
+      "docs/ok.md": [
+        "[a](../some%20file.md#hello) [b](<../some file.md#hello-1>) [c](../some%20file.md?plain=1#use-foo)",
+        "[d](../apps/web/AGENTS.md#this-is-not-the-nextjs-you-know) `[e](missing.md)` [f][ref]",
+        "",
+        "[ref]: ../AGENTS.md#rules",
+      ].join("\n"),
+      "docs/bad.md": '[a](missing.md "Title")\n\n[b][gone]\n\n[gone]: ../nowhere.md\n',
+    }),
+    [
+      "docs/bad.md: Fix the link to ../nowhere.md; nowhere.md does not exist.",
+      "docs/bad.md: Fix the link to missing.md; docs/missing.md does not exist.",
+    ],
+  );
+});
+
+test("agent-docs tells repository paths from endpoints and repository names", (t) => {
+  deepEqual(
+    findings(t, {
+      "AGENTS.md":
+        "# A\n\n## Rules\n\n- Serve `/api/schema.json` and `/dev/shm`; read `owner/repo` on GitHub.\n- Avoid `.github/workflows/` and `node_modules/next/dist/docs/` and `pnpm exec vitest run #/lib/env.ts`.\n",
+    }),
+    [
+      "AGENTS.md: Name what .github/workflows/, node_modules/next/dist/docs/, #/lib/env.ts is instead of where it lives; paths go stale when files move.",
+    ],
+  );
+});

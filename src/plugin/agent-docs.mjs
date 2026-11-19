@@ -6,49 +6,127 @@ import { anchorFor, listFiles, locate } from "./paths.mjs";
 const SECTIONS = ["Rules", "Words", "Copy", "Decisions", "Traps", "Operations", "Sources"];
 const MAX_LINES = 50;
 const CODE = /\.[cm]?[jt]sx?$/;
-const GENERATED = /<!-- BEGIN:([\w-]+) -->[\s\S]*?<!-- END:\1 -->/g;
-const FENCE = /^```[\s\S]*?^```/gm;
-const SPAN = /`([^`\n]+)`/g;
-const LINK = /\]\(([^)\s]+)\)/g;
-const PATH_START = /^(?:\.{1,2}\/)*(?:src|apps|packages|lib|scripts|infra|test|e2e|components|features)\//;
-const PATH_END = /\/[^/\s]*\.(?:[cm]?[jt]sx?|json|ya?ml|toml|css|astro|sh|py)$/;
+const BEGIN = /^<!-- BEGIN:([\w-]+) -->\s*$/;
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
+const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/;
+const SPAN = /(`+)(.+?)\1(?!`)/g;
+const INLINE_LINK =
+  /!?\[(?:[^\]\n]|\][^(])*?\]\(\s*(<[^>\n]*>|[^\s()]+(?:\([^\s()]*\)[^\s()]*)*)(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)/g;
+const REFERENCE = /^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/;
+const DIRS =
+  /^(?:\.{1,2}\/)*(?:\.github|\.claude|node_modules|dist|src|apps|packages|lib|scripts|infra|test|e2e|components|features)\//;
+const EXTENSION = /\/[^/]*\.[a-z\d]+$/i;
 const VERSION = /(?<![\d.])v?\d+\.\d+\.\d+(?!\.?\d)/g;
 const CACHE_MS = 2000;
 const scans = new Map();
 
-function blank(text) {
-  return text.replaceAll(/[^\n]/g, "");
+function classify(text) {
+  const lines = text.split("\n");
+  const kinds = [];
+  let fence = null;
+  let generated = null;
+  for (const line of lines) {
+    if (fence) {
+      kinds.push("fence");
+      if (new RegExp(`^ {0,3}${fence[0] === "`" ? "`" : "~"}{${fence.length},}\\s*$`).test(line)) fence = null;
+      continue;
+    }
+    const open = FENCE_OPEN.exec(line);
+    if (open) {
+      fence = open[1];
+      kinds.push("fence");
+      continue;
+    }
+    if (generated) {
+      kinds.push("generated");
+      if (line.trim() === `<!-- END:${generated} -->`) generated = null;
+      continue;
+    }
+    const begin = BEGIN.exec(line.trim());
+    if (begin) {
+      generated = begin[1];
+      kinds.push("generated");
+      continue;
+    }
+    kinds.push("prose");
+  }
+  return lines.map((line, index) => ({ line, kind: kinds[index] }));
 }
 
-function prose(text) {
-  return text.replaceAll(GENERATED, blank).replaceAll(FENCE, blank);
+function withoutCode(line) {
+  return line.replaceAll(SPAN, "");
 }
 
-function slug(heading) {
-  return heading
-    .replaceAll("`", "")
-    .trim()
-    .toLowerCase()
-    .replaceAll(/[^\p{L}\p{N} _-]/gu, "")
-    .replaceAll(" ", "-");
+function decode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
-function headings(text) {
-  return [...prose(text).matchAll(/^(#{1,6})\s+(.+?)\s*$/gm)].map(([, marks, title]) => ({
-    level: marks.length,
-    title,
-  }));
+function destination(raw) {
+  const bare = raw.startsWith("<") ? raw.slice(1, -1) : raw;
+  const hash = bare.indexOf("#");
+  const path = (hash === -1 ? bare : bare.slice(0, hash)).split("?")[0];
+  return { raw, path: decode(path), anchor: hash === -1 ? undefined : decode(bare.slice(hash + 1)) };
 }
 
-function isPath(token) {
-  return !token.endsWith(".md") && !token.includes("://") && (PATH_START.test(token) || PATH_END.test(token));
-}
-
-function shapeProblems(text) {
+function links(lines) {
   const found = [];
-  const body = prose(text);
-  const lines = body.trimEnd().split("\n");
-  const titles = headings(text);
+  for (const { line } of lines) {
+    const reference = REFERENCE.exec(line);
+    if (reference) found.push(destination(reference[1]));
+    for (const match of withoutCode(line).matchAll(INLINE_LINK)) found.push(destination(match[1]));
+  }
+  return found;
+}
+
+function headingOf(line) {
+  const match = HEADING.exec(line);
+  if (!match) return null;
+  const title = (match[2] ?? "").replace(/(?:^|[ \t]+)#+[ \t]*$/, "").trim();
+  return { level: match[1].length, title };
+}
+
+function rendered(title) {
+  return title
+    .replaceAll(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replaceAll(/<[^>]+>/g, "")
+    .replaceAll("`", "")
+    .replaceAll(/(\*{1,3}|_{1,3})(\S(?:.*?\S)?)\1/g, "$2");
+}
+
+function slugs(lines) {
+  const seen = new Map();
+  const result = new Set();
+  for (const { line, kind } of lines) {
+    if (kind === "fence") continue;
+    const heading = headingOf(line);
+    if (!heading) continue;
+    const base = rendered(heading.title)
+      .trim()
+      .toLowerCase()
+      .replaceAll(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
+      .replaceAll(" ", "-");
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    result.add(count === 0 ? base : `${base}-${count}`);
+  }
+  return result;
+}
+
+function isPath(word) {
+  const token = word.replace(/[.,;:)]+$/, "");
+  if (token.startsWith("/") || token.includes("://") || token.endsWith(".md")) return false;
+  return DIRS.test(token) || (token.includes("/") && EXTENSION.test(token));
+}
+
+function shapeProblems(prose) {
+  const found = [];
+  const lines = prose.map((item) => item.line);
+  while (lines.length > 0 && lines.at(-1).trim() === "") lines.pop();
+  const titles = lines.map((line) => headingOf(line)).filter(Boolean);
   if (!/^# \S/.test(lines[0] ?? "")) found.push("Start with one # title naming the app or repo.");
   if (titles.filter((item) => item.level === 1).length > 1)
     found.push("Keep one # title; make the others ## sections.");
@@ -64,34 +142,29 @@ function shapeProblems(text) {
   return found;
 }
 
-function contentProblems(text) {
+function contentProblems(prose) {
   const found = [];
-  const body = prose(text);
-  const tokens = [...body.matchAll(SPAN)].map((match) => match[1]);
-  const targets = [...body.matchAll(LINK)].map((match) => match[1].split("#")[0]);
-  const paths = [...new Set([...tokens, ...targets].filter((token) => isPath(token)))];
+  const spans = prose.flatMap(({ line }) => [...line.matchAll(SPAN)].flatMap((match) => match[2].split(/\s+/)));
+  const targets = links(prose).map((link) => link.path);
+  const paths = [...new Set([...spans, ...targets].filter((token) => isPath(token)))];
   if (paths.length > 0)
     found.push(`Name what ${paths.join(", ")} is instead of where it lives; paths go stale when files move.`);
-  const versions = [...new Set(body.match(VERSION) ?? [])];
+  const versions = [...new Set(prose.flatMap(({ line }) => line.match(VERSION) ?? []))];
   if (versions.length > 0) found.push(`Drop ${versions.join(", ")}; the lockfile and manifests already pin versions.`);
   return found;
 }
 
-function linkProblems(root, rel, text) {
+function linkProblems(root, rel, prose, documentOf) {
   const found = [];
-  for (const [, target] of prose(text).matchAll(LINK)) {
-    if (/^[a-z][\w+.-]*:/i.test(target)) continue;
-    const [path, anchor] = target.split("#");
+  for (const { raw, path, anchor } of links(prose)) {
+    if (/^[a-z][\w+.-]*:/i.test(path) || (path === "" && anchor === undefined)) continue;
     const file = path ? normalize(join(dirname(rel), path)) : rel;
-    const absolute = join(root, file);
-    if (!existsSync(absolute)) {
-      found.push(`Fix the link to ${target}; ${file} does not exist.`);
+    if (!existsSync(join(root, file))) {
+      found.push(`Fix the link to ${raw}; ${file} does not exist.`);
       continue;
     }
-    if (anchor === undefined || !file.endsWith(".md")) continue;
-    const own = file === rel ? text : readFileSync(absolute, "utf8");
-    if (!headings(own).some((item) => slug(item.title) === anchor))
-      found.push(`Fix the link to ${target}; ${file} has no heading #${anchor}.`);
+    if (anchor === undefined || anchor === "" || !file.endsWith(".md")) continue;
+    if (!documentOf(file).slugs.has(anchor)) found.push(`Fix the link to ${raw}; ${file} has no heading #${anchor}.`);
   }
   return found;
 }
@@ -99,13 +172,21 @@ function linkProblems(root, rel, text) {
 function scan(root) {
   const files = listFiles(root);
   const lintable = files.filter((rel) => CODE.test(rel));
+  const documents = new Map();
+  const documentOf = (rel) => {
+    if (!documents.has(rel)) {
+      const lines = classify(readFileSync(join(root, rel), "utf8"));
+      documents.set(rel, { prose: lines.filter((item) => item.kind === "prose"), slugs: slugs(lines) });
+    }
+    return documents.get(rel);
+  };
   const findings = new Map();
   for (const rel of files.filter((file) => file.endsWith(".md"))) {
-    const text = readFileSync(join(root, rel), "utf8");
+    const { prose } = documentOf(rel);
     const name = rel.slice(rel.lastIndexOf("/") + 1);
     const problems = [
-      ...(name === "AGENTS.md" ? [...shapeProblems(text), ...contentProblems(text)] : []),
-      ...linkProblems(root, rel, text),
+      ...(name === "AGENTS.md" ? [...shapeProblems(prose), ...contentProblems(prose)] : []),
+      ...linkProblems(root, rel, prose, documentOf),
     ];
     const anchor = anchorFor(rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "", lintable);
     if (!anchor || problems.length === 0) continue;
