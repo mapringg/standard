@@ -1,14 +1,16 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, matchesGlob } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   DATABASE_SUITE,
   UI_APPS,
+  anchorFor,
   describe,
   exportedIds,
   isGenerated,
   isTest,
   isTestSupport,
+  listFiles,
   locate,
   stem,
 } from "./paths.mjs";
@@ -44,7 +46,6 @@ const API_DIRS = new Set(["middleware", "infra", "upstreams"]);
 const WEB_ROOT_FILES = new Set(["proxy", "instrumentation", "instrumentation-client"]);
 const SSE = /text\/event-stream|\.to\w*StreamResponse\(/;
 const CACHE_MS = 2000;
-const SKIP = new Set([".git", "node_modules"]);
 const scans = new Map();
 
 function routesDir(kind) {
@@ -241,60 +242,6 @@ function fileProblems(rel, root, localized) {
     found.push("Move this code into an app or package; the top level holds only config.");
   if (base && CODE.test(name)) found.push(...codeProblems(where));
   return found;
-}
-
-function ignoreRules(root, dir, file) {
-  const path = join(root, dir, file);
-  if (!existsSync(path)) return [];
-  const rules = [];
-  for (const raw of readFileSync(path, "utf8").split("\n")) {
-    const line = raw.replace(/\s+$/, "");
-    if (!line || line.startsWith("#")) continue;
-    const negate = line.startsWith("!");
-    let pattern = negate ? line.slice(1) : line;
-    const dirOnly = pattern.endsWith("/");
-    pattern = pattern.replace(/\/$/, "");
-    const anchored = pattern.includes("/");
-    rules.push({ dir, pattern: pattern.replace(/^\//, ""), negate, dirOnly, anchored });
-  }
-  return rules;
-}
-
-function ignored(rules, rel, isDir) {
-  let result = false;
-  for (const rule of rules) {
-    if (rule.dirOnly && !isDir) continue;
-    if (rule.dir && !rel.startsWith(`${rule.dir}/`)) continue;
-    const local = rule.dir ? rel.slice(rule.dir.length + 1) : rel;
-    const target = rule.anchored ? local : local.slice(local.lastIndexOf("/") + 1);
-    if (matchesGlob(target, rule.pattern)) result = !rule.negate;
-  }
-  return result;
-}
-
-function listFiles(root) {
-  const files = [];
-  const walk = (dir, inherited) => {
-    const rules = [...inherited, ...ignoreRules(root, dir, ".gitignore")];
-    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
-      if (SKIP.has(entry.name)) continue;
-      const rel = dir ? `${dir}/${entry.name}` : entry.name;
-      if (ignored(rules, rel, entry.isDirectory())) continue;
-      if (entry.isDirectory()) walk(rel, rules);
-      else if (entry.isFile()) files.push(rel);
-    }
-  };
-  walk("", ignoreRules(root, ".git/info", "exclude"));
-  return files.sort();
-}
-
-function anchorFor(path, lintable) {
-  for (let dir = path; ; dir = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "") {
-    const prefix = dir ? `${dir}/` : "";
-    const hit = lintable.find((file) => file.startsWith(prefix));
-    if (hit) return hit;
-    if (!dir) return null;
-  }
 }
 
 function scan(root) {

@@ -7,7 +7,7 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.1.12",
+    "@mapringg/standard": "github:mapringg/standard#v1.2.0",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
@@ -76,3 +76,19 @@ Next route files may import shared server i18n from `#/lib/i18n.server.ts` (or `
 Keep HTTP work in the API or a Server Action. Next permits `src/app/health/route.ts` exporting only `GET`, and `src/app/mcp/route.ts` for MCP. A streaming handler under `src/app/api/**/route.ts` must contain `text/event-stream`, call a `.to*StreamResponse()` helper, or have a static value import from a module named `<feature>-stream.server.ts` (the `.ts` extension may be omitted). Type-only imports do not mark a route as streaming. Forward the stream from that module; a cancellable JSON response alone does not qualify.
 
 API tests, test utilities and fixtures may use `fetch` when the same file starts a local server with `.listen(<numeric port>)`, including `.listen(0)`. MSW's `.listen({ ... })` still requires `onUnhandledRequest: "error"` (or `onUnhandledFrame: "error"` in MSW 3). Use `testClient()` for `/api` paths; direct `app.request(...)` or `createApp().request(...)` is allowed for literal paths outside `/api`, including static template literals.
+
+## AGENTS.md
+
+An `AGENTS.md` holds only what the code, the config and lint messages can't tell an agent. `pnpm lint` checks its shape:
+
+- One `#` title, then `##` sections chosen from Rules, Words, Copy, Decisions, Traps, Operations and Sources, in that order.
+- At most 50 lines. A block a tool writes between `<!-- BEGIN:<name> -->` and `<!-- END:<name> -->` doesn't count.
+- No file paths and no version numbers. Name the thing instead; paths and versions go stale.
+- Relative links in every Markdown file resolve, including `#heading` anchors.
+
+Review every change to an `AGENTS.md` for what lint can't check:
+
+- Could an agent learn it from the code, the config or a lint message? Delete it.
+- Will it turn false when someone renames, moves or retunes something? Keep only the lasting reason.
+- Does a rule whose reason isn't obvious say why, or what breaks?
+- Is it in the narrowest `AGENTS.md` that covers it, and said only once?
