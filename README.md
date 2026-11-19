@@ -7,7 +7,7 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.2.3",
+    "@mapringg/standard": "github:mapringg/standard#v1.2.4",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
@@ -72,6 +72,8 @@ pnpm --filter "...[origin/develop]" test
 Run `pnpm lint` from the repo root. It lints and type checks in one run, so there is no separate `tsc`. Astro apps also run `astro check`.
 
 Next route files may import shared server i18n from `#/lib/i18n.server.ts` (or `#/lib/i18n.server`). In `src/instrumentation.ts`, Next runtime detection may read `process.env.NEXT_RUNTIME` directly. Test utilities (`*.test-utils.*`) and fixtures (`*.fixture.*`) may spread `...process.env` into an object to pass the environment to a child process.
+
+Keep URL parsing and builders in a feature's `*-params.ts`. A shared URL belongs in a `*-params.ts` under `src/lib`.
 
 Keep HTTP work in the API or a Server Action. Next permits `src/app/health/route.ts` exporting only `GET`, and `src/app/mcp/route.ts` for MCP. A streaming handler under `src/app/api/**/route.ts` must contain `text/event-stream`, call a `.to*StreamResponse()` helper, or have a static value import from a module named `<feature>-stream.server.ts` (the `.ts` extension may be omitted). Type-only imports do not mark a route as streaming. Forward the stream from that module; a cancellable JSON response alone does not qualify.
 
