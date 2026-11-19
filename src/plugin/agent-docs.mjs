@@ -7,12 +7,12 @@ const SECTIONS = ["Rules", "Words", "Copy", "Decisions", "Traps", "Operations", 
 const MAX_LINES = 50;
 const CODE = /\.[cm]?[jt]sx?$/;
 const BEGIN = /^<!-- BEGIN:([\w-]+) -->\s*$/;
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
+const FENCE_OPEN = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/;
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/;
-const SPAN = /(`+)(.+?)\1(?!`)/g;
+const SPAN = /(?<!`)(`+)(?!`)([\s\S]+?)(?<!`)\1(?!`)/g;
 const INLINE_LINK =
   /!?\[(?:[^\]\n]|\][^(])*?\]\(\s*(<[^>\n]*>|[^\s()]+(?:\([^\s()]*\)[^\s()]*)*)(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)/g;
-const REFERENCE = /^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/;
+const REFERENCE = /^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/gm;
 const DIRS =
   /^(?:\.{1,2}\/)*(?:\.github|\.claude|node_modules|dist|src|apps|packages|lib|scripts|infra|test|e2e|components|features)\//;
 const EXTENSION = /\/[^/]*\.[a-z\d]+$/i;
@@ -33,7 +33,7 @@ function classify(text) {
     }
     const open = FENCE_OPEN.exec(line);
     if (open) {
-      fence = open[1];
+      fence = open[1] ?? open[2];
       kinds.push("fence");
       continue;
     }
@@ -53,8 +53,8 @@ function classify(text) {
   return lines.map((line, index) => ({ line, kind: kinds[index] }));
 }
 
-function withoutCode(line) {
-  return line.replaceAll(SPAN, "");
+function joined(lines) {
+  return lines.map((item) => item.line).join("\n");
 }
 
 function decode(value) {
@@ -73,13 +73,8 @@ function destination(raw) {
 }
 
 function links(lines) {
-  const found = [];
-  for (const { line } of lines) {
-    const reference = REFERENCE.exec(line);
-    if (reference) found.push(destination(reference[1]));
-    for (const match of withoutCode(line).matchAll(INLINE_LINK)) found.push(destination(match[1]));
-  }
-  return found;
+  const text = joined(lines).replaceAll(SPAN, "");
+  return [...text.matchAll(REFERENCE), ...text.matchAll(INLINE_LINK)].map((match) => destination(match[1]));
 }
 
 function headingOf(line) {
@@ -91,7 +86,8 @@ function headingOf(line) {
 
 function rendered(title) {
   return title
-    .replaceAll(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replaceAll(/\]\([^)]*\)/g, "]")
+    .replaceAll(/\]\[[^\]]*\]/g, "]")
     .replaceAll(/<[^>]+>/g, "")
     .replaceAll("`", "")
     .replaceAll(/(\*{1,3}|_{1,3})(\S(?:.*?\S)?)\1/g, "$2");
@@ -109,9 +105,14 @@ function slugs(lines) {
       .toLowerCase()
       .replaceAll(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
       .replaceAll(" ", "-");
-    const count = seen.get(base) ?? 0;
+    let count = seen.get(base) ?? 0;
+    let slug = count === 0 ? base : `${base}-${count}`;
+    while (result.has(slug)) {
+      count += 1;
+      slug = `${base}-${count}`;
+    }
     seen.set(base, count + 1);
-    result.add(count === 0 ? base : `${base}-${count}`);
+    result.add(slug);
   }
   return result;
 }
@@ -144,7 +145,7 @@ function shapeProblems(prose) {
 
 function contentProblems(prose) {
   const found = [];
-  const spans = prose.flatMap(({ line }) => [...line.matchAll(SPAN)].flatMap((match) => match[2].split(/\s+/)));
+  const spans = [...joined(prose).matchAll(SPAN)].flatMap((match) => match[2].split(/\s+/));
   const targets = links(prose).map((link) => link.path);
   const paths = [...new Set([...spans, ...targets].filter((token) => isPath(token)))];
   if (paths.length > 0)

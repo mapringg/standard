@@ -139,3 +139,32 @@ test("agent-docs tells repository paths from endpoints and repository names", (t
     ],
   );
 });
+
+test("agent-docs handles inline fences, multiline code spans and colliding anchors", (t) => {
+  deepEqual(
+    findings(t, {
+      "AGENTS.md": GOOD,
+      "apps/web/AGENTS.md": WEB,
+      "notes.md": [
+        "# Foo",
+        "# Foo",
+        "# Foo-1",
+        "# Foo",
+        "# Use [foo][ref]",
+        "# Use [foo [bar]](https://example.com)",
+        "",
+        "[ref]: https://example.com",
+        "",
+        "[a](#foo-1-1) [b](#foo-2) [c](#use-foo) [d](#use-foo-bar)",
+        "",
+        "Some `",
+        "[x](missing.md)",
+        "` code.",
+        "",
+        "```inline code```",
+        "[y](gone.md)",
+      ].join("\n"),
+    }),
+    ["notes.md: Fix the link to gone.md; gone.md does not exist."],
+  );
+});
