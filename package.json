@@ -5,6 +5,7 @@
   "license": "MIT",
   "repository": "github:mapringg/standard",
   "files": [
+    ".claude/skills/test-audit/SKILL.md",
     "oxlint.json",
     "oxfmt.json",
     "tsconfig.json",
