@@ -1,5 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, matchesGlob, relative, sep } from "node:path";
+
+const SKIP = new Set([".git", "node_modules"]);
 
 const roots = new Map();
 const kinds = new Map();
@@ -137,4 +139,58 @@ export function exportedIds(node) {
     return node.declaration.declarations.flatMap((item) => patternIds(item.id));
   if (node.declaration?.id) return [node.declaration.id];
   return (node.specifiers ?? []).map((specifier) => specifier.exported);
+}
+
+function ignoreRules(root, dir, file) {
+  const path = join(root, dir, file);
+  if (!existsSync(path)) return [];
+  const rules = [];
+  for (const raw of readFileSync(path, "utf8").split("\n")) {
+    const line = raw.replace(/\s+$/, "");
+    if (!line || line.startsWith("#")) continue;
+    const negate = line.startsWith("!");
+    let pattern = negate ? line.slice(1) : line;
+    const dirOnly = pattern.endsWith("/");
+    pattern = pattern.replace(/\/$/, "");
+    const anchored = pattern.includes("/");
+    rules.push({ dir, pattern: pattern.replace(/^\//, ""), negate, dirOnly, anchored });
+  }
+  return rules;
+}
+
+function ignored(rules, rel, isDir) {
+  let result = false;
+  for (const rule of rules) {
+    if (rule.dirOnly && !isDir) continue;
+    if (rule.dir && !rel.startsWith(`${rule.dir}/`)) continue;
+    const local = rule.dir ? rel.slice(rule.dir.length + 1) : rel;
+    const target = rule.anchored ? local : local.slice(local.lastIndexOf("/") + 1);
+    if (matchesGlob(target, rule.pattern)) result = !rule.negate;
+  }
+  return result;
+}
+
+export function listFiles(root) {
+  const files = [];
+  const walk = (dir, inherited) => {
+    const rules = [...inherited, ...ignoreRules(root, dir, ".gitignore")];
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      if (SKIP.has(entry.name)) continue;
+      const rel = dir ? `${dir}/${entry.name}` : entry.name;
+      if (ignored(rules, rel, entry.isDirectory())) continue;
+      if (entry.isDirectory()) walk(rel, rules);
+      else if (entry.isFile()) files.push(rel);
+    }
+  };
+  walk("", ignoreRules(root, ".git/info", "exclude"));
+  return files.sort();
+}
+
+export function anchorFor(path, lintable) {
+  for (let dir = path; ; dir = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "") {
+    const prefix = dir ? `${dir}/` : "";
+    const hit = lintable.find((file) => file.startsWith(prefix));
+    if (hit) return hit;
+    if (!dir) return null;
+  }
 }

@@ -31,6 +31,7 @@
     "es2024": true
   },
   "rules": {
+    "standard/agent-docs": "error",
     "standard/feature-imports": "error",
     "standard/hono": "error",
     "standard/next-data": "error",

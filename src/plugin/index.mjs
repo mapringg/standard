@@ -1,3 +1,4 @@
+import agentDocs from "./agent-docs.mjs";
 import featureImports from "./feature-imports.mjs";
 import hono from "./hono.mjs";
 import nextData from "./next-data.mjs";
@@ -18,6 +19,7 @@ import tests from "./tests.mjs";
 export default {
   meta: { name: "standard" },
   rules: {
+    "agent-docs": agentDocs,
     "feature-imports": featureImports,
     hono,
     "next-data": nextData,
