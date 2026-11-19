@@ -12,3 +12,7 @@
 
 - Releases are `vX.Y.Z` tags on main. Never move or delete them.
 - The repo is public. Name adopters only as repo-a, repo-b and repo-c.
+
+## Sources
+
+- Follow the [test audit skill](.claude/skills/test-audit/SKILL.md) before a migration or broad refactor.
