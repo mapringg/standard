@@ -6,6 +6,7 @@ const UI = ["web", "liff", "mobile", "marketing"];
 const API = ["api"];
 const APPS = [...API, ...UI];
 const PARAMS = ["src/features/*/*-params.ts"];
+const URL_PARAMS = [...PARAMS, "src/lib/**/*-params.ts"];
 const ROUTES = ["src/app/**", "src/pages/**"];
 const TESTS = ["**/*.test.ts", "**/*.test.tsx", "**/*.test-utils.ts", "e2e/*.test.ts"];
 const OAUTH = "src/features/oauth/**";
@@ -139,14 +140,14 @@ const TABLE = [
   {
     ban: { global: "URLSearchParams" },
     kinds: UI,
-    owner: PARAMS,
-    use: "Read search params in <feature>-params.ts with parse().",
+    owner: URL_PARAMS,
+    use: "Read search params in a *-params.ts module with parse().",
   },
   {
     ban: { property: [null, "searchParams"] },
     kinds: UI,
-    owner: [...PARAMS, "src/app/**/page.tsx"],
-    use: "Pass searchParams to parse() from <feature>-params.ts.",
+    owner: [...URL_PARAMS, "src/app/**/page.tsx"],
+    use: "Pass searchParams to parse() from a *-params.ts module.",
   },
   {
     ban: { property: [null, "useSearch"] },

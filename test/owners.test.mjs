@@ -297,3 +297,19 @@ test("owners checks app request factories and static template paths", (t) => {
     "apps/api/src/lib/unknown.test.ts",
   ]);
 });
+
+test("owners accepts shared URL params modules and keeps UI parsers centralized", (t) => {
+  const query = "export const read = (url: URL) => new URLSearchParams(url.searchParams);\n";
+  const result = lint(t, {
+    "apps/web/src/lib/compare-params.ts": query,
+    "apps/web/src/lib/auth/return-params.ts": query,
+    "apps/web/src/lib/compare-params.test.ts": query,
+    "apps/web/src/lib/compare-url.ts": query,
+    "apps/web/src/components/compare/compare-link.tsx": query,
+    "apps/web/src/features/search/search-params.ts": query,
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/web/src/components/compare/compare-link.tsx",
+    "apps/web/src/lib/compare-url.ts",
+  ]);
+});
