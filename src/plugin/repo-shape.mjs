@@ -16,7 +16,17 @@ import {
 } from "./paths.mjs";
 
 const PACKAGES = new Set(["tokens", "i18n"]);
-const TOP_DIRS = new Set(["apps", "packages", "infra", "scripts", ".github", ".githooks", ".claude", ".vscode", ".amp"]);
+const TOP_DIRS = new Set([
+  "apps",
+  "packages",
+  "infra",
+  "scripts",
+  ".github",
+  ".githooks",
+  ".claude",
+  ".vscode",
+  ".amp",
+]);
 const CHECK_SCRIPT = /(?:^|[-.])(?:check|lint|verify|validate|audit|enforce)(?:[-.]|$)/;
 const DOCS = new Set(["README.md", "AGENTS.md"]);
 const CODE = /\.[cm]?[jt]sx?$/;
