@@ -168,3 +168,49 @@ test("agent-docs handles inline fences, multiline code spans and colliding ancho
     ["notes.md: Fix the link to gone.md; gone.md does not exist."],
   );
 });
+
+const skillRoot = "node_modules/@mapringg/standard/.claude/skills";
+const auditSkill = `${skillRoot}/test-audit/SKILL.md`;
+const reviewSkill = `${skillRoot}/review-standard/SKILL.md`;
+const standardInstall = {
+  "node_modules/@mapringg/standard/package.json": '{"name":"@mapringg/standard"}',
+  [auditSkill]: "# Test audit\n",
+  [reviewSkill]: "# Standard review\n",
+};
+const skillLinks = `# Adopter
+
+## Sources
+
+- [Test audit](${auditSkill})
+- [Standard review](${reviewSkill})
+`;
+
+test("adopters with no root agent instructions are told where to add both standard skills", (t) => {
+  deepEqual(findings(t, standardInstall), [
+    `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
+    `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
+  ]);
+});
+
+test("adopters put the skill references in agent instructions even when README links to them", (t) => {
+  deepEqual(findings(t, { ...standardInstall, "AGENTS.md": "# Adopter\n", "README.md": skillLinks }), [
+    `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
+    `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
+  ]);
+});
+
+test("adopters link the installed skills without local copies", (t) => {
+  deepEqual(findings(t, { ...standardInstall, "AGENTS.md": skillLinks }), []);
+  deepEqual(
+    findings(t, {
+      ...standardInstall,
+      "AGENTS.md": skillLinks,
+      ".claude/skills/review-standard/SKILL.md": "# Old review\n",
+      ".claude/skills/test-audit/SKILL.md": "# Old audit\n",
+    }),
+    [
+      ".claude/skills/review-standard/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
+      ".claude/skills/test-audit/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
+    ],
+  );
+});
