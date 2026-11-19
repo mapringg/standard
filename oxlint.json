@@ -359,6 +359,15 @@
       }
     },
     {
+      "files": ["scripts/**/*.cjs", "**/.claude/skills/**/*.cjs"],
+      "rules": {
+        "import/no-commonjs": "off",
+        "import/unambiguous": "off",
+        "typescript/no-require-imports": "off",
+        "typescript/no-var-requires": "off"
+      }
+    },
+    {
       "files": ["scripts/**", "**/.claude/skills/**"],
       "rules": {
         "typescript/await-thenable": "off",
