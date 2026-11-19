@@ -16,3 +16,4 @@
 ## Sources
 
 - Follow the [test audit skill](.claude/skills/test-audit/SKILL.md) before a migration or broad refactor.
+- Use the [standard review skill](.claude/skills/review-standard/SKILL.md) when reviewing a diff for simplifications.
