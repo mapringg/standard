@@ -170,10 +170,12 @@ test("agent-docs handles inline fences, multiline code spans and colliding ancho
 });
 
 const skillRoot = "node_modules/@mapringg/standard/.claude/skills";
+const prSkill = `${skillRoot}/pr/SKILL.md`;
 const auditSkill = `${skillRoot}/test-audit/SKILL.md`;
 const reviewSkill = `${skillRoot}/review-standard/SKILL.md`;
 const standardInstall = {
   "node_modules/@mapringg/standard/package.json": '{"name":"@mapringg/standard"}',
+  [prSkill]: "# Pull request writing\n",
   [auditSkill]: "# Test audit\n",
   [reviewSkill]: "# Standard review\n",
 };
@@ -181,12 +183,14 @@ const skillLinks = `# Adopter
 
 ## Sources
 
+- [PR writing](${prSkill})
 - [Test audit](${auditSkill})
 - [Standard review](${reviewSkill})
 `;
 
-test("adopters with no root agent instructions are told where to add both standard skills", (t) => {
+test("adopters with no root agent instructions are told where to add the standard skills", (t) => {
   deepEqual(findings(t, standardInstall), [
+    `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for writing pull requests.`,
     `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
     `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
   ]);
@@ -194,6 +198,7 @@ test("adopters with no root agent instructions are told where to add both standa
 
 test("adopters put the skill references in agent instructions even when README links to them", (t) => {
   deepEqual(findings(t, { ...standardInstall, "AGENTS.md": "# Adopter\n", "README.md": skillLinks }), [
+    `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for writing pull requests.`,
     `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
     `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
   ]);
@@ -205,10 +210,12 @@ test("adopters link the installed skills without local copies", (t) => {
     findings(t, {
       ...standardInstall,
       "AGENTS.md": skillLinks,
+      ".claude/skills/pr/SKILL.md": "# Old PR writing\n",
       ".claude/skills/review-standard/SKILL.md": "# Old review\n",
       ".claude/skills/test-audit/SKILL.md": "# Old audit\n",
     }),
     [
+      ".claude/skills/pr/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
       ".claude/skills/review-standard/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
       ".claude/skills/test-audit/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
     ],
