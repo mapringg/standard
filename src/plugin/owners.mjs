@@ -170,7 +170,8 @@ const TABLE = [
   {
     ban: { module: /^next\/navigation$/, names: ["useSearchParams"] },
     kinds: ["web"],
-    use: "Parse searchParams on the server with <feature>-params.ts and pass props.",
+    owner: ["src/lib/next-route-params.ts"],
+    use: "Parse searchParams on the server and pass props, or use src/lib/next-route-params.ts in a persistent layout.",
   },
   {
     ban: { property: ["router", "refresh"] },
