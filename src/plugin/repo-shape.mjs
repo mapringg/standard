@@ -52,7 +52,7 @@ function routesDir(kind) {
 }
 
 const HANDLER_MESSAGE =
-  "Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; keep only GET at src/app/health/route.ts, MCP at src/app/mcp/route.ts, or streaming handlers under src/app/api/ with text/event-stream or a value import from <feature>-stream.server.ts.";
+  "Move the handler into a webhooks/ folder, a metadata route like sitemap.xml/route.ts or a Server Action; keep only GET at src/app/health/route.ts, MCP at src/app/mcp/route.ts, or streaming or cancellable handlers under src/app/api/ with text/event-stream or a value import from <feature>-stream.server.ts or <feature>-cancellable.server.ts.";
 
 function handlerAllowed(where, program, text) {
   const segments = where.local.split("/").slice(2, -1);
@@ -81,7 +81,7 @@ function handlerAllowed(where, program, text) {
           node.type === "ImportDeclaration" &&
           node.importKind !== "type" &&
           node.specifiers.some((specifier) => specifier.importKind !== "type") &&
-          /(?:^|\/)[^/]+-stream\.server(?:\.ts)?$/.test(node.source.value),
+          /(?:^|\/)[^/]+-(?:stream|cancellable)\.server(?:\.ts)?$/.test(node.source.value),
       ))
   );
 }
