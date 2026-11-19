@@ -7,7 +7,7 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.2.0",
+    "@mapringg/standard": "github:mapringg/standard#v1.2.3",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
@@ -85,6 +85,8 @@ An `AGENTS.md` holds only what the code, the config and lint messages can't tell
 - At most 50 lines. Fenced code and a block a tool writes between `<!-- BEGIN:<name> -->` and `<!-- END:<name> -->` don't count.
 - No repository paths, such as `src/lib/env.ts` or `.github/workflows/`, and no version numbers. Name the thing instead; paths and versions go stale. URL paths like `/api/auth/callback`, bare file names like `package.json`, links to other Markdown files and `owner/repo` names are fine.
 - Relative links in every Markdown file resolve, including `#heading` anchors.
+
+Adopters link the installed PR-writing, review, and test-audit skills under `## Sources` in the root `AGENTS.md`. Copy the [template's skill links](https://github.com/mapringg/monorepo/blob/main/AGENTS.md#sources). Lint reports missing links and local copies.
 
 Review every change to an `AGENTS.md` for what lint can't check:
 
