@@ -23,3 +23,18 @@ test("scripts and skills lint as plain JS tools that may use Node", (t) => {
     [],
   );
 });
+
+test("explicit CommonJS tools can load through Node's legacy preload interface", (t) => {
+  const preload = 'const { sep } = require("node:path");\nmodule.exports = { sep };\n';
+  const production = "apps/api/src/lib/path.cjs";
+  const esModule = "scripts/preload.mjs";
+  const blocked = /^(?:import\((?:no-commonjs|unambiguous)\)|typescript\((?:no-require-imports|no-var-requires)\))$/;
+  const actual = lint(t, {
+    "scripts/preload.cjs": preload,
+    ".claude/skills/verify/scripts/preload.cjs": preload,
+    [esModule]: preload,
+    [production]: preload,
+  });
+  const files = new Set(actual.filter(({ rule }) => blocked.test(rule)).map(({ file }) => file));
+  deepEqual([...files].sort(), [production, esModule].sort());
+});
