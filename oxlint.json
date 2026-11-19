@@ -419,6 +419,18 @@
         "eslint/no-await-in-loop": "off",
         "standard/no-typeof": "off"
       }
+    },
+    {
+      "files": ["**/apps/api/**"],
+      "rules": {
+        "unicorn/prefer-add-event-listener": "off"
+      }
+    },
+    {
+      "files": ["**/src/app/**/layout.tsx", "**/src/app/**/page.tsx", "**/src/app/**/template.tsx"],
+      "rules": {
+        "import/max-dependencies": "off"
+      }
     }
   ]
 }

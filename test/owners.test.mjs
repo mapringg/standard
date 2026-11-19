@@ -206,3 +206,94 @@ test("owners lets API tests reach an Express server and paths outside the typed 
     ],
   );
 });
+
+test("owners allows shared server i18n in route files only", (t) => {
+  const result = lint(t, {
+    "apps/web/src/app/[lang]/page.tsx":
+      'import { pageTitle } from "#/lib/i18n.server.ts"; export const generateMetadata = pageTitle("home");',
+    "apps/web/src/app/[lang]/layout.tsx":
+      'import { getLocale, getTranslator } from "#/lib/i18n.server"; export const locale = getLocale(getTranslator());',
+    "apps/web/src/app/[lang]/template.tsx": 'export { pageTitle } from "#/lib/i18n.server.ts";',
+    "apps/web/src/app/private/page.tsx": 'export { load } from "#/lib/data.server.ts";',
+  });
+  deepEqual(filesWith(result, "owners"), ["apps/web/src/app/private/page.tsx"]);
+});
+
+test("owners allows only Next runtime detection in web instrumentation", (t) => {
+  const runtime = 'if (process.env.NEXT_RUNTIME === "nodejs") await import("./instrumentation-node.ts");';
+  const result = lint(t, {
+    "apps/web/src/instrumentation.ts": runtime,
+    "apps/web/src/lib/instrumentation.ts": runtime,
+    "apps/api/src/instrumentation.ts": runtime,
+    "apps/web/src/features/task/task-runtime.ts": runtime,
+    "apps/web/src/instrumentation-client.ts": "export const key = process.env.API_KEY;",
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/api/src/instrumentation.ts",
+    "apps/web/src/features/task/task-runtime.ts",
+    "apps/web/src/instrumentation-client.ts",
+    "apps/web/src/lib/instrumentation.ts",
+  ]);
+  deepEqual(
+    filesWith(lint(t, { "apps/web/src/instrumentation.ts": "export const key = process.env.API_KEY;" }), "owners"),
+    ["apps/web/src/instrumentation.ts"],
+  );
+});
+
+test("owners allows env passthrough only in test utilities and fixtures", (t) => {
+  const spread =
+    'import { spawn } from "node:child_process"; export const child = spawn("pnpm", [], { env: { ...process.env, API_URL: "http://localhost" } });';
+  const result = lint(t, {
+    "apps/api/src/lib/broker.test-utils.ts": spread,
+    "apps/web/src/lib/broker.fixture.tsx": spread,
+    "apps/web/src/lib/broker.test-utils.mts": spread,
+    "apps/api/src/lib/broker.ts": spread,
+    "apps/api/src/lib/broker.test.ts": spread,
+    "apps/api/src/lib/read.test-utils.ts": "export const key = process.env.API_KEY;",
+    "apps/api/src/lib/read.fixture.ts": "export const env = process.env;",
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/api/src/lib/broker.test.ts",
+    "apps/api/src/lib/broker.ts",
+    "apps/api/src/lib/read.fixture.ts",
+    "apps/api/src/lib/read.test-utils.ts",
+  ]);
+});
+
+test("owners allows API test fetch when the file starts a local HTTP server", (t) => {
+  const local =
+    'import { createMcpBrokerApp } from "#/lib/broker"; export const server = createMcpBrokerApp().listen(0); export const load = (path: string, broker: { url: string }, init: RequestInit) => fetch(new URL(path, broker.url), init);';
+  const result = lint(t, {
+    "apps/api/src/lib/broker.test-utils.ts": local,
+    "apps/api/src/lib/broker.test.ts": local,
+    "apps/api/src/lib/broker.fixture.ts": local,
+    "apps/api/src/lib/broker.ts": local,
+    "apps/web/src/lib/broker.test-utils.ts": local,
+    "apps/api/src/lib/remote.test.ts": 'export const load = () => fetch("https://example.com");',
+    "apps/api/src/lib/msw.test-utils.ts":
+      'server.listen({ onUnhandledRequest: "error" }); export const load = () => fetch("https://example.com");',
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/api/src/lib/broker.ts",
+    "apps/api/src/lib/msw.test-utils.ts",
+    "apps/api/src/lib/remote.test.ts",
+    "apps/web/src/lib/broker.test-utils.ts",
+  ]);
+});
+
+test("owners checks app request factories and static template paths", (t) => {
+  const result = lint(t, {
+    "apps/api/src/app.test.ts":
+      'export const load = () => app.request(`/mcp`); export const missing = () => createApp().request("/mcp");',
+    "apps/api/src/lib/api.test.ts": "export const load = () => createApp().request(`/api/tasks`);",
+    "apps/api/src/lib/root.test.ts": 'export const load = () => app.request("/api");',
+    "apps/api/src/lib/dynamic.test.ts": "export const load = (path: string) => createApp().request(`/${path}`);",
+    "apps/api/src/lib/unknown.test.ts": "export const load = (path: string) => app.request(path);",
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/api/src/lib/api.test.ts",
+    "apps/api/src/lib/dynamic.test.ts",
+    "apps/api/src/lib/root.test.ts",
+    "apps/api/src/lib/unknown.test.ts",
+  ]);
+});

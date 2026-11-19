@@ -162,7 +162,13 @@ export default {
         if (!fixture && memberCall(node, MOCKERS, new Set(["fn"])) && node.arguments.length > 0) report(node, DOUBLE);
         if (!fixture && property && FAKES.test(property)) report(node, DOUBLE);
         if (property === "defineProperty" && rootName(callee) === "Object") report(node, DOUBLE);
-        if (property === "listen" && msw && !servers.has(rootName(callee.object)) && !strictListen(node))
+        if (
+          property === "listen" &&
+          msw &&
+          typeof node.arguments[0]?.value !== "number" &&
+          !servers.has(rootName(callee.object)) &&
+          !strictListen(node)
+        )
           report(
             node,
             'Start the MSW server with listen({ onUnhandledRequest: "error" }) (onUnhandledFrame in MSW 3).',

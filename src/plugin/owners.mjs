@@ -1,6 +1,6 @@
 import { matchesGlob } from "node:path";
 
-import { exportedIds, importedName, locate, moduleVisitors, testedStem } from "./paths.mjs";
+import { exportedIds, importedName, isTestSupport, locate, moduleVisitors, testedStem } from "./paths.mjs";
 
 const UI = ["web", "liff", "mobile", "marketing"];
 const API = ["api"];
@@ -87,7 +87,7 @@ const TABLE = [
     ban: { global: "fetch" },
     kinds: API,
     owner: ["src/upstreams/**"],
-    except: { in: TESTS, imports: /^express$/ },
+    except: { in: TESTS, imports: /^express$/, localServer: true },
     use: "Call outside services through src/upstreams/<vendor>.ts with a timeout.",
   },
   {
@@ -104,6 +104,7 @@ const TABLE = [
   },
   {
     ban: { property: ["process", "env"] },
+    except: { env: true },
     kinds: APPS,
     owner: ["src/lib/env.ts", "src/env.ts", "*.config.*"],
     use: "Read env vars through #/lib/env.",
@@ -195,6 +196,7 @@ const TABLE = [
   },
   {
     ban: { module: /^#\/lib\/api(?:\/|$)|\.server$/ },
+    except: { module: /^#\/lib\/i18n\.server(?:\.ts)?$/ },
     kinds: UI,
     in: ROUTES,
     owner: ["src/app/**/route.ts"],
@@ -288,7 +290,9 @@ function applies(entry, where) {
 function firstPath(node) {
   const call = node.parent;
   const arg = call?.type === "CallExpression" && call.callee === node ? call.arguments[0] : null;
-  return arg?.type === "Literal" && typeof arg.value === "string" ? arg.value : null;
+  if (arg?.type === "Literal" && typeof arg.value === "string") return arg.value;
+  if (arg?.type === "TemplateLiteral" && arg.expressions.length === 0) return arg.quasis[0].value.cooked;
+  return null;
 }
 
 function importBinding(scope, name) {
@@ -310,11 +314,27 @@ export default {
     const rules = TABLE.filter((entry) => applies(entry, where));
     if (rules.length === 0) return {};
     const sources = [];
+    let localServer = false;
     const pending = [];
     const report = (node, entry) => pending.push({ node, entry });
     const excepted = ({ node, entry }) => {
       const rule = entry.except;
       if (!rule) return false;
+      if (rule.module) return rule.module.test(node.source?.value ?? "");
+      if (rule.env) {
+        const parent = node.parent;
+        return (
+          (where.kind === "web" &&
+            where.local === "src/instrumentation.ts" &&
+            parent?.type === "MemberExpression" &&
+            !parent.computed &&
+            parent.property.name === "NEXT_RUNTIME") ||
+          (/\.(?:test-utils|fixture)\.[cm]?[jt]sx?$/.test(where.name) &&
+            parent?.type === "SpreadElement" &&
+            parent.parent?.type === "ObjectExpression")
+        );
+      }
+      if (rule.localServer && localServer && isTestSupport(where.name)) return true;
       if (rule.in && !matches(where.local, rule.in)) return false;
       if (rule.imports && !sources.some((source) => rule.imports.test(source))) return false;
       return !rule.path || rule.path.test(firstPath(node) ?? "");
@@ -351,6 +371,15 @@ export default {
     });
     return {
       ...modules,
+      CallExpression(node) {
+        if (
+          node.callee.type === "MemberExpression" &&
+          !node.callee.computed &&
+          node.callee.property.name === "listen" &&
+          typeof node.arguments[0]?.value === "number"
+        )
+          localServer = true;
+      },
       MemberExpression(node) {
         if (node.computed) return;
         const name = node.property.name;
@@ -362,7 +391,11 @@ export default {
           const entry = rules.find((candidate) => candidate.ban.meta === "env");
           if (entry) report(node, entry);
         }
-        const banned = property(object, name);
+        const factoryApp =
+          node.object.type === "CallExpression" &&
+          node.object.callee.type === "Identifier" &&
+          node.object.callee.name === "createApp";
+        const banned = property(factoryApp && name === "request" ? "app" : object, name);
         if (banned) report(node, banned);
         if (node.parent?.type === "CallExpression" && node.parent.callee === node) {
           const entry = rules.find((candidate) => candidate.ban.method?.includes(name));

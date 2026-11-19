@@ -225,3 +225,36 @@ test("hook rules, defaults on non-union switches and implicit returns still fail
     "apps/web/src/lib/size.ts typescript(switch-exhaustiveness-check)",
   ]);
 });
+
+test("API SDK event callbacks need no DOM event listener API", (t) => {
+  const assign =
+    "export const attach = (transport: { onclose: () => void }, cleanup: () => void) => { transport.onclose = cleanup; };";
+  const result = lint(t, {
+    "apps/api/src/lib/transport.ts": assign,
+    "apps/web/src/lib/transport.ts": assign,
+  });
+  deepEqual(
+    result.filter((item) => item.rule === "unicorn(prefer-add-event-listener)").map((item) => item.file),
+    ["apps/web/src/lib/transport.ts"],
+  );
+});
+
+test("Next composition files may import more than ten features", (t) => {
+  const composition =
+    mounts.map((name) => `import { ${name} } from "#/features/${name}/${name}";`).join("\n") +
+    `\nexport default function View() { return [${mounts.join(", ")}]; }`;
+  const result = lint(t, {
+    "apps/web/src/app/layout.tsx": composition,
+    "apps/web/src/app/[lang]/page.tsx": composition,
+    "apps/web/src/app/[lang]/template.tsx": composition,
+    "apps/web/src/features/task/task-view.tsx": composition,
+    "apps/web/src/components/ui/layout.tsx": composition,
+  });
+  deepEqual(
+    result
+      .filter((item) => item.rule === "import(max-dependencies)")
+      .map((item) => item.file)
+      .sort(),
+    ["apps/web/src/components/ui/layout.tsx", "apps/web/src/features/task/task-view.tsx"],
+  );
+});
