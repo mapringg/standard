@@ -204,6 +204,18 @@
   },
   "overrides": [
     {
+      "files": ["apps/web/src/components/ui/image.tsx", "apps/web/src/components/ui/icon.tsx"],
+      "rules": {
+        "nextjs/no-img-element": "off"
+      }
+    },
+    {
+      "files": ["apps/web/src/lib/navigation-link.tsx"],
+      "rules": {
+        "jsx-a11y/prefer-tag-over-role": "off"
+      }
+    },
+    {
       "files": ["**/src/app/**", "**/src/pages/**", "**/*.config.*"],
       "rules": {
         "import/no-default-export": "off"

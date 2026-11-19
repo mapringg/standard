@@ -4,6 +4,25 @@ import { test } from "node:test";
 
 import { lint } from "./lint.mjs";
 
+test("native image and disabled link exceptions are scoped to their shared primitives", (t) => {
+  const image = 'export function Picture() { return <img src="/sample.png" alt="" />; }\n';
+  const disabled = 'export function Link() { return <span role="link" aria-disabled="true" />; }\n';
+  const diagnostics = lint(t, {
+    "apps/web/src/components/ui/image.tsx": image,
+    "apps/web/src/components/ui/icon.tsx": image,
+    "apps/web/src/features/search/search-card.tsx": image,
+    "apps/web/src/lib/navigation-link.tsx": disabled,
+    "apps/web/src/features/search/search-link.tsx": disabled,
+  });
+  deepEqual(
+    diagnostics
+      .filter(({ rule }) => rule === "next(no-img-element)" || rule === "jsx-a11y(prefer-tag-over-role)")
+      .map(({ file }) => file)
+      .sort(),
+    ["apps/web/src/features/search/search-card.tsx", "apps/web/src/features/search/search-link.tsx"],
+  );
+});
+
 const RULES = new Set([
   "typescript(promise-function-async)",
   "eslint(class-methods-use-this)",
