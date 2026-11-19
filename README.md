@@ -77,6 +77,8 @@ Keep URL parsing and builders in a feature's `*-params.ts`. A shared URL belongs
 
 Parse page search parameters on the server and pass the values to client components. When a persistent layout needs the current query after client navigation, import Next.js `useSearchParams` from within `src/lib/next-route-params.ts` and expose a hook from that module.
 
+Use Next Image for page images. The shared `src/components/ui/image.tsx` and `src/components/ui/icon.tsx` primitives may use a native image for intrinsic sizing, load or error state, or a CSS mask. In `src/lib/navigation-link.tsx`, a disabled link may use a span with `role="link"` and `aria-disabled="true"` so it keeps its accessible role without a navigable URL.
+
 Keep HTTP work in the API or a Server Action. Next permits `src/app/health/route.ts` exporting only `GET`, and `src/app/mcp/route.ts` for MCP. A streaming handler under `src/app/api/**/route.ts` must contain `text/event-stream`, call a `.to*StreamResponse()` helper, or have a static value import from a module named `<feature>-stream.server.ts` (the `.ts` extension may be omitted). Type-only imports do not mark a route as streaming. Forward the stream from that module; a cancellable JSON response alone does not qualify.
 
 API tests, test utilities and fixtures may use `fetch` when the same file starts a local server with `.listen(<numeric port>)`, including `.listen(0)`. MSW's `.listen({ ... })` still requires `onUnhandledRequest: "error"` (or `onUnhandledFrame: "error"` in MSW 3). Use `testClient()` for `/api` paths; direct `app.request(...)` or `createApp().request(...)` is allowed for literal paths outside `/api`, including static template literals.
