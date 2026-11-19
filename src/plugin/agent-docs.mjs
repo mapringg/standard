@@ -17,6 +17,11 @@ const DIRS =
   /^(?:\.{1,2}\/)*(?:\.github|\.claude|node_modules|dist|src|apps|packages|lib|scripts|infra|test|e2e|components|features)\//;
 const EXTENSION = /\/[^/]*\.[a-z\d]+$/i;
 const VERSION = /(?<![\d.])v?\d+\.\d+\.\d+(?!\.?\d)/g;
+const STANDARD_PACKAGE = "node_modules/@mapringg/standard";
+const AGENT_SKILLS = [
+  { name: "review-standard", label: "Standard review", use: "branch and pull request reviews" },
+  { name: "test-audit", label: "Test audit", use: "migrations and broad refactors" },
+];
 const CACHE_MS = 2000;
 const scans = new Map();
 
@@ -170,6 +175,24 @@ function linkProblems(root, rel, prose, documentOf) {
   return found;
 }
 
+function sharedSkillProblems(root, documentOf) {
+  if (!existsSync(join(root, STANDARD_PACKAGE, "package.json"))) return [];
+  const rootDoc = "AGENTS.md";
+  const prose = existsSync(join(root, rootDoc)) ? documentOf(rootDoc).prose : [];
+  const targets = new Set(links(prose).map(({ path }) => normalize(path)));
+  const findings = [];
+  for (const { name, label, use } of AGENT_SKILLS) {
+    const local = `.claude/skills/${name}/SKILL.md`;
+    const installed = `${STANDARD_PACKAGE}/${local}`;
+    if (!targets.has(normalize(installed)))
+      findings.push(`${rootDoc}: Add [${label}](${installed}) under ## Sources for ${use}.`);
+    if (existsSync(join(root, local))) {
+      findings.push(`${local}: Remove the local copy and use the installed standard skill linked in AGENTS.md.`);
+    }
+  }
+  return findings;
+}
+
 function scan(root) {
   const files = listFiles(root);
   const lintable = files.filter((rel) => CODE.test(rel));
@@ -182,6 +205,8 @@ function scan(root) {
     return documents.get(rel);
   };
   const findings = new Map();
+  const rootAnchor = anchorFor("", lintable);
+  if (rootAnchor) findings.set(rootAnchor, sharedSkillProblems(root, documentOf));
   for (const rel of files.filter((file) => file.endsWith(".md"))) {
     const { prose } = documentOf(rel);
     const name = rel.slice(rel.lastIndexOf("/") + 1);

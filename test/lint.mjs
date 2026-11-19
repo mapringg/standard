@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -26,7 +26,16 @@ export function lint(t, files) {
   const root = mkdtempSync(join(tmpdir(), "standard-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q"], { cwd: root });
-  symlinkSync(join(PACKAGE, "node_modules"), join(root, "node_modules"));
+  const modules = join(PACKAGE, "node_modules");
+  const localModules = join(root, "node_modules");
+  if (Object.keys(files).some((file) => file.startsWith("node_modules/@mapringg/"))) {
+    mkdirSync(localModules);
+    for (const name of readdirSync(modules)) {
+      if (name !== "@mapringg") symlinkSync(join(modules, name), join(localModules, name));
+    }
+  } else {
+    symlinkSync(modules, localModules);
+  }
   writeFileSync(join(root, ".gitignore"), "node_modules\n");
   writeFileSync(join(root, ".oxlintrc.json"), JSON.stringify({ extends: [join(PACKAGE, "oxlint.json")] }));
   for (const [path, text] of Object.entries({ ...scaffold(files), ...files })) {
