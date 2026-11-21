@@ -221,3 +221,35 @@ test("adopters link the installed skills without local copies", (t) => {
     ],
   );
 });
+
+test("monorepo READMEs accept 60 root and 40 app prose lines with flexible headings", (t) => {
+  const example = "```sh\n" + "pnpm test\n".repeat(70) + "```\n";
+  deepEqual(
+    findings(t, {
+      "README.md": `# Repo\n\n## Getting started\n\n${"Run the app.\n\n".repeat(58)}${example}`,
+      "apps/web/README.md": `# Web\n\n### Run locally\n\n${"Open the app.\n".repeat(38)}${example}`,
+    }),
+    [],
+  );
+});
+
+test("monorepo READMEs report prose over budget and missing or duplicate titles", (t) => {
+  deepEqual(
+    findings(t, {
+      "README.md": `## Read this\n${"Run the app.\n".repeat(60)}`,
+      "apps/web/README.md": `# Web\n# Another title\n${"Open the app.\n".repeat(39)}`,
+    }),
+    [
+      "README.md: Cut it to 60 prose lines; keep setup, checks, and operational decisions.",
+      "README.md: Use one # title naming the project.",
+      "apps/web/README.md: Cut it to 40 prose lines; keep setup, checks, and operational decisions.",
+      "apps/web/README.md: Use one # title naming the project.",
+    ],
+  );
+});
+
+test("standalone package and skill READMEs have no monorepo prose budget", (t) => {
+  const long = "Extended reference.\n".repeat(80);
+  deepEqual(only(lint(t, { "src/index.ts": code, "README.md": long }), "agent-docs"), []);
+  deepEqual(findings(t, { ".claude/skills/verify/README.md": long, "packages/tokens/README.md": long }), []);
+});

@@ -83,6 +83,12 @@ Keep HTTP work in the API or a Server Action. Next permits `src/app/health/route
 
 API tests, test utilities and fixtures may use `fetch` when the same file starts a local server with `.listen(<numeric port>)`, including `.listen(0)`. MSW's `.listen({ ... })` still requires `onUnhandledRequest: "error"` (or `onUnhandledFrame: "error"` in MSW 3). Use `testClient()` for `/api` paths; direct `app.request(...)` or `createApp().request(...)` is allowed for literal paths outside `/api`, including static template literals.
 
+## Monorepo READMEs
+
+A repository with app workspaces under `apps/` can use up to 60 prose lines in its root README and 40 in each app README. Each file has one `#` title. Use headings that fit the project. Blank lines, fenced examples, and generated blocks are excluded from the count.
+
+Use the root README for the project's purpose, local setup, checks, and how to navigate or operate the repo. Use app READMEs for app-specific instructions and lasting operating decisions.
+
 ## AGENTS.md
 
 An `AGENTS.md` holds only what the code, the config and lint messages can't tell an agent. `pnpm lint` checks its shape:
