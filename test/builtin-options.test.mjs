@@ -296,3 +296,15 @@ test("Astro can load a classic external script", (t) => {
     ["apps/marketing/src/lib/values.ts"],
   );
 });
+
+test("the API runtime entry may default export its Worker", (t) => {
+  const worker = "export default { fetch: () => new Response() };\n";
+  const result = lint(t, {
+    "apps/api/src/server.ts": worker,
+    "apps/api/src/lib/unrelated.ts": worker,
+  });
+  deepEqual(
+    result.filter((item) => item.rule === "import(no-default-export)").map((item) => item.file),
+    ["apps/api/src/lib/unrelated.ts"],
+  );
+});

@@ -228,7 +228,7 @@
       }
     },
     {
-      "files": ["**/src/app/**", "**/src/pages/**", "**/*.config.*"],
+      "files": ["**/src/app/**", "**/src/pages/**", "**/apps/api/src/server.ts", "**/*.config.*"],
       "rules": {
         "import/no-default-export": "off"
       }
