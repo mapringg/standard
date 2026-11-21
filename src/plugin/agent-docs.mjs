@@ -5,6 +5,8 @@ import { anchorFor, listFiles, locate } from "./paths.mjs";
 
 const SECTIONS = ["Rules", "Words", "Copy", "Decisions", "Traps", "Operations", "Sources"];
 const MAX_LINES = 50;
+const ROOT_README_LINES = 60;
+const APP_README_LINES = 40;
 const CODE = /\.[cm]?[jt]sx?$/;
 const BEGIN = /^<!-- BEGIN:([\w-]+) -->\s*$/;
 const FENCE_OPEN = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/;
@@ -149,6 +151,16 @@ function shapeProblems(prose) {
   return found;
 }
 
+function readmeProblems(prose, maxLines) {
+  const found = [];
+  const lines = prose.map(({ line }) => line).filter((line) => line.trim());
+  const titles = lines.map(headingOf).filter((heading) => heading?.level === 1 && heading.title);
+  if (titles.length !== 1) found.push("Use one # title naming the project.");
+  if (lines.length > maxLines)
+    found.push(`Cut it to ${maxLines} prose lines; keep setup, checks, and operational decisions.`);
+  return found;
+}
+
 function contentProblems(prose) {
   const found = [];
   const spans = [...joined(prose).matchAll(SPAN)].flatMap((match) => match[2].split(/\s+/));
@@ -197,6 +209,7 @@ function sharedSkillProblems(root, documentOf) {
 function scan(root) {
   const files = listFiles(root);
   const lintable = files.filter((rel) => CODE.test(rel));
+  const monorepo = files.some((rel) => /^apps\/[^/]+\/package\.json$/.test(rel));
   const documents = new Map();
   const documentOf = (rel) => {
     if (!documents.has(rel)) {
@@ -211,10 +224,10 @@ function scan(root) {
   for (const rel of files.filter((file) => file.endsWith(".md"))) {
     const { prose } = documentOf(rel);
     const name = rel.slice(rel.lastIndexOf("/") + 1);
-    const problems = [
-      ...(name === "AGENTS.md" ? [...shapeProblems(prose), ...contentProblems(prose)] : []),
-      ...linkProblems(root, rel, prose, documentOf),
-    ];
+    const problems = linkProblems(root, rel, prose, documentOf);
+    if (name === "AGENTS.md") problems.push(...shapeProblems(prose), ...contentProblems(prose));
+    if (monorepo && rel === "README.md") problems.push(...readmeProblems(prose, ROOT_README_LINES));
+    if (/^apps\/[^/]+\/README\.md$/.test(rel)) problems.push(...readmeProblems(prose, APP_README_LINES));
     const anchor = anchorFor(rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "", lintable);
     if (!anchor || problems.length === 0) continue;
     findings.set(anchor, [...(findings.get(anchor) ?? []), ...problems.map((message) => `${rel}: ${message}`)]);
@@ -235,7 +248,7 @@ export default {
     type: "problem",
     docs: {
       description:
-        "AGENTS.md files share one shape and hold only what the code cannot show; Markdown links resolve. Findings report on the nearest linted file.",
+        "AGENTS.md and monorepo READMEs stay short; Markdown links resolve. Findings report on the nearest linted file.",
     },
   },
   create(context) {
