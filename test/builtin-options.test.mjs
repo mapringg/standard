@@ -11,6 +11,7 @@ test("native image and disabled link exceptions are scoped to their shared primi
     "apps/web/src/components/ui/image.tsx": image,
     "apps/web/src/components/ui/icon.tsx": image,
     "apps/web/src/features/search/search-card.tsx": image,
+    "apps/liff/src/components/ui/image.tsx": image,
     "apps/web/src/lib/navigation-link.tsx": disabled,
     "apps/web/src/features/search/search-link.tsx": disabled,
   });
@@ -258,11 +259,14 @@ test("API SDK event callbacks need no DOM event listener API", (t) => {
   );
 });
 
-test("Next composition files may import more than ten features", (t) => {
+test("Next and Astro route compositions may import more than ten features", (t) => {
   const composition =
     mounts.map((name) => `import { ${name} } from "#/features/${name}/${name}";`).join("\n") +
     `\nexport default function View() { return [${mounts.join(", ")}]; }`;
+  const astro = `---\n${mounts.map((name) => `import ${name} from "#/components/site/${name}.astro";`).join("\n")}\n---\n`;
   const result = lint(t, {
+    "apps/marketing/src/pages/index.astro": astro,
+    "apps/marketing/src/components/site/layout.astro": astro,
     "apps/web/src/app/layout.tsx": composition,
     "apps/web/src/app/[lang]/page.tsx": composition,
     "apps/web/src/app/[lang]/template.tsx": composition,
@@ -274,6 +278,21 @@ test("Next composition files may import more than ten features", (t) => {
       .filter((item) => item.rule === "import(max-dependencies)")
       .map((item) => item.file)
       .sort(),
-    ["apps/web/src/components/ui/layout.tsx", "apps/web/src/features/task/task-view.tsx"],
+    [
+      "apps/marketing/src/components/site/layout.astro",
+      "apps/web/src/components/ui/layout.tsx",
+      "apps/web/src/features/task/task-view.tsx",
+    ],
+  );
+});
+
+test("Astro can load a classic external script", (t) => {
+  const result = lint(t, {
+    "apps/marketing/src/pages/index.astro": '<script is:inline defer src="/menu.js"></script>',
+    "apps/marketing/src/lib/values.ts": "const value = 1;\n",
+  });
+  deepEqual(
+    result.filter((item) => item.rule === "import(unambiguous)").map((item) => item.file),
+    ["apps/marketing/src/lib/values.ts"],
   );
 });
