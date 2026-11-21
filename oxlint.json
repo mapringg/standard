@@ -204,6 +204,18 @@
   },
   "overrides": [
     {
+      "files": ["apps/liff/**", "apps/marketing/**", "apps/mobile/**"],
+      "rules": {
+        "nextjs/no-img-element": "off"
+      }
+    },
+    {
+      "files": ["**/*.astro"],
+      "rules": {
+        "import/unambiguous": "off"
+      }
+    },
+    {
       "files": ["apps/web/src/components/ui/image.tsx", "apps/web/src/components/ui/icon.tsx"],
       "rules": {
         "nextjs/no-img-element": "off"
@@ -216,7 +228,7 @@
       }
     },
     {
-      "files": ["**/src/app/**", "**/src/pages/**", "**/*.config.*"],
+      "files": ["**/src/app/**", "**/src/pages/**", "**/apps/api/src/server.ts", "**/*.config.*"],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -342,8 +354,15 @@
     {
       "files": ["**/*.d.ts"],
       "rules": {
+        "import/unambiguous": "off",
         "unicorn/require-module-specifiers": "off",
         "typescript/consistent-indexed-object-style": "off"
+      }
+    },
+    {
+      "files": ["**/worker-configuration.d.ts"],
+      "rules": {
+        "unicorn/no-abusive-eslint-disable": "off"
       }
     },
     {
@@ -455,7 +474,12 @@
       }
     },
     {
-      "files": ["**/src/app/**/layout.tsx", "**/src/app/**/page.tsx", "**/src/app/**/template.tsx"],
+      "files": [
+        "**/src/app/**/layout.tsx",
+        "**/src/app/**/page.tsx",
+        "**/src/app/**/template.tsx",
+        "**/src/pages/**/*.astro"
+      ],
       "rules": {
         "import/max-dependencies": "off"
       }
