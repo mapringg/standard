@@ -89,6 +89,22 @@ test("owners bans forwardRef in every UI app", (t) => {
   deepEqual(filesWith(result, "owners"), ["apps/web/src/components/ui/button.tsx"]);
 });
 
+test("owners confines UI primitive packages to components/ui in UI apps", (t) => {
+  const result = lint(t, {
+    "apps/web/src/components/ui/button.tsx": 'export { Button } from "@ui-sdk/react";\n',
+    "apps/web/src/features/task/task-button.tsx": 'export { Button } from "@ui-sdk/react";\n',
+    "apps/web/src/features/task/task-dialog.tsx": 'export { Dialog } from "@base-ui-components/react/dialog";\n',
+    "apps/mobile/src/features/task/task-text.tsx": 'export { Text } from "@rn-primitives/slot";\n',
+    "apps/api/src/features/tasks/view.ts": 'export { Button } from "@ui-sdk/react";\n',
+    "apps/web/src/features/task/task-sdk.ts": 'export { client } from "ui-sdk";\n',
+  });
+  deepEqual(filesWith(result, "owners"), [
+    "apps/mobile/src/features/task/task-text.tsx",
+    "apps/web/src/features/task/task-button.tsx",
+    "apps/web/src/features/task/task-dialog.tsx",
+  ]);
+});
+
 test("owners lets an owner file's own test use what the owner owns", (t) => {
   const result = lint(t, {
     "apps/web/src/lib/log.ts": "export const log = (message: string) => console.log(message);\n",

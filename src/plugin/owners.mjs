@@ -98,7 +98,7 @@ const TABLE = [
     use: "Call models through #/lib/ai.",
   },
   {
-    ban: { module: /^(?:@base-ui-components|@base-ui|@rn-primitives)\// },
+    ban: { module: /^(?:@base-ui-components|@base-ui|@rn-primitives|@ui-sdk)\// },
     kinds: UI,
     owner: ["src/components/ui/**"],
     use: "Use the primitives from #/components/ui.",
