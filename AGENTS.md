@@ -10,7 +10,8 @@
 
 ## Operations
 
-- Releases are `vX.Y.Z` tags on main. Never move or delete them.
+- Bump `version` in the PR that changes behavior. After it merges to develop, tag that develop commit `vX.Y.Z`. Main is not used for releases.
+- Consumers pin `github:mapringg/standard#vX.Y.Z`. Never move or delete a tag.
 - The repo is public. Name adopters only as repo-a, repo-b and repo-c.
 
 ## Sources
