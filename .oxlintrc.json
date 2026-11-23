@@ -6,6 +6,7 @@
   "env": { "builtin": true, "node": true },
   "rules": {
     "standard/no-comments": "error",
+    "standard/pr-check": "error",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
     "oxc/no-barrel-file": "error",
     "import/no-cycle": "error"

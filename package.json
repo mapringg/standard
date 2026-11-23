@@ -1,12 +1,9 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "One oxlint config and plugin for every repository.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
-  "bin": {
-    "standard-pr": "./src/pr/cli.mjs"
-  },
   "files": [
     ".claude/skills/pr/SKILL.md",
     ".claude/skills/review-standard/SKILL.md",
