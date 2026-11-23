@@ -19,4 +19,4 @@
 
 - Follow the [test audit skill](.claude/skills/test-audit/SKILL.md) before a migration or broad refactor.
 - Use the [standard review skill](.claude/skills/review-standard/SKILL.md) when reviewing a diff for simplifications.
-- Use the [PR writing skill](.claude/skills/pr/SKILL.md) when writing a pull request.
+- Use the [PR writing skill](.claude/skills/pr/SKILL.md) when starting a change and when writing a pull request.
