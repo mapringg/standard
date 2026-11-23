@@ -5,6 +5,7 @@
   "categories": { "correctness": "error" },
   "env": { "builtin": true, "node": true },
   "rules": {
+    "standard/agent-docs": "error",
     "standard/no-comments": "error",
     "standard/pr-check": "error",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],

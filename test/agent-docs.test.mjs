@@ -1,4 +1,6 @@
 import { deepEqual } from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { lint, only } from "./lint.mjs";
@@ -231,6 +233,13 @@ test("monorepo READMEs accept 60 root and 40 app prose lines with flexible headi
     }),
     [],
   );
+});
+
+test("standard's own README and AGENTS.md fit the root budgets adopters get", (t) => {
+  const own = (path) => readFileSync(join(import.meta.dirname, "..", path), "utf8");
+  const skills = ["pr", "review-standard", "test-audit"].map((name) => `.claude/skills/${name}/SKILL.md`);
+  const docs = ["README.md", "AGENTS.md", ...skills];
+  deepEqual(findings(t, Object.fromEntries(docs.map((path) => [path, own(path)]))), []);
 });
 
 test("monorepo READMEs report prose over budget and missing or duplicate titles", (t) => {
