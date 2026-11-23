@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "One oxlint config and plugin for every repository.",
   "license": "MIT",
   "repository": "github:mapringg/standard",

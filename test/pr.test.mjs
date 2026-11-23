@@ -24,7 +24,13 @@ const BODY = `Ticket: SOL-1
 **Blast Radius:** adopters
 `;
 
-const pull = { body: BODY, bot: false, files: ["src/plugin/pr-check.mjs"] };
+const pull = {
+  number: 7,
+  title: "Check PR titles in pnpm lint",
+  body: BODY,
+  bot: false,
+  files: ["src/plugin/pr-check.mjs"],
+};
 
 test("a PR in the template passes", () => {
   deepEqual(check(pull), []);
@@ -60,4 +66,18 @@ test("a user-visible change shows screenshots or a recording in Evidence", () =>
   const shown = BODY.replace("**After:** `standard-pr` passes.", "**After:** ![after](https://example.com/after.png)");
   deepEqual(check({ ...ui, body: shown }), []);
   deepEqual(check({ ...pull, files: ["apps/web/src/app/page.test.tsx"] }), []);
+});
+
+test("the title is one plain sentence that fits the squash subject", () => {
+  deepEqual(check({ ...pull, title: "feat(pr): check titles." }), [
+    "Title: drop the type(scope): prefix and write one plain sentence.",
+    "Title: drop the trailing period.",
+  ]);
+  deepEqual(check({ ...pull, title: "check titles" }), [
+    "Title: start with a capitalised verb, such as Allow, Fix or Remove.",
+  ]);
+  deepEqual(check({ ...pull, title: `Allow ${"x".repeat(70)}` }), [
+    'Title: shorten to 80 characters including " (#7)". It is 81.',
+  ]);
+  deepEqual(check({ ...pull, title: `Allow ${"x".repeat(69)}` }), []);
 });

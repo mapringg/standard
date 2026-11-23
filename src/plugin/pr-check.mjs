@@ -5,6 +5,8 @@ import { anchorFor, listFiles, locate } from "./paths.mjs";
 
 const CODE = /\.[cm]?[jt]sx?$/;
 const anchors = new Map();
+const TITLE_MAX = 80;
+const PREFIX = /^[\w-]+(?:\([^)]*\))?!?:\s/;
 const SECTIONS = ["Summary", "Evidence", "Merge Danger"];
 const TICKET = /^Ticket: \S+$/;
 const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t#]*$/;
@@ -64,10 +66,22 @@ function templateProblems(lines) {
   return { found, evidence: text("Evidence") };
 }
 
+function titleProblems(title, number) {
+  const found = [];
+  if (PREFIX.test(title)) found.push("Title: drop the type(scope): prefix and write one plain sentence.");
+  else if (!/^\p{Lu}/u.test(title)) found.push("Title: start with a capitalised verb, such as Allow, Fix or Remove.");
+  if (title.endsWith(".")) found.push("Title: drop the trailing period.");
+  const length = `${title} (#${number})`.length;
+  if (length > TITLE_MAX)
+    found.push(`Title: shorten to ${TITLE_MAX} characters including " (#${number})". It is ${length}.`);
+  return found;
+}
+
 export function check(pull) {
   if (pull.bot) return [];
   const body = (pull.body ?? "").replaceAll("\r\n", "\n").trim();
   const { found, evidence } = templateProblems(body.split("\n"));
+  found.unshift(...titleProblems((pull.title ?? "").trim(), pull.number));
   const ui = pull.files.filter((file) => UI.test(file) && !TEST.test(file));
   if (ui.length > 0 && !MEDIA.test(evidence))
     found.push(`Evidence: ${ui[0]} is a user-visible change. Add screenshots or a recording.`);
@@ -90,7 +104,13 @@ function changed(root, pull) {
 
 function problems(root) {
   const pull = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")).pull_request;
-  return check({ body: pull.body, bot: pull.user.type === "Bot", files: changed(root, pull) });
+  return check({
+    number: pull.number,
+    title: pull.title,
+    body: pull.body,
+    bot: pull.user.type === "Bot",
+    files: changed(root, pull),
+  });
 }
 
 function anchorOf(root) {
@@ -108,7 +128,9 @@ function anchorOf(root) {
 export default {
   meta: {
     type: "problem",
-    docs: { description: "A pull request follows the PR skill's template. Reports on the first linted file in CI." },
+    docs: {
+      description: "A pull request follows the PR skill's title and template. Reports on the first linted file in CI.",
+    },
   },
   create(context) {
     const where = locate(context.filename);

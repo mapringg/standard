@@ -7,7 +7,7 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.6.2",
+    "@mapringg/standard": "github:mapringg/standard#v1.7.0",
     "knip": "6.45.1",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
@@ -72,7 +72,7 @@ Link the installed skills under `## Sources` in the root `AGENTS.md`, as in the 
 ## Commands
 
 - `pnpm lint`: lints and type checks in one run, so there is no separate `tsc`.
-- In a `pull_request` CI run, `pnpm lint` also checks the PR body against the [PR skill](.claude/skills/pr/SKILL.md).
+- In a `pull_request` CI run, `pnpm lint` also checks the PR title and body against the [PR skill](.claude/skills/pr/SKILL.md).
 
 ## Configs
 
