@@ -49,7 +49,7 @@ export default {
         for (const specifier of node.specifiers) imports.set(specifier.local.name, node.source.value);
       },
       Property(node) {
-        if (where?.kind !== "liff" || keyName(node) !== "validateSearch") return;
+        if (where?.kind !== "vite" || keyName(node) !== "validateSearch") return;
         const value = node.value.type === "MemberExpression" ? node.value.object : node.value;
         const source = value.type === "Identifier" ? imports.get(value.name) : null;
         if (!source || !source.replace(/\.[cm]?[jt]sx?$/, "").endsWith("-params"))

@@ -1,9 +1,9 @@
 import { matchesGlob } from "node:path";
 
-import { exportedIds, importedName, isTestSupport, locate, moduleVisitors, testedStem } from "./paths.mjs";
+import { UI_APPS, exportedIds, importedName, isTestSupport, locate, moduleVisitors, testedStem } from "./paths.mjs";
 
-const UI = ["web", "liff", "mobile", "marketing"];
-const API = ["api"];
+const UI = [...UI_APPS];
+const API = ["hono"];
 const APPS = [...API, ...UI];
 const PARAMS = ["src/features/*/*-params.ts"];
 const URL_PARAMS = [...PARAMS, "src/lib/**/*-params.ts"];
@@ -39,7 +39,7 @@ const TABLE = [
   },
   {
     ban: { react: ["Suspense"] },
-    kinds: ["web"],
+    kinds: ["next"],
     owner: ["src/components/boundary/section.tsx"],
     use: "Wrap the section in <Section fallback> from #/components/boundary/section.",
   },
@@ -61,13 +61,7 @@ const TABLE = [
     use: "Define query keys and queryOptions in <feature>-queries.ts.",
   },
   {
-    ban: { module: /^hono\/client$/ },
-    kinds: UI,
-    owner: ["src/lib/api/**"],
-    use: "Call the API through the typed client in #/lib/api.",
-  },
-  {
-    ban: { global: "fetch" },
+    ban: { module: /^hono\/client$/, global: "fetch" },
     kinds: UI,
     owner: ["src/lib/api/**"],
     use: "Call the API through the typed client in #/lib/api.",
@@ -89,7 +83,7 @@ const TABLE = [
     kinds: API,
     owner: ["src/upstreams/**"],
     except: { in: TESTS, imports: /^express$/, localServer: true },
-    use: "Call outside services through src/upstreams/<vendor>.ts with a timeout.",
+    use: "Call outside services through src/upstreams/<vendor>.ts with a timeout; a test may fetch a server it starts with .listen(port).",
   },
   {
     ban: { module: /^(?:ai|@ai-sdk\/[^/]+)(?:\/|$)/ },
@@ -118,15 +112,14 @@ const TABLE = [
   },
   {
     ban: { module: /^astro:env(?:\/|$)/ },
-    kinds: ["marketing"],
+    kinds: ["astro"],
     owner: ["src/lib/env.ts"],
     use: "Read env vars through #/lib/env.",
   },
   { ban: { global: "console" }, kinds: APPS, owner: ["src/lib/log.ts"], use: "Log through #/lib/log." },
   { ban: { global: "JSON" }, kinds: APPS, owner: ["src/lib/json.ts"], use: "Parse and serialise through #/lib/json." },
-  { ban: { global: "Intl" }, kinds: APPS, owner: ["src/lib/format.ts"], use: "Format through #/lib/format." },
   {
-    ban: { method: ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"] },
+    ban: { global: "Intl", method: ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"] },
     kinds: APPS,
     owner: ["src/lib/format.ts"],
     use: "Format through #/lib/format.",
@@ -150,26 +143,20 @@ const TABLE = [
     use: "Pass searchParams to parse() from a *-params.ts module.",
   },
   {
-    ban: { property: [null, "useSearch"] },
-    kinds: ["liff"],
-    owner: PARAMS,
-    use: "Read search params in <feature>-params.ts.",
-  },
-  {
-    ban: { module: /^@tanstack\/react-router$/, names: ["useSearch"] },
-    kinds: ["liff"],
+    ban: { property: [null, "useSearch"], module: /^@tanstack\/react-router$/, names: ["useSearch"] },
+    kinds: ["vite"],
     owner: PARAMS,
     use: "Read search params in <feature>-params.ts.",
   },
   {
     ban: { module: /^expo-router$/, names: ["useLocalSearchParams", "useGlobalSearchParams"] },
-    kinds: ["mobile"],
+    kinds: ["expo"],
     owner: PARAMS,
     use: "Read params in <feature>-params.ts.",
   },
   {
     ban: { module: /^next\/navigation$/, names: ["useSearchParams"] },
-    kinds: ["web"],
+    kinds: ["next"],
     owner: ["src/lib/next-route-params.ts"],
     use: "Parse searchParams on the server and pass props, or use src/lib/next-route-params.ts in a persistent layout.",
   },
@@ -180,19 +167,19 @@ const TABLE = [
   },
   {
     ban: { module: /^(?:expo-router|@react-navigation\/native)$/, names: ["useFocusEffect"] },
-    kinds: ["mobile"],
+    kinds: ["expo"],
     use: "Let TanStack Query refetch on focus.",
   },
   {
     ban: { module: /^react-native$/, names: ["SafeAreaView"] },
-    kinds: ["mobile"],
+    kinds: ["expo"],
     use: "Import SafeAreaView from react-native-safe-area-context.",
   },
-  { ban: { property: ["Keyboard", "addListener"] }, kinds: ["mobile"], use: "Use react-native-keyboard-controller." },
-  { ban: { property: ["StyleSheet", "create"] }, kinds: ["mobile"], use: "Style with Uniwind classes." },
+  { ban: { property: ["Keyboard", "addListener"] }, kinds: ["expo"], use: "Use react-native-keyboard-controller." },
+  { ban: { property: ["StyleSheet", "create"] }, kinds: ["expo"], use: "Style with Uniwind classes." },
   {
     ban: { module: /^next\/headers$/ },
-    kinds: ["web"],
+    kinds: ["next"],
     in: ROUTES,
     use: "Read session and data in a feature component inside <Section>.",
   },
@@ -264,7 +251,7 @@ const TABLE = [
     kinds: API,
     in: TESTS,
     except: { path: /^\/(?!api(?:\/|$))/ },
-    use: "Call routes through testClient().",
+    use: "Call /api routes through testClient().",
   },
   { ban: { property: ["expect", "poll"] }, in: TESTS, use: "Await the real event instead of polling." },
   { ban: { property: ["jest", "setTimeout"] }, in: TESTS, use: "Make the test fast instead of raising its timeout." },
@@ -326,7 +313,7 @@ export default {
       if (rule.env) {
         const parent = node.parent;
         return (
-          (where.kind === "web" &&
+          (where.kind === "next" &&
             where.local === "src/instrumentation.ts" &&
             parent?.type === "MemberExpression" &&
             !parent.computed &&

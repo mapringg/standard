@@ -17,7 +17,7 @@ export default {
     return moduleVisitors((source, node) => {
       if (!source.startsWith("#/") || source.startsWith(own)) return;
       const other = /^#\/features\/([^/]+)\/([^/]+)$/.exec(source);
-      if (where.kind === "api") {
+      if (where.kind === "hono") {
         if (!other || (routes ? COMPOSED : SHARED_API).test(other[2])) return;
         context.report({
           node,

@@ -34,12 +34,8 @@ function appKind(root, base) {
   const path = join(dir, "package.json");
   const manifest = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
   const deps = { ...manifest.dependencies, ...manifest.devDependencies };
-  let kind = null;
-  if (deps.next) kind = "web";
-  else if (deps.astro) kind = "marketing";
-  else if (deps.expo) kind = "mobile";
-  else if (deps.vite) kind = "liff";
-  else if (manifest.dependencies?.hono) kind = "api";
+  const kind =
+    ["next", "astro", "expo", "vite"].find((name) => deps[name]) ?? (manifest.dependencies?.hono ? "hono" : null);
   kinds.set(key, kind);
   return kind;
 }
@@ -63,7 +59,7 @@ export function describe(rel, root = null) {
   };
 }
 
-export const UI_APPS = new Set(["web", "liff", "mobile", "marketing"]);
+export const UI_APPS = new Set(["next", "vite", "expo", "astro"]);
 
 export function stem(name) {
   return name.replace(/\.(?:[cm]?[jt]sx?|astro)$/, "");
