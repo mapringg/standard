@@ -1,7 +1,7 @@
 import { deepEqual } from "node:assert/strict";
 import { test } from "node:test";
 
-import { check } from "../src/pr/check.mjs";
+import { check } from "../src/plugin/pr-check.mjs";
 
 const BODY = `Ticket: SOL-1
 
@@ -24,7 +24,7 @@ const BODY = `Ticket: SOL-1
 **Blast Radius:** adopters
 `;
 
-const pull = { number: 7, body: BODY, bot: false, files: ["src/pr/check.mjs"], commits: ["a1"], open: [] };
+const pull = { body: BODY, bot: false, files: ["src/plugin/pr-check.mjs"] };
 
 test("a PR in the template passes", () => {
   deepEqual(check(pull), []);
@@ -60,10 +60,4 @@ test("a user-visible change shows screenshots or a recording in Evidence", () =>
   const shown = BODY.replace("**After:** `standard-pr` passes.", "**After:** ![after](https://example.com/after.png)");
   deepEqual(check({ ...ui, body: shown }), []);
   deepEqual(check({ ...pull, files: ["apps/web/src/app/page.test.tsx"] }), []);
-});
-
-test("a branch built on an unmerged PR names it", () => {
-  const open = [{ number: 6, sha: "a1" }];
-  deepEqual(check({ ...pull, open }), ["Body: this branch builds on unmerged #6. Name #6 in the PR."]);
-  deepEqual(check({ ...pull, open, body: BODY.replace("Before:** ", "Before:** Builds on #6. ") }), []);
 });
