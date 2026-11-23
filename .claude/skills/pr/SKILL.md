@@ -1,6 +1,6 @@
 ---
 name: pr
-description: "Use when writing a PR body."
+description: "Use when starting work on a request, pushing to a branch or writing a PR body."
 metadata:
   credits:
     skill: show-me
@@ -8,6 +8,15 @@ metadata:
     organisation: Humanlayer
     url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
 ---
+
+## One change per PR
+
+- Give each new request its own branch from the latest base and its own PR, even while another PR is open.
+- Push to an open PR only to fix that PR's own change or answer its review.
+- When a request needs an unmerged PR, branch from that PR and name it in the new PR.
+- When unsure whether a request belongs to an open PR, open a new one.
+
+## PR body
 
 Write the PR body with this template. Skip preambles, keep prose brief and use the project's domain words.
 

@@ -21,7 +21,7 @@ const EXTENSION = /\/[^/]*\.[a-z\d]+$/i;
 const VERSION = /(?<![\d.])v?\d+\.\d+\.\d+(?!\.?\d)/g;
 const STANDARD_PACKAGE = "node_modules/@mapringg/standard";
 const AGENT_SKILLS = [
-  { name: "pr", label: "PR writing", use: "writing pull requests" },
+  { name: "pr", label: "PR writing", use: "starting a change and writing pull requests" },
   { name: "review-standard", label: "Standard review", use: "branch and pull request reviews" },
   { name: "test-audit", label: "Test audit", use: "migrations and broad refactors" },
 ];

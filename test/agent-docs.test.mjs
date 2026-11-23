@@ -190,7 +190,7 @@ const skillLinks = `# Adopter
 
 test("adopters with no root agent instructions are told where to add the standard skills", (t) => {
   deepEqual(findings(t, standardInstall), [
-    `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for writing pull requests.`,
+    `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for starting a change and writing pull requests.`,
     `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
     `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
   ]);
@@ -198,7 +198,7 @@ test("adopters with no root agent instructions are told where to add the standar
 
 test("adopters put the skill references in agent instructions even when README links to them", (t) => {
   deepEqual(findings(t, { ...standardInstall, "AGENTS.md": "# Adopter\n", "README.md": skillLinks }), [
-    `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for writing pull requests.`,
+    `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for starting a change and writing pull requests.`,
     `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
     `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
   ]);
