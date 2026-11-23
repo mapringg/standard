@@ -1,6 +1,6 @@
 ---
 name: pr
-description: "Use when starting work on a request, pushing to a branch or writing a PR body."
+description: "Use when starting work on a request, pushing to a branch or writing a PR title or body."
 metadata:
   credits:
     skill: show-me
@@ -15,6 +15,10 @@ metadata:
 - Push to an open PR only to fix that PR's own change or answer its review.
 - When a request needs an unmerged PR, branch from that PR and name it in the new PR.
 - When unsure whether a request belongs to an open PR, open a new one.
+
+## PR title
+
+The title becomes the squash commit subject. Write one plain sentence that starts with a capitalised verb, such as "Allow shared URL parameter owners". Skip `type(scope):` prefixes and the trailing period. Keep it within 80 characters including ` (#<number>)`.
 
 ## PR body
 

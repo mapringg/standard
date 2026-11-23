@@ -24,7 +24,7 @@ function findings(t, event) {
 }
 
 const pullRequest = (body, type = "User") => ({
-  pull_request: { body, user: { type }, base: { sha: "a" }, head: { sha: "b" } },
+  pull_request: { number: 7, title: "Allow a test", body, user: { type }, base: { sha: "a" }, head: { sha: "b" } },
 });
 
 test("pr-check reports a PR body outside the template once, in CI", (t) => {
