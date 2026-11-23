@@ -12,7 +12,7 @@
 
 - Work lands on main through PRs. There is no develop branch.
 - Bump `version` in the PR that changes behavior. After it merges, tag that main commit `vX.Y.Z`.
-- Consumers pin `github:mapringg/standard#vX.Y.Z`. Never move or delete a tag.
+- Consumers pin a release tag. Never move or delete a tag.
 - The repo is public. Name adopters only as repo-a, repo-b and repo-c.
 
 ## Sources
