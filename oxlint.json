@@ -42,6 +42,7 @@
     "standard/no-typeof": "error",
     "standard/owners": "error",
     "standard/params": "error",
+    "standard/pr-check": "error",
     "standard/query-client": "error",
     "standard/reducer": "error",
     "standard/repo-shape": "error",

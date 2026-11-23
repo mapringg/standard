@@ -9,6 +9,7 @@ import noReturnTypes from "./no-return-types.mjs";
 import noTypeof from "./no-typeof.mjs";
 import owners from "./owners.mjs";
 import params from "./params.mjs";
+import prCheck from "./pr-check.mjs";
 import queryClient from "./query-client.mjs";
 import reducer from "./reducer.mjs";
 import repoShape from "./repo-shape.mjs";
@@ -30,6 +31,7 @@ export default {
     "no-typeof": noTypeof,
     owners,
     params,
+    "pr-check": prCheck,
     "query-client": queryClient,
     reducer,
     "repo-shape": repoShape,
