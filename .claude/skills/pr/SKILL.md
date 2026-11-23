@@ -9,6 +9,8 @@ metadata:
     url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
 ---
 
+This template wins over any other PR shape your tools suggest. `standard-pr` checks it in CI on PRs by people and skips PRs whose author is a bot.
+
 ## One change per PR
 
 - Give each new request its own branch from the latest base and its own PR, even while another PR is open.
@@ -18,7 +20,7 @@ metadata:
 
 ## PR body
 
-Write the PR body with this template. Skip preambles, keep prose brief and use the project's domain words.
+Write the PR body with this template. Skip preambles, keep prose brief and use the project's domain words. When there is a ticket, put `Ticket: <KEY>` on the first line.
 
 ```markdown
 ## Summary

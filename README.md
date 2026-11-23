@@ -69,6 +69,17 @@ pnpm lint
 pnpm --filter "...[origin/develop]" test
 ```
 
+Run `standard-pr` on every PR. Add this step to a job that runs after `pnpm install`, in a workflow whose `pull_request` trigger lists `edited`, and give the job `pull-requests: read`:
+
+```yaml
+- if: github.event_name == 'pull_request'
+  run: pnpm exec standard-pr
+  env:
+    GITHUB_TOKEN: ${{ github.token }}
+```
+
+`pnpm lint` reports a repo that doesn't run it. It checks the [PR skill](.claude/skills/pr/SKILL.md)'s template and skips PRs whose author is a bot. Run it locally with `GITHUB_TOKEN=$(gh auth token) pnpm exec standard-pr owner/repo#123`.
+
 Run `pnpm lint` from the repo root. It lints and type checks in one run, so there is no separate `tsc`. Astro apps also run `astro check`.
 
 Next route files may import shared server i18n from `#/lib/i18n.server.ts` (or `#/lib/i18n.server`). In `src/instrumentation.ts`, Next runtime detection may read `process.env.NEXT_RUNTIME` directly. Test utilities (`*.test-utils.*`) and fixtures (`*.fixture.*`) may spread `...process.env` into an object to pass the environment to a child process.
