@@ -109,7 +109,7 @@ export default {
   },
   create(context) {
     const where = locate(context.filename);
-    if (where?.kind !== "api") return {};
+    if (where?.kind !== "hono") return {};
     const routes = /^src\/features\/[^/]+\/routes\.ts$/.test(where.local);
     const app = where.local === "src/app.ts";
     const webhook = where.feature === "webhooks";

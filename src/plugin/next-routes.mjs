@@ -29,7 +29,7 @@ export default {
   },
   create(context) {
     const where = locate(context.filename);
-    if (where?.kind !== "web" || !where.local.startsWith("src/app/")) return {};
+    if (where?.kind !== "next" || !where.local.startsWith("src/app/")) return {};
     const file = stem(where.name);
     if (file !== "page" && file !== "layout") return {};
     const label = `${file}.tsx`;

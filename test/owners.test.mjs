@@ -217,8 +217,8 @@ test("owners lets API tests reach an Express server and paths outside the typed 
       .map((item) => `${item.file} ${item.message}`)
       .sort(),
     [
-      "apps/api/src/features/tasks/routes.test.ts Call outside services through src/upstreams/<vendor>.ts with a timeout.",
-      "apps/api/src/features/tasks/routes.test.ts Call routes through testClient().",
+      "apps/api/src/features/tasks/routes.test.ts Call /api routes through testClient().",
+      "apps/api/src/features/tasks/routes.test.ts Call outside services through src/upstreams/<vendor>.ts with a timeout; a test may fetch a server it starts with .listen(port).",
     ],
   );
 });

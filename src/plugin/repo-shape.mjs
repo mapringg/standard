@@ -49,7 +49,7 @@ const CACHE_MS = 2000;
 const scans = new Map();
 
 function routesDir(kind) {
-  return kind === "marketing" ? "pages" : "app";
+  return kind === "astro" ? "pages" : "app";
 }
 
 const HANDLER_MESSAGE =
@@ -126,7 +126,7 @@ function codeProblems(where) {
       ? []
       : ["Move the journey to apps/<app>/e2e/<journey>.test.ts."];
   }
-  if (kind === "api" && local.startsWith("migrations/")) return [];
+  if (kind === "hono" && local.startsWith("migrations/")) return [];
   if (!local.includes("/"))
     return /\.config\./.test(name)
       ? []
@@ -137,14 +137,14 @@ function codeProblems(where) {
   const parts = rest.split("/");
   const found = [];
   const apiPlaced =
-    kind === "api" &&
+    kind === "hono" &&
     ((parts.length === 1 && API_ROOT_FILES.has(name.replace(/\.(?:test|fixture|test-utils)\.ts$/, ".ts"))) ||
       (parts.length === 2 && API_DIRS.has(parts[0])));
   if (isTestSupport(name) && !apiPlaced && !["features", "lib", "components"].includes(parts[0])) {
     found.push(
       parts[0] === routesDir(kind)
         ? "Move the test to the feature code it covers; route files never have tests."
-        : kind === "api"
+        : kind === "hono"
           ? "Move the test next to the code it tests in features/, lib/, middleware/, infra/, upstreams/ or beside app.ts, factory.ts, env.ts, server.ts or client.ts."
           : "Move the test next to the code it tests in features/, lib/ or components/.",
     );
@@ -152,7 +152,7 @@ function codeProblems(where) {
   if (parts[0] === "features") {
     if (parts.length !== 3) return [...found, "Flatten the feature folder, or split a big feature into two features."];
     const base = stem(name).split(".")[0];
-    if (kind === "api") {
+    if (kind === "hono") {
       if (!API_FEATURE_FILES.has(base))
         found.push("Move the code into the feature's routes.ts, schema.ts, db.ts or service.ts.");
     } else if (base !== feature && !base.startsWith(`${feature}-`)) {
@@ -161,7 +161,7 @@ function codeProblems(where) {
     return found;
   }
   if (parts[0] === "lib") return found;
-  if (kind === "api") {
+  if (kind === "hono") {
     if (apiPlaced) return found;
     return [
       ...found,
@@ -171,13 +171,13 @@ function codeProblems(where) {
   if (parts[0] === "components") {
     return parts.length === 3 ? found : [...found, "Move the component to components/<group>/<file>, one level deep."];
   }
-  if (parts[0] === routesDir(kind)) return kind === "web" ? [...found, ...webRoute(rest, name)] : found;
+  if (parts[0] === routesDir(kind)) return kind === "next" ? [...found, ...webRoute(rest, name)] : found;
   if (parts.length === 1) {
-    if (kind === "web" && WEB_ROOT_FILES.has(stem(name))) return found;
-    if (kind === "liff" && name === "main.tsx") return found;
-    if (kind === "marketing" && stem(name) === "content.config") return found;
+    if (kind === "next" && WEB_ROOT_FILES.has(stem(name))) return found;
+    if (kind === "vite" && name === "main.tsx") return found;
+    if (kind === "astro" && stem(name) === "content.config") return found;
   }
-  if (kind === "marketing" && parts[0] === "content") return found;
+  if (kind === "astro" && parts[0] === "content") return found;
   return [...found, `Move the code into src/${routesDir(kind)}/, src/features/, src/components/ or src/lib/.`];
 }
 
@@ -195,7 +195,7 @@ function fileProblems(rel, root, localized) {
   if (parts[0] === "packages" && parts.length > 2 && !PACKAGES.has(pkg))
     return [`Move this into an app's lib/; packages/ holds only ${[...PACKAGES].join(" and ")}.`];
   if (/\.mdx?$/.test(name)) {
-    const exempt = rel.startsWith(".claude/skills/") || (kind === "marketing" && local.startsWith("src/content/"));
+    const exempt = rel.startsWith(".claude/skills/") || (kind === "astro" && local.startsWith("src/content/"));
     const placed = DOCS.has(name) && (parts.length === 1 || (base && local === name));
     if (!exempt && !placed) found.push("Fold this into README.md or AGENTS.md, or delete it.");
   }
@@ -204,7 +204,7 @@ function fileProblems(rel, root, localized) {
   if (name.endsWith(".module.css")) found.push("Replace the CSS module with Tailwind classes.");
   if (name.endsWith(".css") && !base) found.push("Move the CSS into the app's one global CSS file.");
   if (name.endsWith(".astro")) {
-    if (kind !== "marketing" || !local.startsWith("src/") || local.startsWith("src/lib/"))
+    if (kind !== "astro" || !local.startsWith("src/") || local.startsWith("src/lib/"))
       found.push("Write this component as .tsx; .astro files live only in the marketing app's routes and components.");
     else if (astroText(readFileSync(join(root, rel), "utf8")))
       found.push("Move the text into a content collection entry or pass it as a prop.");
@@ -231,7 +231,7 @@ function fileProblems(rel, root, localized) {
     found.push("Move the dictionary to src/lib/i18n/messages/<feature>.ts.");
   }
   if (
-    kind === "marketing" &&
+    kind === "astro" &&
     localized?.has(base) &&
     local.startsWith("src/pages/") &&
     !local.startsWith("src/pages/[locale]/")
@@ -265,7 +265,7 @@ function scan(root) {
   for (const rel of files) {
     const where = describe(rel, root);
     if (where.kind) bases.add(where.base);
-    if (where.kind === "web" && where.local.startsWith("src/app/")) {
+    if (where.kind === "next" && where.local.startsWith("src/app/")) {
       const segments = rel.split("/").slice(0, -1);
       const last = segments.findLastIndex((segment) => /^\([^.].*\)$/.test(segment));
       if (last !== -1) groups.add(segments.slice(0, last + 1).join("/"));
@@ -286,7 +286,7 @@ function scan(root) {
   }
   for (const base of bases) {
     const kind = describe(`${base}/x`, root).kind;
-    const routes = kind === "api" ? "src/app.ts" : `src/${routesDir(kind)}/`;
+    const routes = kind === "hono" ? "src/app.ts" : `src/${routesDir(kind)}/`;
     for (const need of [routes, "src/lib/"]) {
       const present = need.endsWith("/")
         ? files.some((rel) => rel.startsWith(`${base}/${need}`))
@@ -339,7 +339,7 @@ export default {
     return {
       Program(node) {
         if (
-          where.kind === "web" &&
+          where.kind === "next" &&
           /^src\/app\/(?:.*\/)?route\.[cm]?[jt]sx?$/.test(where.local) &&
           !handlerAllowed(where, node, context.sourceCode.getText())
         )
