@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "One oxlint config and plugin for every repository.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -8,6 +8,7 @@
     ".claude/skills/pr/SKILL.md",
     ".claude/skills/review-standard/SKILL.md",
     ".claude/skills/test-audit/SKILL.md",
+    ".claude/skills/upgrade-standard/SKILL.md",
     "oxlint.json",
     "oxfmt.json",
     "tsconfig.json",
