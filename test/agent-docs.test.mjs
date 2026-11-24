@@ -175,11 +175,13 @@ const skillRoot = "node_modules/@mapringg/standard/.claude/skills";
 const prSkill = `${skillRoot}/pr/SKILL.md`;
 const auditSkill = `${skillRoot}/test-audit/SKILL.md`;
 const reviewSkill = `${skillRoot}/review-standard/SKILL.md`;
+const upgradeSkill = `${skillRoot}/upgrade-standard/SKILL.md`;
 const standardInstall = {
   "node_modules/@mapringg/standard/package.json": '{"name":"@mapringg/standard"}',
   [prSkill]: "# Pull request writing\n",
   [auditSkill]: "# Test audit\n",
   [reviewSkill]: "# Standard review\n",
+  [upgradeSkill]: "# Standard upgrade\n",
 };
 const skillLinks = `# Adopter
 
@@ -188,12 +190,14 @@ const skillLinks = `# Adopter
 - [PR writing](${prSkill})
 - [Test audit](${auditSkill})
 - [Standard review](${reviewSkill})
+- [Standard upgrade](${upgradeSkill})
 `;
 
 test("adopters with no root agent instructions are told where to add the standard skills", (t) => {
   deepEqual(findings(t, standardInstall), [
     `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for starting a change and writing pull requests.`,
     `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
+    `AGENTS.md: Add [Standard upgrade](${upgradeSkill}) under ## Sources for upgrading @mapringg/standard.`,
     `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
   ]);
 });
@@ -202,6 +206,7 @@ test("adopters put the skill references in agent instructions even when README l
   deepEqual(findings(t, { ...standardInstall, "AGENTS.md": "# Adopter\n", "README.md": skillLinks }), [
     `AGENTS.md: Add [PR writing](${prSkill}) under ## Sources for starting a change and writing pull requests.`,
     `AGENTS.md: Add [Standard review](${reviewSkill}) under ## Sources for branch and pull request reviews.`,
+    `AGENTS.md: Add [Standard upgrade](${upgradeSkill}) under ## Sources for upgrading @mapringg/standard.`,
     `AGENTS.md: Add [Test audit](${auditSkill}) under ## Sources for migrations and broad refactors.`,
   ]);
 });
@@ -215,11 +220,13 @@ test("adopters link the installed skills without local copies", (t) => {
       ".claude/skills/pr/SKILL.md": "# Old PR writing\n",
       ".claude/skills/review-standard/SKILL.md": "# Old review\n",
       ".claude/skills/test-audit/SKILL.md": "# Old audit\n",
+      ".claude/skills/upgrade-standard/SKILL.md": "# Old upgrade\n",
     }),
     [
       ".claude/skills/pr/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
       ".claude/skills/review-standard/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
       ".claude/skills/test-audit/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
+      ".claude/skills/upgrade-standard/SKILL.md: Remove the local copy and use the installed standard skill linked in AGENTS.md.",
     ],
   );
 });
@@ -237,7 +244,9 @@ test("monorepo READMEs accept 60 root and 40 app prose lines with flexible headi
 
 test("standard's own README and AGENTS.md fit the root budgets adopters get", (t) => {
   const own = (path) => readFileSync(join(import.meta.dirname, "..", path), "utf8");
-  const skills = ["pr", "review-standard", "test-audit"].map((name) => `.claude/skills/${name}/SKILL.md`);
+  const skills = ["pr", "review-standard", "test-audit", "upgrade-standard"].map(
+    (name) => `.claude/skills/${name}/SKILL.md`,
+  );
   const docs = ["README.md", "AGENTS.md", ...skills];
   deepEqual(findings(t, Object.fromEntries(docs.map((path) => [path, own(path)]))), []);
 });

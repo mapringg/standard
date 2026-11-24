@@ -82,4 +82,4 @@ Link the installed skills under `## Sources` in the root `AGENTS.md`, as in the 
 - `oxfmt.json`: formatting.
 - `tsconfig.json`: TypeScript settings.
 - `knip.json`: unused files, exports and dependencies.
-- Skills: [pr](.claude/skills/pr/SKILL.md), [review-standard](.claude/skills/review-standard/SKILL.md), [test-audit](.claude/skills/test-audit/SKILL.md).
+- Skills: [pr](.claude/skills/pr/SKILL.md), [review-standard](.claude/skills/review-standard/SKILL.md), [test-audit](.claude/skills/test-audit/SKILL.md), [upgrade-standard](.claude/skills/upgrade-standard/SKILL.md).
