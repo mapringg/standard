@@ -7,11 +7,11 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
 ```json
 {
   "devDependencies": {
-    "@mapringg/standard": "github:mapringg/standard#v1.7.0",
-    "knip": "6.45.1",
-    "oxfmt": "0.79.0",
-    "oxlint": "1.94.0",
-    "tsrs": "0.25.0-ts7.1.0-beta"
+    "@mapringg/standard": "github:mapringg/standard#<tag>",
+    "knip": "<version>",
+    "oxfmt": "<version>",
+    "oxlint": "<version>",
+    "tsrs": "<version>"
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
@@ -21,6 +21,8 @@ One shared oxlint config and plugin, plus shared oxfmt, knip and TypeScript sett
   }
 }
 ```
+
+Use the latest release tag. Pin `knip`, `oxfmt`, `oxlint` and `tsrs` to the exact versions in that tag's `peerDependencies`.
 
 ## Wiring
 
