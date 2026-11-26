@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "unicorn", "oxc", "import", "node"],
+  "jsPlugins": ["./src/plugin/index.mjs"],
+  "categories": { "correctness": "error" },
+  "env": { "builtin": true, "node": true },
+  "rules": {
+    "standard/agent-docs": "error",
+    "standard/no-comments": "error",
+    "standard/pr-check": "error",
+    "unicorn/filename-case": ["error", { "case": "kebabCase" }],
+    "oxc/no-barrel-file": "error",
+    "import/no-cycle": "error"
+  }
+}

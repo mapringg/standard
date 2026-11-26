@@ -1,0 +1,450 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "promise",
+    "node",
+    "react",
+    "jsx-a11y",
+    "nextjs",
+    "vitest"
+  ],
+  "jsPlugins": ["./src/plugin/index.mjs"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error",
+    "pedantic": "error"
+  },
+  "options": { "typeAware": true, "typeCheck": true },
+  "env": { "builtin": true, "es2024": true },
+  "rules": {
+    "standard/agent-docs": "error",
+    "standard/feature-imports": "error",
+    "standard/hono": "error",
+    "standard/next-data": "error",
+    "standard/next-routes": "error",
+    "standard/no-chained-assertions": "error",
+    "standard/no-comments": "error",
+    "standard/no-return-types": "error",
+    "standard/no-typeof": "error",
+    "standard/owners": "error",
+    "standard/params": "error",
+    "standard/pr-check": "error",
+    "standard/query-client": "error",
+    "standard/reducer": "error",
+    "standard/repo-shape": "error",
+    "standard/server-actions": "error",
+    "standard/style-prop": "error",
+    "standard/tests": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          { "regex": "^\\.{1,2}(/|$)", "message": "Import through the #/ alias from package.json imports." },
+          {
+            "regex": "^@/",
+            "message": "Import through the #/ alias from package.json imports; @/ tsconfig paths break when another package type checks this file."
+          }
+        ]
+      }
+    ],
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase",
+        "ignore": ["^_layout\\.", "^__root\\.", "^\\+", "^\\[", "^\\$", "\\.d\\.ts$"]
+      }
+    ],
+    "react/jsx-no-literals": [
+      "error",
+      {
+        "restrictedAttributes": ["placeholder", "aria-label", "title", "alt"],
+        "allowedStrings": ["", "-", "–", "—", "/", "|", "·", "•", ":", ",", ".", "…", "(", ")", "+", "×", "%", "#", "*"]
+      }
+    ],
+    "typescript/switch-exhaustiveness-check": [
+      "error",
+      { "considerDefaultExhaustiveForUnions": false, "requireDefaultForNonUnion": true }
+    ],
+    "vitest/consistent-test-it": ["error", { "fn": "test", "withinDescribe": "test" }],
+    "eslint/no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
+    "eslint/new-cap": ["error", { "capIsNew": false }],
+    "eslint/class-methods-use-this": ["error", { "enforceForClassFields": false }],
+    "vitest/valid-title": ["error", { "allowArguments": true }],
+    "eslint/prefer-destructuring": [
+      "error",
+      {
+        "VariableDeclarator": { "array": false, "object": true },
+        "AssignmentExpression": { "array": false, "object": false }
+      }
+    ],
+    "node/no-sync": [
+      "error",
+      {
+        "ignores": ["flushSync"]
+      }
+    ],
+    "react/no-unstable-nested-components": ["error", { "allowAsProps": true }],
+    "eslint/curly": "off",
+    "eslint/default-case": "off",
+    "eslint/func-style": "off",
+    "eslint/id-length": "off",
+    "eslint/no-bitwise": "off",
+    "eslint/no-console": "off",
+    "eslint/no-magic-numbers": "off",
+    "eslint/no-ternary": "off",
+    "eslint/no-undefined": "off",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/no-void": "off",
+    "eslint/one-var": "off",
+    "eslint/require-await": "off",
+    "eslint/sort-imports": "off",
+    "eslint/sort-keys": "off",
+    "import/exports-last": "off",
+    "import/group-exports": "off",
+    "import/namespace": "off",
+    "import/no-named-export": "off",
+    "import/no-namespace": "off",
+    "import/no-nodejs-modules": "off",
+    "import/no-unassigned-import": "off",
+    "import/prefer-default-export": "off",
+    "node/callback-return": "off",
+    "node/no-process-env": "off",
+    "node/no-top-level-await": "off",
+    "oxc/no-async-await": "off",
+    "oxc/no-map-spread": "off",
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-rest-spread-properties": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    "promise/prefer-await-to-then": "off",
+    "promise/valid-params": "off",
+    "react/forbid-component-props": "off",
+    "react/incompatible-library": "off",
+    "react/jsx-filename-extension": "off",
+    "react/jsx-max-depth": "off",
+    "react/jsx-props-no-spreading": "off",
+    "react/react-in-jsx-scope": "off",
+    "typescript/consistent-return": "off",
+    "typescript/consistent-type-definitions": "off",
+    "typescript/explicit-function-return-type": "off",
+    "typescript/explicit-member-accessibility": "off",
+    "typescript/explicit-module-boundary-types": "off",
+    "typescript/method-signature-style": "off",
+    "typescript/no-confusing-void-expression": "off",
+    "typescript/no-unnecessary-type-parameters": "off",
+    "typescript/non-nullable-type-assertion-style": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "typescript/promise-function-async": "off",
+    "typescript/require-await": "off",
+    "unicorn/max-nested-calls": "off",
+    "unicorn/no-array-fill-with-reference-type": "off",
+    "unicorn/no-array-method-this-argument": "off",
+    "unicorn/no-document-cookie": "off",
+    "unicorn/no-null": "off",
+    "unicorn/no-useless-undefined": "off",
+    "unicorn/number-literal-case": "off",
+    "unicorn/prefer-code-point": "off",
+    "unicorn/prefer-math-trunc": "off",
+    "unicorn/prefer-top-level-await": "off",
+    "vitest/no-hooks": "off",
+    "vitest/no-importing-vitest-globals": "off",
+    "vitest/prefer-called-times": "off",
+    "vitest/prefer-describe-function-title": "off",
+    "vitest/prefer-expect-assertions": "off",
+    "vitest/prefer-to-be-falsy": "off",
+    "vitest/prefer-to-be-truthy": "off",
+    "vitest/require-hook": "off",
+    "vitest/require-test-timeout": "off",
+    "vitest/require-top-level-describe": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/src/app/**/page.tsx", "**/src/app/**/layout.tsx"],
+      "rules": {
+        "react/only-export-components": [
+          "error",
+          {
+            "allowExportNames": [
+              "dynamic",
+              "dynamicParams",
+              "revalidate",
+              "fetchCache",
+              "runtime",
+              "preferredRegion",
+              "maxDuration",
+              "experimental_ppr",
+              "instant",
+              "prefetch",
+              "ensureStatic",
+              "metadata",
+              "generateMetadata",
+              "viewport",
+              "generateViewport",
+              "generateStaticParams",
+              "unstable_dynamicStaleTime"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "**/src/app/**/opengraph-image.tsx",
+        "**/src/app/**/twitter-image.tsx",
+        "**/src/app/**/icon.tsx",
+        "**/src/app/**/apple-icon.tsx"
+      ],
+      "rules": {
+        "react/only-export-components": [
+          "error",
+          {
+            "allowExportNames": [
+              "alt",
+              "size",
+              "contentType",
+              "generateImageMetadata",
+              "dynamic",
+              "dynamicParams",
+              "revalidate",
+              "fetchCache",
+              "runtime",
+              "preferredRegion",
+              "maxDuration"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-utils.ts", "**/*.fixture.ts"],
+      "rules": {
+        "vitest/no-restricted-matchers": [
+          "error",
+          {
+            "toMatchSnapshot": "Assert the specific outcome.",
+            "toMatchInlineSnapshot": "Assert the specific outcome.",
+            "toMatchFileSnapshot": "Assert the specific outcome.",
+            "toThrowErrorMatchingSnapshot": "Assert the specific error.",
+            "toThrowErrorMatchingInlineSnapshot": "Assert the specific error."
+          }
+        ],
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "waitFor": "Await the real event.",
+            "waitUntil": "Await the real event.",
+            "setConfig": "Make the test fast instead of raising its timeout."
+          }
+        ],
+        "eslint/no-script-url": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/liff/**",
+        "apps/marketing/**",
+        "apps/mobile/**",
+        "apps/web/src/components/ui/image.tsx",
+        "apps/web/src/components/ui/icon.tsx"
+      ],
+      "rules": {
+        "nextjs/no-img-element": "off"
+      }
+    },
+    {
+      "files": [
+        "**/*.astro",
+        "**/*.config.js",
+        "**/*.config.cjs",
+        "**/*.config.mjs",
+        "**/*.d.ts",
+        "scripts/**/*.cjs",
+        "**/.claude/skills/**/*.cjs"
+      ],
+      "rules": {
+        "import/unambiguous": "off"
+      }
+    },
+    {
+      "files": ["apps/web/src/lib/navigation-link.tsx"],
+      "rules": {
+        "jsx-a11y/prefer-tag-over-role": "off"
+      }
+    },
+    {
+      "files": ["**/src/app/**", "**/src/pages/**", "**/apps/api/src/server.ts", "**/*.config.*"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["**/src/app/**/layout.tsx"],
+      "rules": {
+        "react/no-danger": "off"
+      }
+    },
+    {
+      "files": ["**/src/proxy.ts", "**/src/middleware.ts"],
+      "rules": {
+        "unicorn/prefer-string-raw": "off"
+      }
+    },
+    {
+      "files": ["**/*.ts", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs"],
+      "rules": {
+        "react/function-component-definition": "off",
+        "react/no-multi-comp": "off",
+        "react/display-name": "off"
+      }
+    },
+    {
+      "files": [
+        "**/apps/api/**",
+        "**/src/features/*/routes.ts",
+        "**/src/features/*/schema.ts",
+        "**/src/features/*/db.ts",
+        "**/src/features/*/service.ts",
+        "**/src/middleware/**",
+        "**/src/infra/**",
+        "**/src/upstreams/**",
+        "**/src/app.ts",
+        "**/src/factory.ts",
+        "**/src/server.ts"
+      ],
+      "rules": {
+        "react/rules-of-hooks": "off",
+        "react/exhaustive-deps": "off"
+      }
+    },
+    {
+      "files": [
+        "**/src/app.ts",
+        "**/src/app/**/layout.tsx",
+        "**/src/app/**/page.tsx",
+        "**/src/app/**/template.tsx",
+        "**/src/pages/**/*.astro"
+      ],
+      "rules": {
+        "import/max-dependencies": "off"
+      }
+    },
+    {
+      "files": ["**/src/app.ts"],
+      "rules": {
+        "eslint/max-lines-per-function": "off"
+      }
+    },
+    {
+      "files": [
+        "**/*.config.js",
+        "**/*.config.cjs",
+        "**/*.config.mjs",
+        "scripts/**/*.cjs",
+        "**/.claude/skills/**/*.cjs"
+      ],
+      "rules": {
+        "import/no-commonjs": "off",
+        "typescript/no-require-imports": "off",
+        "typescript/no-var-requires": "off"
+      }
+    },
+    {
+      "files": ["**/*.config.js", "**/*.config.cjs", "**/*.config.mjs"],
+      "rules": {
+        "unicorn/prefer-module": "off",
+        "import/no-anonymous-default-export": "off"
+      }
+    },
+    {
+      "files": ["**/*.config.js", "**/*.config.cjs", "**/*.config.mjs", "scripts/**", "**/.claude/skills/**"],
+      "rules": {
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off"
+      }
+    },
+    {
+      "files": ["**/*.d.ts"],
+      "rules": {
+        "unicorn/require-module-specifiers": "off",
+        "typescript/consistent-indexed-object-style": "off"
+      }
+    },
+    {
+      "files": ["**/worker-configuration.d.ts"],
+      "rules": {
+        "unicorn/no-abusive-eslint-disable": "off"
+      }
+    },
+    {
+      "files": ["scripts/**", "**/.claude/skills/**"],
+      "rules": {
+        "typescript/await-thenable": "off",
+        "typescript/consistent-type-exports": "off",
+        "typescript/dot-notation": "off",
+        "typescript/no-array-delete": "off",
+        "typescript/no-base-to-string": "off",
+        "typescript/no-deprecated": "off",
+        "typescript/no-duplicate-type-constituents": "off",
+        "typescript/no-floating-promises": "off",
+        "typescript/no-for-in-array": "off",
+        "typescript/no-generated-empty-object-type": "off",
+        "typescript/no-implied-eval": "off",
+        "typescript/no-meaningless-void-operator": "off",
+        "typescript/no-misused-promises": "off",
+        "typescript/no-misused-spread": "off",
+        "typescript/no-mixed-enums": "off",
+        "typescript/no-redundant-type-constituents": "off",
+        "typescript/no-unnecessary-boolean-literal-compare": "off",
+        "typescript/no-unnecessary-qualifier": "off",
+        "typescript/no-unnecessary-template-expression": "off",
+        "typescript/no-unnecessary-type-arguments": "off",
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-unnecessary-type-conversion": "off",
+        "typescript/no-unsafe-enum-assignment": "off",
+        "typescript/no-unsafe-enum-comparison": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-unsafe-unary-minus": "off",
+        "typescript/no-useless-default-assignment": "off",
+        "typescript/only-throw-error": "off",
+        "typescript/prefer-find": "off",
+        "typescript/prefer-includes": "off",
+        "typescript/prefer-nullish-coalescing": "off",
+        "typescript/prefer-promise-reject-errors": "off",
+        "typescript/prefer-readonly": "off",
+        "typescript/prefer-reduce-type-parameter": "off",
+        "typescript/prefer-regexp-exec": "off",
+        "typescript/prefer-return-this-type": "off",
+        "typescript/prefer-string-starts-ends-with": "off",
+        "typescript/related-getter-setter-pairs": "off",
+        "typescript/require-array-sort-compare": "off",
+        "typescript/restrict-plus-operands": "off",
+        "typescript/restrict-template-expressions": "off",
+        "typescript/return-await": "off",
+        "typescript/strict-boolean-expressions": "off",
+        "typescript/strict-void-return": "off",
+        "typescript/switch-exhaustiveness-check": "off",
+        "typescript/unbound-method": "off",
+        "typescript/use-unknown-in-catch-callback-variable": "off",
+        "node/no-sync": "off",
+        "eslint/no-await-in-loop": "off",
+        "standard/no-typeof": "off"
+      }
+    },
+    {
+      "files": ["**/apps/api/**"],
+      "rules": {
+        "unicorn/prefer-add-event-listener": "off"
+      }
+    }
+  ]
+}
