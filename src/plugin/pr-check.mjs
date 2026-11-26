@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { anchorFor, listFiles, locate } from "./paths.mjs";
@@ -12,10 +11,8 @@ const TICKET = /^Ticket: \S+$/;
 const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t#]*$/;
 const FENCE = /^ {0,3}(?:`{3,}|~{3,})/;
 const IMAGE = /!\[[^\]]*\]\([^)]+\)|<img\b/i;
-const MEDIA =
-  /!\[[^\]]*\]\([^)]+\)|<(?:img|video)\b|https:\/\/github\.com\/user-attachments\/assets\/|\.(?:png|jpe?g|gif|webp|mp4|mov|webm)\b/i;
-const UI = /\.(?:tsx|jsx|astro|vue|svelte|css|scss)$/;
-const TEST = /\.(?:test|spec|stories)\.[^.]+$/;
+const EVIDENCE_LABEL = /^\s*(?:[-*+]\s+)?(Before|After):\s*(.*)$/;
+const EVIDENCE_PLACEHOLDER = /^<screenshot\/output\/(?:failing|passing) test run>$/;
 const DOOR = /^\**Door:\**\s*\**(one-way|two-way)\b/im;
 const BLAST = /^\**Blast Radius:\**\s*\**([^\s*]+)\**\s*$/im;
 
@@ -55,15 +52,31 @@ function templateProblems(lines) {
     found.push(
       "Summary: add one visual, such as pseudocode, a call tree, a component tree, a file tree, a Mermaid diagram or a diff block.",
     );
-  const evidence = text("Evidence").replaceAll("*", "");
-  if (counts.has("Evidence") && !(/\bBefore:/.test(evidence) && /\bAfter:/.test(evidence)))
+  if (counts.has("Evidence") && !hasEvidence(text("Evidence")))
     found.push("Evidence: show a Before: and an After: (screenshot, output or test).");
   const danger = text("Merge Danger");
   if (counts.has("Merge Danger") && !DOOR.test(danger))
     found.push("Merge Danger: add a line **Door:** one-way or **Door:** two-way.");
   if (counts.has("Merge Danger") && !BLAST.test(danger))
     found.push("Merge Danger: add a line **Blast Radius:** <one word>, naming who or what the change can hurt.");
-  return { found, evidence: text("Evidence") };
+  return found;
+}
+
+function hasEvidence(text) {
+  const filled = new Set();
+  let current = null;
+  let fenced = false;
+  for (const line of text.replaceAll(/<!--[\s\S]*?-->/g, "").split("\n")) {
+    if (FENCE.test(line.trimStart())) {
+      fenced = !fenced;
+      continue;
+    }
+    const entry = fenced ? null : EVIDENCE_LABEL.exec(line.replaceAll("**", ""));
+    if (entry) current = entry[1];
+    const content = (entry?.[2] ?? line).trim();
+    if (current && content && !EVIDENCE_PLACEHOLDER.test(content)) filled.add(current);
+  }
+  return filled.has("Before") && filled.has("After");
 }
 
 function titleProblems(title, number) {
@@ -80,36 +93,18 @@ function titleProblems(title, number) {
 export function check(pull) {
   if (pull.bot) return [];
   const body = (pull.body ?? "").replaceAll("\r\n", "\n").trim();
-  const { found, evidence } = templateProblems(body.split("\n"));
+  const found = templateProblems(body.split("\n"));
   found.unshift(...titleProblems((pull.title ?? "").trim(), pull.number));
-  const ui = pull.files.filter((file) => UI.test(file) && !TEST.test(file));
-  if (ui.length > 0 && !MEDIA.test(evidence))
-    found.push(`Evidence: ${ui[0]} is a user-visible change. Add screenshots or a recording.`);
   return found;
 }
 
-function changed(root, pull) {
-  try {
-    return execFileSync("git", ["diff", "--name-only", `${pull.base.sha}...${pull.head.sha}`], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .split("\n")
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-export function checkEvent(root, eventPath) {
+export function checkEvent(eventPath) {
   const pull = JSON.parse(readFileSync(eventPath, "utf8")).pull_request;
   return check({
     number: pull.number,
     title: pull.title,
     body: pull.body,
     bot: pull.user.type === "Bot",
-    files: changed(root, pull),
   });
 }
 
@@ -137,7 +132,7 @@ export default {
     if (process.env.GITHUB_EVENT_NAME !== "pull_request" || !where || anchorOf(where.root) !== where.rel) return {};
     return {
       Program(node) {
-        for (const message of checkEvent(where.root, process.env.GITHUB_EVENT_PATH)) context.report({ node, message });
+        for (const message of checkEvent(process.env.GITHUB_EVENT_PATH)) context.report({ node, message });
       },
     };
   },

@@ -4,5 +4,5 @@
   "sortImports": {},
   "sortPackageJson": true,
   "sortTailwindcss": {},
-  "ignorePatterns": ["**/*.gen.ts", "**/*.d.ts"]
+  "ignorePatterns": ["**/*.gen.ts", "**/*.d.ts", ".claude/skills/pr/SKILL.md"]
 }

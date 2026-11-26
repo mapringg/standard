@@ -29,7 +29,6 @@ const pull = {
   title: "Check PR titles in pnpm lint",
   body: BODY,
   bot: false,
-  files: ["src/plugin/pr-check.mjs"],
 };
 
 test("a PR in the template passes", () => {
@@ -58,14 +57,21 @@ test("each section carries what the template asks for", () => {
   ]);
 });
 
-test("a user-visible change shows screenshots or a recording in Evidence", () => {
-  const ui = { ...pull, files: ["apps/web/src/app/page.tsx", "apps/web/src/app/page.test.tsx"] };
-  deepEqual(check(ui), [
-    "Evidence: apps/web/src/app/page.tsx is a user-visible change. Add screenshots or a recording.",
-  ]);
+test("evidence accepts output and visual attachments", () => {
   const shown = BODY.replace("**After:** `standard-pr` passes.", "**After:** ![after](https://example.com/after.png)");
-  deepEqual(check({ ...ui, body: shown }), []);
-  deepEqual(check({ ...pull, files: ["apps/web/src/app/page.test.tsx"] }), []);
+  deepEqual(check({ ...pull, body: shown }), []);
+  const output = BODY.replace("**After:** `standard-pr` passes.", "**After:**\n\n```text\n1 passed\n```");
+  deepEqual(check({ ...pull, body: output }), []);
+});
+
+test("evidence requires both entries to contain proof", () => {
+  const after = "**After:** `standard-pr` passes.";
+  const missing = ["**After:**", "**After:** <!-- add proof -->", "**After:** <screenshot/output/passing test run>"];
+  for (const entry of missing) {
+    deepEqual(check({ ...pull, body: BODY.replace(after, entry) }), [
+      "Evidence: show a Before: and an After: (screenshot, output or test).",
+    ]);
+  }
 });
 
 test("the title is one plain sentence that fits the squash subject", () => {

@@ -5,19 +5,21 @@ For projects that start from a shared template, set up these commands and skill 
 
 ## Shared PR workflow
 
-Open a pull request, follow the [PR skill](.claude/skills/pr/SKILL.md), and squash-merge after `Check` passes.
+Open one pull request per change from the latest target branch. Start the title with a capitalised verb and fit it
+within 80 characters including the squash suffix ` (#<number>)`. Write the body with the [PR skill](.claude/skills/pr/SKILL.md),
+gather proof with [Capture](.claude/skills/capture/SKILL.md), and squash-merge after `Check` passes.
 In GitHub's merge settings, enable only squash merging and set the default message to **Pull request title** so the
 squash commit gets the PR title and an empty body.
 Require an independent approval on projects with a reviewer. Make `Check` required where branch protection is available.
 
-To check PRs in a repository that does not run Oxlint, add this step to its `Check` job after checkout with
-`fetch-depth: 0`. Run the job on `pull_request` events of type `opened`, `synchronize`, `reopened`, and `edited`.
+To check PRs in a repository that does not run Oxlint, add this step to its `Check` job.
+Run the job on `pull_request` events of type `opened`, `synchronize`, `reopened`, and `edited`.
 
 ```yaml
 - uses: mapringg/standard/.github/actions/check-pr@vX.Y.Z
 ```
 
-Replace `vX.Y.Z` with a Standard release that includes the action. Link the PR skill from the same release in the
+Replace `vX.Y.Z` with a Standard release that includes the action. Link both skills from the same release in the
 repository's `AGENTS.md`. Run the project's own checks in the same job.
 
 ## Install
@@ -100,14 +102,13 @@ Add the skill links and their triggers to the root `AGENTS.md`.
 ```markdown
 ## Sources
 
-- Use [PR writing](node_modules/@mapringg/standard/.claude/skills/pr/SKILL.md) when starting a change or writing a PR.
-- Use [Standard review](node_modules/@mapringg/standard/.claude/skills/review-standard/SKILL.md) when reviewing a branch or PR.
-- Use [Test audit](node_modules/@mapringg/standard/.claude/skills/test-audit/SKILL.md) before a migration or broad refactor.
-- Use [Standard upgrade](node_modules/@mapringg/standard/.claude/skills/upgrade-standard/SKILL.md) when upgrading Standard.
+- Use [PR writing](node_modules/@mapringg/standard/.claude/skills/pr/SKILL.md) when writing a PR.
+- Follow [Capture](node_modules/@mapringg/standard/.claude/skills/capture/SKILL.md) when preparing PR evidence.
 ```
 
-Lint requires the installed links and rejects local copies of those four skills.
+Lint requires the installed links and rejects local copies of the two skills.
 If the project has a verification skill, link it in the same section with one trigger for user-visible changes.
+Pin Agent Browser in projects that capture web evidence. Install its browser, and install FFmpeg for recordings.
 
 ## CI
 
@@ -115,7 +116,7 @@ Run `pnpm lint` from the repository root. It includes type checking. Run `pnpm f
 repository's tests separately.
 
 Run lint on `pull_request` events with the settings below. The `edited` event reruns the check after a title or body
-edit. Full checkout history lets the check see changed files when it looks for UI evidence.
+edit.
 
 ```yaml
 on:
@@ -123,9 +124,7 @@ on:
     types: [opened, synchronize, reopened, edited]
 ```
 
-Set `fetch-depth: 0` on the checkout step. Make the CI check required on the PR target branch to block merging when
-a check fails.
+Make the CI check required on the PR target branch to block merging when a check fails.
 
-The [PR check](src/plugin/pr-check.mjs) checks title format, template sections, and whether evidence text contains
-media for certain file types. A reviewer checks whether the evidence demonstrates the change. See the
-[PR skill](.claude/skills/pr/SKILL.md#evidence) for capturing and uploading evidence.
+The [PR check](src/plugin/pr-check.mjs) checks the title, template sections, and populated Before and After evidence.
+A reviewer checks whether the evidence demonstrates the change.

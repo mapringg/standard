@@ -1,6 +1,6 @@
 ---
 name: pr
-description: "Use when starting work on a request, pushing to a branch or writing a PR title or body."
+description: "Use when writing a PR body."
 metadata:
   credits:
     skill: show-me
@@ -9,65 +9,162 @@ metadata:
     url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
 ---
 
-## One change per PR
-
-- Give each new request its own branch from the latest base and its own PR, even while another PR is open.
-- Push to an open PR only to fix that PR's own change or answer its review.
-- When a request needs an unmerged PR, branch from that PR and name it in the new PR.
-- When unsure whether a request belongs to an open PR, open a new one.
-
-## PR title
-
-The title becomes the squash commit subject. Write one plain sentence that starts with a capitalised verb, such as "Allow shared URL parameter owners". Skip `type(scope):` prefixes and the trailing period. Keep it within 80 characters including ` (#<number>)`.
-
-## PR body
-
-Write the PR body with this template. Skip preambles, keep prose brief and use the project's domain words.
+Use this template for writing the PR body:
 
 ```markdown
 ## Summary
 
-<one visual>
+<diagram, diff-sketch, or tree>
 
 ## Evidence
 
-- **Before:** <screenshot, output or failing test>
-  **After:** <screenshot, output or passing test>
+- **Before:** <screenshot/output/failing test run>
+  **After:** <screenshot/output/passing test run>
 
 ## Merge Danger
 
 **Door:** <one-way or two-way>
 
-**Blast Radius:** <one word>
+<optional: description>
 
-<optional: what could break>
+**Blast Radius:** <one-word description>
+
+<optional: potential ramifications of merge>
 ```
 
-## Summary
+## Sections
 
-Pick the smallest visual that makes the point, next to one or two sentences:
+Skip all preambles and keep prose brief. Use the user's domain language from `GLOSSARY.md`.
 
-- Logic: pseudocode.
-- Runtime flow: a call tree.
-- UI: a component tree with the state and module boundaries that matter.
-- Layout or a broad refactor: a shallow file tree.
-- Interaction or data flow: a Mermaid sequence diagram.
-- A change to an existing shape: a `diff` block of that tree, call tree or pseudocode.
-- Mostly new code: the whole target block.
+### Summary
 
-Show only the calls, files, props and states the reviewer needs.
+Pick the smallest view that makes the key point clear.
 
-## Evidence
+- Show logic or an algorithm as pseudocode:
 
-User-visible changes need the verify skill's proof: screenshots or a recording, plus the commands run. Otherwise show test or console output, naming the test that failed before and passes now. A PR that adds a test names the contract it protects, the realistic bug that breaks it and why no existing test catches it.
+```text
+on(save)
+  if content is unchanged
+    return cached result
+  write new content
+  return fresh result
+```
 
-Put that proof in the PR, not only in the chat:
+- Show runtime control flow as a call tree:
 
-- Capture before and after with the same browser tool and viewport. For before, commit the change, run `git checkout <base> -- <files>` and restart the app; for after, run `git checkout HEAD -- <files>` and restart it again.
-- Record only what a still cannot show, such as loading or a transition, and keep the clip under about 15 seconds.
-- Open the PR first (a draft is fine). If the repository installs Standard, run `pnpm exec upload-evidence [--pr <number>] <files>` and paste the Markdown it prints into Evidence. It commits the files to the `pr-evidence-assets` branch under `pr/<number>/<head sha>/`, links them at that evidence commit, embeds images and links videos. Other repositories can attach files directly in Evidence.
-- When a user-visible change has no screenshot or recording, say why in Evidence.
+```text
+submitForm
+  createSession
+    persistPrompt
+    launchAgent
+  navigateToSession
+```
 
-## Merge Danger
+- Show UI structure as a component tree, including state and module boundaries that matter:
 
-A two-way door is cheap to roll back; destructive or hard-to-reverse changes (migrations, deleted data, public API removals) are one-way. The blast radius is who or what the change can hurt: consumers, layout, mobile, other apps.
+```text
+<SessionPage> (apps/example/src/routes/session.tsx)
+  useSessionEvents()
+  <SessionToolbar>
+    <RunSkillButton> (packages/ui)
+```
+
+- Show file responsibility or a broad refactor as a shallow file tree:
+
+```text
+src/
+├── commands/       # parses user actions
+├── sessions/       # owns session state
+└── transport/      # sends API requests
+```
+
+- Show component interaction, control flow, or data flow with Mermaid:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI
+    participant Daemon
+    User->>UI: choose command
+    UI->>Daemon: send expanded prompt
+    Daemon-->>UI: stream result
+```
+
+- Use `diff` when the point is what changes and the surrounding shape already exists. Match the diff shape to the topic.
+
+For a component change:
+
+```diff
+ <SessionPage>
+   useSessionEvents()
+   <SessionToolbar>
++    <RunSkillButton />
+   <SessionTimeline>
++    <SkillResultCard />
+```
+
+For a file-layout change:
+
+```diff
+ src/
+ ├── commands/
++│   └── show-me.ts       # expands the slash command
+ ├── sessions/
+-└── transport.ts
++└── transport/
++    ├── client.ts
++    └── stream.ts
+```
+
+For a call-tree or call-stack change:
+
+```diff
+ submitForm
+   createSession
+     persistPrompt
++    expandSkillMention
+     launchAgent
+-  navigateToSession
++  navigateToSession
++    subscribeToEvents
+```
+
+For a state or control-flow change:
+
+```diff
+ on(save)
+-  write content
++  if content is unchanged
++    return cached result
++  write new content
++  invalidate cache
+```
+
+- Show the whole block when most of it is new, when omitted context would hide ownership or order, or when the user needs a copyable target shape:
+
+```ts
+function expandSkill(command: string): string {
+  const skillName = command.slice(1);
+  return `use the ${skillName} skill`;
+}
+```
+
+#### Guidance
+
+Place each visual next to the short text it supports. Keep only the calls, files, props, states, and boundaries needed to answer the user's current question or the options to resolve the current discussion point.
+
+You may use one of these, you may use several, it is unlikely you will use all of them. Use your judgement and don't overwhelm the user.
+
+### Evidence
+
+Concrete evidence that the change works. Show a before and after.
+
+Screenshots are S-tier - when the environment is set up for it and the change is visual.
+
+Execution-based evidence is A-tier. Test results, console output. Show the exact test that now fails and passes, using pseudocode.
+
+### Merge Danger
+
+Describe whether it's a one-way or two-way door. You can walk back through two-way doors, but not one-way doors. A PR that is cheap to roll back is lower risk. Changes that involve destructive actions or hard-to-reverse decisions are one-way doors.
+
+The blast radius is the potential impact or scope of the changes introduced by this PR. Consider all possibilities. Examples are layout shift, breakages for consumers, mobile responsiveness, etc.
