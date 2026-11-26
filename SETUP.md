@@ -3,6 +3,21 @@
 For projects that start from a shared template, set up these commands and skill triggers in the template. Use the
 [upgrade skill](.claude/skills/upgrade-standard/SKILL.md) to bring existing projects to the same release tag.
 
+## Create or adopt a repo
+
+Run the command outside a Git checkout to create a repository, or inside a checkout to adopt it. Use Node 26 and
+a signed-in GitHub CLI account with admin access. Select **app** for the monorepo template and local app checks, or
+**plain** for the shared PR check alone.
+
+```sh
+pnpm dlx --package=github:mapringg/standard#v1.12.0 create-mapringg-repo
+```
+
+New repos default to private and start with `Initial commit`. The command runs applicable local checks, pushes the
+baseline, and waits for the GitHub check. Template production deploys start in manual mode. Existing repos retain
+their history and checks. The command opens or reuses a setup PR when files need changes and reports its CI result.
+Rerun the command after an interruption. Use `--help` for non-interactive options.
+
 ## Shared PR workflow
 
 Open one pull request per change from the latest target branch. Start the title with a capitalised verb and fit it

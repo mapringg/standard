@@ -1,0 +1,25 @@
+{
+  "name": "create-mapringg-repo",
+  "version": "0.1.0",
+  "description": "Create or adopt a GitHub repository with the Mapringg PR workflow.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mapringg/standard.git",
+    "directory": "create-mapringg-repo"
+  },
+  "bin": {
+    "create-mapringg-repo": "./cli.mjs"
+  },
+  "files": [
+    "*.mjs",
+    "LICENSE"
+  ],
+  "type": "module",
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}
