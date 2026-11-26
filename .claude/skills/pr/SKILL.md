@@ -65,7 +65,7 @@ Put that proof in the PR, not only in the chat:
 
 - Capture before and after with the same browser tool and viewport. For before, commit the change, run `git checkout <base> -- <files>` and restart the app; for after, run `git checkout HEAD -- <files>` and restart it again.
 - Record only what a still cannot show, such as loading or a transition, and keep the clip under about 15 seconds.
-- Open the PR first (a draft is fine). Then run `pnpm exec upload-evidence [--pr <number>] <files>` and paste the Markdown it prints into Evidence. It commits the files to the `pr-evidence-assets` branch under `pr/<number>/<head sha>/`, embeds images and links videos.
+- Open the PR first (a draft is fine). Then run `pnpm exec upload-evidence [--pr <number>] <files>` and paste the Markdown it prints into Evidence. It commits the files to the `pr-evidence-assets` branch under `pr/<number>/<head sha>/`, links them at that evidence commit, embeds images and links videos.
 - When a user-visible change has no screenshot or recording, say why in Evidence.
 
 ## Merge Danger
