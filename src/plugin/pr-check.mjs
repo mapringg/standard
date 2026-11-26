@@ -102,8 +102,8 @@ function changed(root, pull) {
   }
 }
 
-function problems(root) {
-  const pull = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")).pull_request;
+export function checkEvent(root, eventPath) {
+  const pull = JSON.parse(readFileSync(eventPath, "utf8")).pull_request;
   return check({
     number: pull.number,
     title: pull.title,
@@ -137,7 +137,7 @@ export default {
     if (process.env.GITHUB_EVENT_NAME !== "pull_request" || !where || anchorOf(where.root) !== where.rel) return {};
     return {
       Program(node) {
-        for (const message of problems(where.root)) context.report({ node, message });
+        for (const message of checkEvent(where.root, process.env.GITHUB_EVENT_PATH)) context.report({ node, message });
       },
     };
   },

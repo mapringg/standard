@@ -247,8 +247,18 @@ test("standard's own README and AGENTS.md fit the root budgets adopters get", (t
   const skills = ["pr", "review-standard", "test-audit", "upgrade-standard"].map(
     (name) => `.claude/skills/${name}/SKILL.md`,
   );
-  const docs = ["README.md", "AGENTS.md", ...skills];
-  deepEqual(findings(t, Object.fromEntries(docs.map((path) => [path, own(path)]))), []);
+  const files = [
+    "README.md",
+    "AGENTS.md",
+    "SETUP.md",
+    "oxlint.json",
+    "oxfmt.json",
+    "tsconfig.json",
+    "knip.json",
+    "src/plugin/pr-check.mjs",
+    ...skills,
+  ];
+  deepEqual(findings(t, Object.fromEntries(files.map((path) => [path, own(path)]))), []);
 });
 
 test("monorepo READMEs report prose over budget and missing or duplicate titles", (t) => {

@@ -1,0 +1,16 @@
+name: Check PR
+description: Check the pull request title, template, and evidence.
+runs:
+  using: composite
+  steps:
+    - if: github.event_name == 'pull_request'
+      uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: 26
+        package-manager-cache: false
+    - if: github.event_name == 'pull_request'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        STANDARD_ACTION_PATH: ${{ github.action_path }}
+      run: node "$STANDARD_ACTION_PATH/../../../bin/check-pr.mjs"
