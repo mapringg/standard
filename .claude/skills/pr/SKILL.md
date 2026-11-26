@@ -61,6 +61,13 @@ Show only the calls, files, props and states the reviewer needs.
 
 User-visible changes need the verify skill's proof: screenshots or a recording, plus the commands run. Otherwise show test or console output, naming the test that failed before and passes now. A PR that adds a test names the contract it protects, the realistic bug that breaks it and why no existing test catches it.
 
+Put that proof in the PR, not only in the chat:
+
+- Capture before and after with the same browser tool and viewport. For before, commit the change, run `git checkout <base> -- <files>` and restart the app; for after, run `git checkout HEAD -- <files>` and restart it again.
+- Record only what a still cannot show, such as loading or a transition, and keep the clip under about 15 seconds.
+- Open the PR first (a draft is fine). Then run `pnpm exec upload-evidence [--pr <number>] <files>` and paste the Markdown it prints into Evidence. It commits the files to the `pr-evidence-assets` branch under `pr/<number>/<head sha>/`, embeds images and links videos.
+- When a user-visible change has no screenshot or recording, say why in Evidence.
+
 ## Merge Danger
 
 A two-way door is cheap to roll back; destructive or hard-to-reverse changes (migrations, deleted data, public API removals) are one-way. The blast radius is who or what the change can hurt: consumers, layout, mobile, other apps.
