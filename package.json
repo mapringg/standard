@@ -1,11 +1,12 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
   "bin": {
     "check-pr": "./bin/check-pr.mjs",
+    "create-mapringg-repo": "./create-mapringg-repo/cli.mjs",
     "upload-evidence": "./bin/upload-evidence.mjs"
   },
   "files": [
@@ -22,7 +23,8 @@
     "SETUP.md",
     "tsconfig.json",
     "knip.json",
-    "src"
+    "src",
+    "create-mapringg-repo"
   ],
   "type": "module",
   "exports": {
@@ -39,6 +41,9 @@
     "format:check": "oxfmt --check",
     "knip": "knip",
     "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "knip": "6.45.1",
