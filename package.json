@@ -1,10 +1,11 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.9.1",
-  "description": "One oxlint config and plugin for every repository.",
+  "version": "1.10.0",
+  "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
   "bin": {
+    "check-pr": "./bin/check-pr.mjs",
     "upload-evidence": "./bin/upload-evidence.mjs"
   },
   "files": [
@@ -15,6 +16,7 @@
     ".claude/skills/upgrade-standard/SKILL.md",
     "oxlint.json",
     "oxfmt.json",
+    "SETUP.md",
     "tsconfig.json",
     "knip.json",
     "src"

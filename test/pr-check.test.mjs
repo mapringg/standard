@@ -1,5 +1,6 @@
-import { deepEqual } from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { deepEqual, equal, match } from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -45,4 +46,39 @@ test("pr-check skips a PR by a bot", (t) => {
 
 test("pr-check is silent outside a pull request", (t) => {
   deepEqual(only(lint(t, files), "pr-check"), []);
+});
+
+test("the standalone check validates a shell-only repository", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "standard-pr-check-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: "pipe" }).trim();
+  git("init");
+  git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "Base");
+  const base = git("rev-parse", "HEAD");
+  writeFileSync(join(root, "setup.sh"), "true\n");
+  git("add", "setup.sh");
+  git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "Add script");
+  const head = git("rev-parse", "HEAD");
+
+  const eventPath = join(root, "event.json");
+  const run = (body, eventName = "pull_request") => {
+    const event = pullRequest(body);
+    event.pull_request.base.sha = base;
+    event.pull_request.head.sha = head;
+    writeFileSync(eventPath, JSON.stringify(event));
+    return spawnSync(process.execPath, [join(import.meta.dirname, "../bin/check-pr.mjs")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_EVENT_NAME: eventName, GITHUB_EVENT_PATH: eventPath },
+    });
+  };
+
+  const invalid = run("");
+  equal(invalid.status, 1);
+  match(invalid.stderr, /Body: start with ## Summary/);
+  const valid = run(
+    "## Summary\n\n```\nsetup script\n```\n\n## Evidence\n\nBefore: missing script\nAfter: shell syntax passes\n\n## Merge Danger\n\nDoor: two-way\nBlast Radius: setup\n",
+  );
+  equal(valid.status, 0, valid.stderr);
+  equal(run("", "push").status, 0);
 });
