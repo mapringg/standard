@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -10,7 +10,10 @@
   },
   "files": [
     "bin",
+    ".claude/skills/capture/SKILL.md",
+    ".claude/skills/pr/LICENSE",
     ".claude/skills/pr/SKILL.md",
+    ".claude/skills/pr/UPSTREAM.md",
     ".claude/skills/review-standard/SKILL.md",
     ".claude/skills/test-audit/SKILL.md",
     ".claude/skills/upgrade-standard/SKILL.md",
