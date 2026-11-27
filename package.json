@@ -6,7 +6,7 @@
   "repository": "github:mapringg/standard",
   "bin": {
     "check-pr": "./bin/check-pr.mjs",
-    "create-mapringg-repo": "./create-mapringg-repo/cli.mjs",
+    "create-mapringg-repo": "./packages/create-mapringg-repo/cli.mjs",
     "upload-evidence": "./bin/upload-evidence.mjs"
   },
   "files": [
@@ -24,7 +24,7 @@
     "tsconfig.json",
     "knip.json",
     "src",
-    "create-mapringg-repo"
+    "packages/create-mapringg-repo"
   ],
   "type": "module",
   "exports": {
