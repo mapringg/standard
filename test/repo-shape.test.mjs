@@ -25,7 +25,7 @@ test("repo-shape accepts the standard layout", (t) => {
     findings(t, {
       "README.md": "x",
       "AGENTS.md": "x",
-      "apps/web/README.md": "x",
+      "apps/web/src/AGENTS.md": "x",
       ".claude/skills/verify/SKILL.md": "x",
       "apps/web/src/app/globals.css": "x",
       "apps/web/next.config.ts": code,

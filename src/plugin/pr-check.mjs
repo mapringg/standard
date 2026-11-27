@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { anchorFor, listFiles, locate } from "./paths.mjs";
+import { repositoryDocProblems } from "./repository-docs.mjs";
 
 const CODE = /\.[cm]?[jt]sx?$/;
 const anchors = new Map();
@@ -132,7 +133,8 @@ export default {
     if (process.env.GITHUB_EVENT_NAME !== "pull_request" || !where || anchorOf(where.root) !== where.rel) return {};
     return {
       Program(node) {
-        for (const message of checkEvent(process.env.GITHUB_EVENT_PATH)) context.report({ node, message });
+        for (const message of [...checkEvent(process.env.GITHUB_EVENT_PATH), ...repositoryDocProblems(where.root)])
+          context.report({ node, message });
       },
     };
   },

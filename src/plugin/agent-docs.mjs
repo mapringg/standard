@@ -1,15 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 
+import { classify } from "./markdown-lines.mjs";
 import { anchorFor, listFiles, locate } from "./paths.mjs";
 
 const SECTIONS = ["Rules", "Words", "Copy", "Decisions", "Traps", "Operations", "Sources"];
 const MAX_LINES = 50;
 const ROOT_README_LINES = 60;
-const APP_README_LINES = 40;
 const CODE = /\.[cm]?[jt]sx?$/;
-const BEGIN = /^<!-- BEGIN:([\w-]+) -->\s*$/;
-const FENCE_OPEN = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/;
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/;
 const SPAN = /(?<!`)(`+)(?!`)([\s\S]+?)(?<!`)\1(?!`)/g;
 const INLINE_LINK =
@@ -26,39 +24,6 @@ const AGENT_SKILLS = [
 ];
 const CACHE_MS = 2000;
 const scans = new Map();
-
-function classify(text) {
-  const lines = text.split("\n");
-  const kinds = [];
-  let fence = null;
-  let generated = null;
-  for (const line of lines) {
-    if (fence) {
-      kinds.push("fence");
-      if (new RegExp(`^ {0,3}${fence[0] === "`" ? "`" : "~"}{${fence.length},}\\s*$`).test(line)) fence = null;
-      continue;
-    }
-    const open = FENCE_OPEN.exec(line);
-    if (open) {
-      fence = open[1] ?? open[2];
-      kinds.push("fence");
-      continue;
-    }
-    if (generated) {
-      kinds.push("generated");
-      if (line.trim() === `<!-- END:${generated} -->`) generated = null;
-      continue;
-    }
-    const begin = BEGIN.exec(line.trim());
-    if (begin) {
-      generated = begin[1];
-      kinds.push("generated");
-      continue;
-    }
-    kinds.push("prose");
-  }
-  return lines.map((line, index) => ({ line, kind: kinds[index] }));
-}
 
 function joined(lines) {
   return lines.map((item) => item.line).join("\n");
@@ -226,7 +191,6 @@ function scan(root) {
     const problems = linkProblems(root, rel, prose, documentOf);
     if (name === "AGENTS.md") problems.push(...shapeProblems(prose), ...contentProblems(prose));
     if (monorepo && rel === "README.md") problems.push(...readmeProblems(prose, ROOT_README_LINES));
-    if (/^apps\/[^/]+\/README\.md$/.test(rel)) problems.push(...readmeProblems(prose, APP_README_LINES));
     const anchor = anchorFor(rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "", lintable);
     if (!anchor || problems.length === 0) continue;
     findings.set(anchor, [...(findings.get(anchor) ?? []), ...problems.map((message) => `${rel}: ${message}`)]);

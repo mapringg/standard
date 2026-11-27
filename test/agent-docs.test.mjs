@@ -215,7 +215,7 @@ test("adopters link the installed skills without local copies", (t) => {
   );
 });
 
-test("monorepo READMEs accept 60 root and 40 app prose lines with flexible headings", (t) => {
+test("monorepo READMEs accept 60 root prose lines with flexible headings", (t) => {
   const example = "```sh\n" + "pnpm test\n".repeat(70) + "```\n";
   deepEqual(
     findings(t, {
@@ -234,7 +234,7 @@ test("standard's own README and AGENTS.md fit the root budgets adopters get", (t
   const files = [
     "README.md",
     "AGENTS.md",
-    "SETUP.md",
+    ".claude/skills/adopt-standard/SKILL.md",
     "oxlint.json",
     "oxfmt.json",
     "tsconfig.json",
@@ -254,8 +254,6 @@ test("monorepo READMEs report prose over budget and missing or duplicate titles"
     [
       "README.md: Cut it to 60 prose lines; keep setup, checks, and operational decisions.",
       "README.md: Use one # title naming the project.",
-      "apps/web/README.md: Cut it to 40 prose lines; keep setup, checks, and operational decisions.",
-      "apps/web/README.md: Use one # title naming the project.",
     ],
   );
 });

@@ -1,8 +1,11 @@
-# @mapringg/standard
+# Standard
 
-Shared PR checks and agent skills for any repository, with lint, types, formatting, and Knip for TypeScript.
+Provides shared review checks, agent skills and TypeScript tooling.
 
-- [Adopt Standard](SETUP.md) for install, skill links, and CI wiring.
-- [Create or adopt a repo](SETUP.md#create-or-adopt-a-repo) with the setup command.
-- [Oxlint](oxlint.json), [TypeScript](tsconfig.json), [Oxfmt](oxfmt.json), and [Knip](knip.json) define the automated checks.
-- [PR writing](.claude/skills/pr/SKILL.md) and [Capture](.claude/skills/capture/SKILL.md) guide pull requests.
+## Quick start
+
+```sh
+pnpm dlx --package=github:mapringg/standard#v1.12.0 create-mapringg-repo
+```
+
+See [Adopt Standard](.claude/skills/adopt-standard/SKILL.md) for installation and CI wiring.

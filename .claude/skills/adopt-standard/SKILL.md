@@ -1,7 +1,12 @@
+---
+name: adopt-standard
+description: Create, adopt, or configure a repository that uses Standard.
+---
+
 # Adopt Standard
 
 For projects that start from a shared template, set up these commands and skill triggers in the template. Use the
-[upgrade skill](.claude/skills/upgrade-standard/SKILL.md) to bring existing projects to the same release tag.
+[upgrade skill](../upgrade-standard/SKILL.md) to bring existing projects to the same release tag.
 
 ## Create or adopt a repo
 
@@ -21,8 +26,8 @@ Rerun the command after an interruption. Use `--help` for non-interactive option
 ## Shared PR workflow
 
 Open one pull request per change from the latest target branch. Start the title with a capitalised verb and fit it
-within 80 characters including the squash suffix ` (#<number>)`. Write the body with the [PR skill](.claude/skills/pr/SKILL.md),
-gather proof with [Capture](.claude/skills/capture/SKILL.md), and squash-merge after `Check` passes.
+within 80 characters including the squash suffix ` (#<number>)`. Write the body with the [PR skill](../pr/SKILL.md),
+gather proof with [Capture](../capture/SKILL.md), and squash-merge after `Check` passes.
 In GitHub's merge settings, enable only squash merging and set the default message to **Pull request title** so the
 squash commit gets the PR title and an empty body.
 Require an independent approval on projects with a reviewer. Make `Check` required where branch protection is available.
@@ -110,18 +115,36 @@ pnpm knip
 pnpm --filter "...[$base]" --if-present test
 ```
 
+## Repository documentation
+
+Use one root README with the project title, a one-sentence overview, and a Quick start section.
+Each prose paragraph and bullet may have up to 100 visible characters.
+
+Use scoped AGENTS.md files starting with the title AGENTS.md.
+Write flat, single-line bullets under Rules and optional Sources.
+Put a verification command under Rules with its trigger.
+Link to a skill under Sources when an agent needs a longer procedure.
+Keep shared skill links at the root. Local Sources apply only to their directory.
+
+Use no handwritten explanatory comments. Name things clearly and put lasting constraints in scoped Rules.
+Keep machine-read directives and generated markers. Extend comment checks by format.
+
+Run `pnpm exec check-pr --docs` from the repo root to check the layout before updating CI.
+The shared PR action and the Standard PR lint rule use the same checks.
+
 ## Agent skills
 
-Add the skill links and their triggers to the root `AGENTS.md`.
+Keep skill links and their triggers under `## Sources` in the root `AGENTS.md` so they are available in a fresh checkout.
 
 ```markdown
 ## Sources
 
-- Use [PR writing](node_modules/@mapringg/standard/.claude/skills/pr/SKILL.md) when writing a PR.
-- Follow [Capture](node_modules/@mapringg/standard/.claude/skills/capture/SKILL.md) when preparing PR evidence.
+- Use [PR writing](node_modules/@mapringg/standard/.claude/skills/pr/SKILL.md) when writing a pull request.
+- Follow [Capture](node_modules/@mapringg/standard/.claude/skills/capture/SKILL.md) when preparing pull request evidence.
 ```
 
-Lint requires the installed links and rejects local copies of the two skills.
+Lint requires the installed links and rejects local copies of the two skills. For repositories without the package installed,
+link to both skills at the same pinned Standard release.
 If the project has a verification skill, link it in the same section with one trigger for user-visible changes.
 Pin Agent Browser in projects that capture web evidence. Install its browser, and install FFmpeg for recordings.
 
@@ -141,5 +164,5 @@ on:
 
 Make the CI check required on the PR target branch to block merging when a check fails.
 
-The [PR check](src/plugin/pr-check.mjs) checks the title, template sections, and populated Before and After evidence.
+The [PR check](../../../src/plugin/pr-check.mjs) checks the title, template sections, and populated Before and After evidence.
 A reviewer checks whether the evidence demonstrates the change.
