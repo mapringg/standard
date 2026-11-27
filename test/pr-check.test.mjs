@@ -17,13 +17,8 @@ const files = {
 function findings(t, event) {
   const path = join(tmpdir(), `standard-event-${process.pid}.json`);
   writeFileSync(path, JSON.stringify(event));
-  t.after(() => {
-    delete process.env.GITHUB_EVENT_NAME;
-    delete process.env.GITHUB_EVENT_PATH;
-  });
-  process.env.GITHUB_EVENT_NAME = "pull_request";
-  process.env.GITHUB_EVENT_PATH = path;
-  return only(lint(t, files), "pr-check").map((item) => `${item.file}: ${item.message}`);
+  t.after(() => rmSync(path, { force: true }));
+  return only(lint(t, files, path), "pr-check").map((item) => `${item.file}: ${item.message}`);
 }
 
 const pullRequest = (body, type = "User") => ({

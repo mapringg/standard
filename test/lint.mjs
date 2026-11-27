@@ -22,7 +22,7 @@ function scaffold(files) {
   return extra;
 }
 
-export function lint(t, files) {
+export function lint(t, files, eventPath) {
   const root = mkdtempSync(join(tmpdir(), "standard-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q"], { cwd: root });
@@ -42,7 +42,11 @@ export function lint(t, files) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), text);
   }
-  const result = spawnSync(OXLINT, ["-f", "json"], { cwd: root, encoding: "utf8" });
+  const result = spawnSync(OXLINT, ["-f", "json"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, GITHUB_EVENT_NAME: eventPath ? "pull_request" : "", GITHUB_EVENT_PATH: eventPath ?? "" },
+  });
   const parsed = JSON.parse(result.stdout || "{}");
   if (!parsed.diagnostics) throw new Error(result.stderr || result.stdout);
   return parsed.diagnostics.map((item) => ({ file: item.filename, rule: item.code, message: item.message }));
