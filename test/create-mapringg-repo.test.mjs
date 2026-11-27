@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { githubRepo } from "../create-mapringg-repo/github.mjs";
-import { configure } from "../create-mapringg-repo/setup.mjs";
+import { githubRepo } from "../packages/create-mapringg-repo/github.mjs";
+import { configure } from "../packages/create-mapringg-repo/setup.mjs";
 
-const cli = join(import.meta.dirname, "../create-mapringg-repo/cli.mjs");
+const cli = join(import.meta.dirname, "../packages/create-mapringg-repo/cli.mjs");
 const mock = `#!/usr/bin/env node
 const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
