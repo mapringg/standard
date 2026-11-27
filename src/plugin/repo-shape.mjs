@@ -18,7 +18,6 @@ import {
 const PACKAGES = new Set(["tokens", "i18n"]);
 const TOP_DIRS = new Set(["apps", "packages", "infra", "scripts", ".github", ".githooks", ".claude", ".vscode"]);
 const CHECK_SCRIPT = /(?:^|[-.])(?:check|lint|verify|validate|audit|enforce)(?:[-.]|$)/;
-const DOCS = new Set(["README.md", "AGENTS.md"]);
 const CODE = /\.[cm]?[jt]sx?$/;
 const DIRECTIVE = /(?:\/\/|\/\*)\s*(?:eslint|oxlint)-(?:disable|enable)/;
 const NEXT_FILES = new Set([
@@ -185,6 +184,7 @@ function fileProblems(rel, root, localized) {
   const where = describe(rel, root);
   const parts = rel.split("/");
   const { name, kind, pkg, base, local } = where;
+  if (name === "AGENTS.md") return [];
   const found = [];
   if (parts.length > 1 && !TOP_DIRS.has(parts[0]))
     return ["Move this into apps/ or packages/; the top level holds only config."];
@@ -196,7 +196,7 @@ function fileProblems(rel, root, localized) {
     return [`Move this into an app's lib/; packages/ holds only ${[...PACKAGES].join(" and ")}.`];
   if (/\.mdx?$/.test(name)) {
     const exempt = rel.startsWith(".claude/skills/") || (kind === "astro" && local.startsWith("src/content/"));
-    const placed = DOCS.has(name) && (parts.length === 1 || (base && local === name));
+    const placed = rel === "README.md";
     if (!exempt && !placed) found.push("Fold this into README.md or AGENTS.md, or delete it.");
   }
   if (/\.(?:scss|sass|less|styl)$/.test(name))

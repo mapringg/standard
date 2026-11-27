@@ -115,7 +115,15 @@ async function create(root, state, scratch) {
     if (remote) throw new Error(`GitHub already has ${state.repo}. Use an existing checkout to adopt it.`);
     if (!state.scaffolded) {
       if (state.kind === "app") copyTemplate(root, scratch);
-      if (!existsSync(join(root, "README.md"))) writeFileSync(join(root, "README.md"), `# ${basename(root)}\n`);
+      const readme = join(root, "README.md");
+      const title = `# ${basename(root)}`;
+      if (!existsSync(readme))
+        writeFileSync(
+          readme,
+          `${title}\n\nAdd a short project overview here.\n\n## Quick start\n\nAdd setup steps here.\n`,
+        );
+      else if (state.kind === "app")
+        writeFileSync(readme, readFileSync(readme, "utf8").replace(/^# monorepo\r?$/im, title));
       saveState(root, { ...state, scaffolded: true });
     }
     const { check, updateLock } = configure(root, basename(root), { kind: state.kind, initial: true });

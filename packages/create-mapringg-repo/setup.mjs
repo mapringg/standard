@@ -22,12 +22,12 @@ function write(path, text) {
   writeFileSync(path, text);
 }
 
-function agents(root, name, installed) {
+function agents(root, installed) {
   const path = join(root, "AGENTS.md");
   const skillsRoot = installed
     ? "node_modules/@mapringg/standard/.claude/skills"
     : `https://github.com/mapringg/standard/blob/${RELEASE}/.claude/skills`;
-  const original = read(path) ?? `# ${name}\n`;
+  const original = read(path) ?? "# AGENTS.md\n";
   const shared = original.split("\n").filter((line) => SKILLS.test(line));
   if (
     shared.length === 2 &&
@@ -167,6 +167,6 @@ export function configure(root, name, { kind = "plain", initial = false } = {}) 
     }
   }
   if (kind === "app") pinBrowser(root);
-  agents(root, name, installed);
+  agents(root, installed);
   return { check: configureCheck(root, installed), updateLock };
 }

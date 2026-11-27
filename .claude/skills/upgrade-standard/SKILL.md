@@ -9,7 +9,7 @@ description: Upgrade a repository to a newer @mapringg/standard tag, or adopt it
 
 1. Run `pnpm lint` on the current version and confirm it passes. Fix or report an existing failure before upgrading.
 2. Point `@mapringg/standard` at the new release tag. Pin `knip`, `oxfmt`, `oxlint` and `tsrs` to the exact versions in that tag's `peerDependencies`. Run `pnpm install`.
-3. Follow the installed [setup guide](../../../SETUP.md) and apply any changes it calls for, such as scripts, `tsconfig.json` or `package.json` imports.
+3. Follow the installed [setup guide](../adopt-standard/SKILL.md) and apply any changes it calls for, such as scripts, `tsconfig.json` or `package.json` imports.
 4. Run `pnpm lint`. Set each newly failing rule to `"off"` in `rules` of the root `.oxlintrc.json`. If a standard override turns a rule back on for some files, add an override with the same `files` that turns it off there too.
 5. Run `pnpm lint`, `pnpm knip` and the format check until they pass. Commit the dependency, config and setup changes as one baseline.
 

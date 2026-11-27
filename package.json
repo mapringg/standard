@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -20,7 +20,7 @@
     ".claude/skills/upgrade-standard/SKILL.md",
     "oxlint.json",
     "oxfmt.json",
-    "SETUP.md",
+    ".claude/skills/adopt-standard/SKILL.md",
     "tsconfig.json",
     "knip.json",
     "src",

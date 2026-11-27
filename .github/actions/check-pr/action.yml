@@ -1,5 +1,5 @@
 name: Check PR
-description: Check the pull request title, template, and evidence.
+description: Check the pull request title, template, evidence, and repository documentation.
 runs:
   using: composite
   steps:
