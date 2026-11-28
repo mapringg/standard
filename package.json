@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -43,6 +43,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@shadcn/lint": "0.2.5",
     "yaml": "2.9.1"
   },
   "devDependencies": {

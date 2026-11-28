@@ -16,8 +16,9 @@ description: Upgrade a repository to a newer @mapringg/standard tag, or adopt it
 ## Enable one rule per commit
 
 1. Remove one rule's temporary `"off"`, fix its findings, and rerun lint. Run the tests and type checks for code whose behavior or types changed. Commit the config and the fixes together.
-2. A rule that reports correct code is a gap in the standard, not a local exception. Leave its `"off"` in place and open an issue or pull request on mapringg/standard with the code it reports. For an owner ban, ask for a row in the owners table.
-3. Repeat for each temporary `"off"`. Remove a temporary `"off"` once a release fixes the gap.
+2. Fix `shadcn/*` findings in the order the [design system section](../adopt-standard/SKILL.md#design-system) gives, never with a local exception.
+3. A rule that reports correct code is a gap in the standard, not a local exception. Leave its `"off"` in place and open an issue or pull request on mapringg/standard with the code it reports. For an owner ban, ask for a row in the owners table.
+4. Repeat for each temporary `"off"`. Remove a temporary `"off"` once a release fixes the gap.
 
 ## Review and squash
 

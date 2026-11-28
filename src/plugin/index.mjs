@@ -1,4 +1,5 @@
 import agentDocs from "./agent-docs.mjs";
+import designSystem from "./design-system.mjs";
 import featureImports from "./feature-imports.mjs";
 import hono from "./hono.mjs";
 import nextData from "./next-data.mjs";
@@ -14,13 +15,13 @@ import queryClient from "./query-client.mjs";
 import reducer from "./reducer.mjs";
 import repoShape from "./repo-shape.mjs";
 import serverActions from "./server-actions.mjs";
-import styleProp from "./style-prop.mjs";
 import tests from "./tests.mjs";
 
 export default {
   meta: { name: "standard" },
   rules: {
     "agent-docs": agentDocs,
+    "design-system": designSystem,
     "feature-imports": featureImports,
     hono,
     "next-data": nextData,
@@ -36,7 +37,6 @@ export default {
     reducer,
     "repo-shape": repoShape,
     "server-actions": serverActions,
-    "style-prop": styleProp,
     tests,
   },
 };
