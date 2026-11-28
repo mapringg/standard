@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
