@@ -22,6 +22,7 @@ const AGENT_SKILLS = [
   { name: "pr", label: "PR writing", use: "writing pull requests" },
   { name: "capture", label: "Capture", use: "preparing pull request evidence" },
 ];
+const SINCE_LAST_RUN = "--since-last-run";
 const CACHE_MS = 2000;
 const scans = new Map();
 
@@ -152,7 +153,16 @@ function linkProblems(root, rel, prose, documentOf) {
   return found;
 }
 
-function sharedSkillProblems(root, documentOf) {
+function declaresVitest(root, files) {
+  return files
+    .filter((rel) => rel === "package.json" || rel.endsWith("/package.json"))
+    .some((rel) => {
+      const manifest = JSON.parse(readFileSync(join(root, rel), "utf8"));
+      return Boolean(manifest.dependencies?.vitest ?? manifest.devDependencies?.vitest);
+    });
+}
+
+function sharedSkillProblems(root, documentOf, files) {
   if (!existsSync(join(root, STANDARD_PACKAGE, "package.json"))) return [];
   const rootDoc = "AGENTS.md";
   const prose = existsSync(join(root, rootDoc)) ? documentOf(rootDoc).prose : [];
@@ -167,6 +177,10 @@ function sharedSkillProblems(root, documentOf) {
       findings.push(`${local}: Remove the local copy and use the installed standard skill linked in AGENTS.md.`);
     }
   }
+  if (declaresVitest(root, files) && !prose.some((item) => item.line.includes(SINCE_LAST_RUN)))
+    findings.push(
+      `${rootDoc}: Add a bullet under ## Rules to run \`pnpm --filter <app> exec vitest run ${SINCE_LAST_RUN}\` after each change and \`pnpm test\` before you finish.`,
+    );
   return findings;
 }
 
@@ -184,7 +198,7 @@ function scan(root) {
   };
   const findings = new Map();
   const rootAnchor = anchorFor("", lintable);
-  if (rootAnchor) findings.set(rootAnchor, sharedSkillProblems(root, documentOf));
+  if (rootAnchor) findings.set(rootAnchor, sharedSkillProblems(root, documentOf, files));
   for (const rel of files.filter((file) => file.endsWith(".md"))) {
     const { prose } = documentOf(rel);
     const name = rel.slice(rel.lastIndexOf("/") + 1);
