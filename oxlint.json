@@ -13,7 +13,8 @@
     "nextjs",
     "vitest"
   ],
-  "jsPlugins": ["./src/plugin/index.mjs"],
+  "jsPlugins": ["./src/plugin/index.mjs", "@shadcn/lint"],
+  "settings": { "shadcn": { "ui": "#/components/ui" } },
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -26,6 +27,7 @@
   "env": { "builtin": true, "es2024": true },
   "rules": {
     "standard/agent-docs": "error",
+    "standard/design-system": "error",
     "standard/feature-imports": "error",
     "standard/hono": "error",
     "standard/next-data": "error",
@@ -41,8 +43,13 @@
     "standard/reducer": "error",
     "standard/repo-shape": "error",
     "standard/server-actions": "error",
-    "standard/style-prop": "error",
     "standard/tests": "error",
+    "shadcn/no-restyle": ["error", { "allow": ["layout"] }],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": "error",
+    "shadcn/no-unknown-classes": "error",
+    "shadcn/require-static-classes": "error",
     "no-restricted-imports": [
       "error",
       {
@@ -165,6 +172,13 @@
     "vitest/require-top-level-describe": "off"
   },
   "overrides": [
+    {
+      "files": ["**/components/ui/**"],
+      "rules": {
+        "shadcn/no-restyle": "off",
+        "shadcn/require-static-classes": "off"
+      }
+    },
     {
       "files": ["**/src/app/**/page.tsx", "**/src/app/**/layout.tsx"],
       "rules": {

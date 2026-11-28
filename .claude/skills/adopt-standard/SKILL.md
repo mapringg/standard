@@ -15,7 +15,7 @@ a signed-in GitHub CLI account with admin access. Select **app** for the monorep
 **plain** for the shared PR check alone.
 
 ```sh
-pnpm dlx --package=github:mapringg/standard#v1.12.0 create-mapringg-repo
+pnpm dlx --package=github:mapringg/standard#v1.14.0 create-mapringg-repo
 ```
 
 New repos default to private and start with `Initial commit`. The command runs applicable local checks, pushes the
@@ -114,6 +114,21 @@ pnpm lint
 pnpm knip
 pnpm --filter "...[$base]" --if-present test
 ```
+
+## Design system
+
+Standard runs [@shadcn/lint](https://github.com/shadcn-ui/lint) on every UI app. Import components from
+`#/components/ui`, keep the theme in the app's one global CSS file, and use only its tokens.
+Keep the rules as shipped: no `settings.shadcn`, rule options, or overrides for `shadcn/*` rules.
+
+Fix a `shadcn/no-restyle` finding in this order:
+
+1. Use the component's existing variant or size that gives the look.
+2. Move spacing around the component to margin on it or `gap` on its parent.
+3. Add a variant or size in the component file and use it.
+
+Fix other findings with the replacement the message names, or the nearest theme token. Add a token to the
+theme only when the design needs a value the scale lacks.
 
 ## Repository documentation
 
