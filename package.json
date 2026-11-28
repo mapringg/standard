@@ -1,6 +1,6 @@
 {
   "name": "@mapringg/standard",
-  "version": "1.15.0",
+  "version": "1.15.1",
   "description": "Shared pull request checks, agent skills, and TypeScript tooling.",
   "license": "MIT",
   "repository": "github:mapringg/standard",
@@ -39,7 +39,7 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "knip": "knip",
+    "knip": "knip -c .knip.json",
     "test": "node --test"
   },
   "dependencies": {

@@ -15,7 +15,7 @@ a signed-in GitHub CLI account with admin access. Select **app** for the monorep
 **plain** for the shared PR check alone.
 
 ```sh
-pnpm dlx --package=github:mapringg/standard#v1.15.0 create-mapringg-repo
+pnpm dlx --package=github:mapringg/standard#v1.15.1 create-mapringg-repo
 ```
 
 New repos default to private and start with `Initial commit`. The command runs applicable local checks, pushes the

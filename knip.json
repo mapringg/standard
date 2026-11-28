@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": false,
   "includeEntryExports": true,
-  "ignoreDependencies": ["@shadcn/lint", "tsrs"],
   "rules": {
     "files": "error",
     "dependencies": "error",
