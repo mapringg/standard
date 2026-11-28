@@ -219,7 +219,7 @@ const vitestApp = { "apps/web/package.json": JSON.stringify({ devDependencies: {
 
 test("adopters with Vitest tell agents to rerun only what changed", (t) => {
   deepEqual(findings(t, { ...standardInstall, ...vitestApp, "AGENTS.md": skillLinks }), [
-    "AGENTS.md: Add a bullet under ## Rules to run `pnpm --filter <app> exec vitest run --since-last-run` after each change and `pnpm test` before you finish.",
+    "AGENTS.md: Add a bullet under ## Rules to run `pnpm --filter <app> exec vitest run --since-last-run` after each change and `pnpm test` at the end.",
   ]);
   deepEqual(
     findings(t, {
@@ -227,7 +227,7 @@ test("adopters with Vitest tell agents to rerun only what changed", (t) => {
       ...vitestApp,
       "AGENTS.md": skillLinks.replace(
         "## Sources",
-        "## Rules\n\n- Run `pnpm --filter <app> exec vitest run --since-last-run` after each change and `pnpm test` before you finish.\n\n## Sources",
+        "## Rules\n\n- Run `pnpm --filter <app> exec vitest run --since-last-run` after each change and `pnpm test` at the end.\n\n## Sources",
       ),
     }),
     [],

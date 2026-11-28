@@ -5,7 +5,7 @@ Provides shared review checks, agent skills and TypeScript tooling.
 ## Quick start
 
 ```sh
-pnpm dlx --package=github:mapringg/standard#v1.15.1 create-mapringg-repo
+pnpm dlx --package=github:mapringg/standard#v1.15.2 create-mapringg-repo
 ```
 
 See [Adopt Standard](.claude/skills/adopt-standard/SKILL.md) for installation and CI wiring.
