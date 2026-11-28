@@ -179,7 +179,7 @@ function sharedSkillProblems(root, documentOf, files) {
   }
   if (declaresVitest(root, files) && !prose.some((item) => item.line.includes(SINCE_LAST_RUN)))
     findings.push(
-      `${rootDoc}: Add a bullet under ## Rules to run \`pnpm --filter <app> exec vitest run ${SINCE_LAST_RUN}\` after each change and \`pnpm test\` before you finish.`,
+      `${rootDoc}: Add a bullet under ## Rules to run \`pnpm --filter <app> exec vitest run ${SINCE_LAST_RUN}\` after each change and \`pnpm test\` at the end.`,
     );
   return findings;
 }

@@ -15,7 +15,7 @@ a signed-in GitHub CLI account with admin access. Select **app** for the monorep
 **plain** for the shared PR check alone.
 
 ```sh
-pnpm dlx --package=github:mapringg/standard#v1.15.1 create-mapringg-repo
+pnpm dlx --package=github:mapringg/standard#v1.15.2 create-mapringg-repo
 ```
 
 New repos default to private and start with `Initial commit`. The command runs applicable local checks, pushes the
@@ -141,7 +141,7 @@ Put a verification command under Rules with its trigger.
 In a repo with Vitest, add this bullet under the root Rules. Lint requires it.
 
 ```markdown
-- Run `pnpm --filter <app> exec vitest run --since-last-run` after each change and `pnpm test` before you finish.
+- Run `pnpm --filter <app> exec vitest run --since-last-run` after each change and `pnpm test` at the end.
 ```
 
 Link to a skill under Sources when an agent needs a longer procedure.
